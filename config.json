@@ -1,0 +1,48 @@
+{
+  "network": "testnet",
+  "port": 8787,
+  "host": "0.0.0.0",
+  "risk": {
+    "riskPerTradePct": 0.5,
+    "maxLeverage": 2,
+    "maxConcurrentPositions": 2,
+    "maxPositionUsd": 250,
+    "dailyLossLimitPct": 2,
+    "takeProfitR": 2,
+    "slippagePct": 0.5,
+    "defaultStopPct": 1.5,
+    "dryRunEquity": 10000,
+    "maxBookDeviationPct": 1.5
+  },
+  "scanner": {
+    "enabled": true,
+    "assets": [
+      "NVDA",
+      "TSLA",
+      "AAPL",
+      "MSFT",
+      "AMZN",
+      "META",
+      "GOOGL"
+    ],
+    "interval": "1h",
+    "minStopPct": 1.5,
+    "minScore": 6,
+    "candleSource": "mainnet",
+    "maxSignalAgeMinutes": 15,
+    "usMarketHoursOnly": false
+  },
+  "webhook": {
+    "enabled": true,
+    "allowExits": true
+  },
+  "trading": {
+    "killSwitch": false,
+    "autoTrade": true
+  },
+  "upstreamApi": "https://quant-signal-frontend.satyapuabhinav1609.chatgpt.site",
+  "market": {
+    "dex": "xyz",
+    "type": "us-stock-perps"
+  }
+}

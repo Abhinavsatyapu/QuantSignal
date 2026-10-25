@@ -1,0 +1,10 @@
+.env
+.env.*
+node_modules
+data
+logs
+screenshots
+original
+*.db
+*.db-*
+.git

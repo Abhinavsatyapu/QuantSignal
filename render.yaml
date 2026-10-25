@@ -1,0 +1,30 @@
+# Render Blueprint: QuantSignal US-stock-perp Auto-Trader (Hyperliquid TESTNET by default)
+services:
+  - type: web
+    name: quantsignal
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free               # free instances sleep after ~15 min idle -> .github/workflows/keepalive.yml pings /health
+    region: singapore
+    numInstances: 1          # SQLite + one execution engine: never scale >1
+    healthCheckPath: /health
+    autoDeploy: true
+    # Free plan has no persistent disk: DATA_DIR is ephemeral (SQLite + config reset on each deploy/restart).
+    # On a paid plan add:  disk: {name: quantsignal-data, mountPath: /var/data, sizeGB: 1}  and DATA_DIR=/var/data
+    envVars:
+      - key: DATA_DIR
+        value: /tmp/data
+      - key: NETWORK
+        value: testnet
+      - key: HOST
+        value: 0.0.0.0
+      - key: WEBHOOK_SECRET
+        generateValue: true
+      - key: ADMIN_TOKEN
+        generateValue: true
+      - key: HL_TESTNET_PRIVATE_KEY
+        sync: false          # set in the Render dashboard (secret)
+      - key: HL_ACCOUNT_ADDRESS
+        sync: false
+      - key: UPSTREAM_API
+        value: https://quant-signal-frontend.satyapuabhinav1609.chatgpt.site
