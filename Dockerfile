@@ -9,6 +9,8 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY server ./server
 COPY public ./public
 COPY scripts ./scripts
+COPY data/reference ./data/reference
+COPY docs ./docs
 COPY config.json ./config.json
 # Mount a persistent volume here (Render persistent disk at /var/data)
 ENV DATA_DIR=/var/data

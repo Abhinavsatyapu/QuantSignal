@@ -149,8 +149,20 @@ async function optionableAssets() {
   return data;
 }
 
+async function expiries(symbol) {
+  const underlying = assertTicker(symbol), map = new Map(); let token = null, pages = 0;
+  const today = new Date().toISOString().slice(0, 10);
+  do {
+    const d = await get(tradingUrl(), '/v2/options/contracts', { underlying_symbols: underlying, expiration_date_gte: today, status: 'active', limit: 10000, page_token: token });
+    for (const c of d.option_contracts || []) { if (c.root_symbol && c.root_symbol !== underlying.replace('.', '')) continue; const e = map.get(c.expiration_date) || { date: c.expiration_date, contracts: 0 }; e.contracts++; map.set(c.expiration_date, e); }
+    token = d.next_page_token || null; pages++;
+  } while (token && pages < 5);
+  let stock = null; try { stock = (await stockSnapshots([underlying]))[underlying] || null; } catch {}
+  return { provider: 'alpaca', label: 'Alpaca ' + optionsFeed().toUpperCase(), stock, expiries: [...map.values()].sort((a, b) => a.date.localeCompare(b.date)) };
+}
+
 function status() {
   return { configured: configured(), optionsFeed: optionsFeed(), stockFeed: stockFeed(), tradingApi: tradingUrl().includes('paper') ? 'paper' : 'live', docs: 'https://docs.alpaca.markets/reference/optionchain' };
 }
 
-module.exports = { configured, status, chain, legs, stockSnapshots, optionableAssets, parseOcc, normalizeSnapshot, httpErr, NO_KEYS, _setFetch };
+module.exports = { configured, status, chain, legs, expiries, stockSnapshots, optionableAssets, parseOcc, normalizeSnapshot, httpErr, NO_KEYS, _setFetch };

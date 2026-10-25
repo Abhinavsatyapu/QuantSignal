@@ -25,32 +25,57 @@ const round = (x, d) => { const f = 10 ** d; return Math.round(x * f) / f; };
 const MAX_STALE_MS = 5 * 86400e3; // "allow last-close quotes" analysis mode (covers weekends/holidays)
 
 // ------------------------------------------------------------------ optional public fallback (opt-in only)
-// OPTIONS_FALLBACK=cboe enables Cboe's public delayed quotes ONLY when Alpaca keys are absent. Off by default.
-const fallbackEnabled = () => (process.env.OPTIONS_FALLBACK || '').toLowerCase() === 'cboe' && !alpaca.configured();
+// Provider abstraction: Alpaca when ALPACA_KEY_ID/ALPACA_SECRET_KEY are set; otherwise Cboe's public DELAYED quotes
+// (cdn.cboe.com delayed_quotes JSON, ~15 min delayed in market hours; last session's close when the market is shut).
+// Set OPTIONS_FALLBACK=off to disable the public fallback.
+const fallbackEnabled = () => !['off', 'none', 'false', '0'].includes((process.env.OPTIONS_FALLBACK || '').toLowerCase()) && !alpaca.configured();
+// Cboe prints New York local times without a zone; convert to UTC (DST aware).
+function nyToUtc(local) {
+  if (!local || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(local)) return null;
+  const guess = Date.parse(local + 'Z');
+  for (const off of [4, 5]) { const t = guess + off * 3600e3; const hh = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hourCycle: 'h23' }).format(new Date(t)); if (Number(hh) === Number(local.slice(11, 13))) return new Date(t).toISOString(); }
+  return new Date(guess + 4 * 3600e3).toISOString();
+}
 const cboeCache = new Map();
-async function cboeChain({ symbol, near, far }) {
-  const t = String(symbol || '').trim().toUpperCase();
-  if (!/^[A-Z][A-Z0-9.]{0,9}$/.test(t)) throw httpErr(400, 'Enter a valid US ticker');
+async function cboeRaw(t) {
   let c = cboeCache.get(t);
   if (!c || Date.now() - c.at > 60e3) {
     const r = await fetch('https://cdn.cboe.com/api/global/delayed_quotes/options/' + encodeURIComponent(t) + '.json', { headers: { 'User-Agent': 'Mozilla/5.0 QuantSignal' }, redirect: 'follow', signal: AbortSignal.timeout(20000) });
-    if (r.status === 403 || r.status === 404) throw httpErr(404, 'No listed options found for ' + t);
+    if (r.status === 403 || r.status === 404) throw httpErr(404, 'No listed options found for ' + t + ' (Cboe)');
     if (!r.ok) throw httpErr(502, 'Cboe delayed quotes HTTP ' + r.status);
     c = { at: Date.now(), data: await r.json(), modified: r.headers.get('last-modified') };
     cboeCache.set(t, c);
+    if (cboeCache.size > 60) cboeCache.delete(cboeCache.keys().next().value);
   }
-  const d = c.data.data || {}, qt = c.modified ? new Date(c.modified).toISOString() : null;
+  return c;
+}
+async function cboeChain({ symbol, near, far }) {
+  const t = String(symbol || '').trim().toUpperCase();
+  if (!/^[A-Z][A-Z0-9.]{0,9}$/.test(t)) throw httpErr(400, 'Enter a valid US ticker');
+  const c = await cboeRaw(t);
+  const d = c.data.data || {}, qt = nyToUtc(d.last_trade_time) || (c.modified ? new Date(c.modified).toISOString() : null);
   const contracts = [];
   for (const o of d.options || []) {
     const p = alpaca.parseOcc(o.option); if (!p || p.root !== t.replace('.', '') || p.expiry < near || p.expiry > far) continue;
     const bid = Number(o.bid), ask = Number(o.ask);
     contracts.push({ symbol: o.option, underlying: t, root: p.root, expiry: p.expiry, type: p.type, strike: p.strike, multiplier: 100, bid, ask, bidSize: o.bid_size, askSize: o.ask_size,
       mid: ask > 0 && ask >= bid ? (bid + ask) / 2 : null, iv: o.iv > 0 ? o.iv : null, greeks: { delta: o.delta, gamma: o.gamma, theta: o.theta, vega: o.vega, rho: o.rho },
-      quoteTime: qt, last: o.last_trade_price || null, openInterest: o.open_interest, provider: 'Cboe delayed' });
+      quoteTime: qt, last: o.last_trade_price || null, lastTime: nyToUtc(o.last_trade_time), openInterest: o.open_interest, volume: o.volume, provider: 'Cboe delayed' });
   }
-  return { provider: 'cboe', feed: 'delayed', label: 'Cboe public DELAYED quotes (≥15 min) · fallback because Alpaca keys are not configured', delayed: true, contracts,
+  return { provider: 'cboe', feed: 'delayed', label: 'Cboe public DELAYED quotes (~15 min; last close when the market is shut) · used because Alpaca keys are not configured', delayed: true, contracts, snapshotTime: qt, fileTime: c.modified ? new Date(c.modified).toISOString() : null,
     stock: d.current_price > 0 ? { price: d.current_price, bid: d.bid, ask: d.ask, time: qt, source: 'Cboe delayed' } : null, partial: false, nextPageToken: null, fetchedAt: new Date().toISOString() };
 }
+async function cboeExpiries(symbol) {
+  const t = String(symbol || '').trim().toUpperCase(), c = await cboeRaw(t), d = c.data.data || {}, map = new Map();
+  for (const o of d.options || []) { const p = alpaca.parseOcc(o.option); if (!p || p.root !== t.replace('.', '')) continue; const e = map.get(p.expiry) || { date: p.expiry, contracts: 0, quoted: 0 }; e.contracts++; if (o.bid > 0 && o.ask >= o.bid) e.quoted++; map.set(p.expiry, e); }
+  return { provider: 'cboe', label: 'Cboe public DELAYED quotes', snapshotTime: nyToUtc(d.last_trade_time), stock: d.current_price > 0 ? { price: d.current_price, time: nyToUtc(d.last_trade_time), source: 'Cboe delayed' } : null, expiries: [...map.values()].sort((a, b) => a.date.localeCompare(b.date)) };
+}
+async function getExpiries(symbol) {
+  if (alpaca.configured()) return alpaca.expiries(symbol);
+  if (fallbackEnabled()) return cboeExpiries(symbol);
+  throw httpErr(503, alpaca.NO_KEYS);
+}
+function providerInfo() { return alpaca.configured() ? { provider: 'alpaca', ...alpaca.status() } : fallbackEnabled() ? { provider: 'cboe', feed: 'delayed', note: 'Alpaca keys not configured; Cboe public delayed quotes in use' } : { provider: null, note: alpaca.NO_KEYS }; }
 async function getChain(body) { if (alpaca.configured()) return alpaca.chain(body); if (fallbackEnabled()) return cboeChain(body); throw httpErr(503, alpaca.NO_KEYS); }
 async function getLegs(list) {
   if (alpaca.configured()) return alpaca.legs(list);
@@ -318,10 +343,10 @@ async function ratioSetup(b, stockSymbols) {
   const universe = await stockSymbols();
   if (!universe.includes(symbol)) throw httpErr(400, 'Select a verified Hyperliquid US stock perp');
   const interval = INTERVALS[b.interval] ? b.interval : '15m';
-  const callLots = fin(b.callLots, 'Call lots', { min: 1, max: 20, int: true }), putLots = callLots * 2;
+  const debitLots = fin(b.callLots, 'Debit-spread lots', { min: 1, max: 10, int: true }); let callLots = debitLots, putLots = debitLots * 2;
   const equity = fin(b.equity, 'Account equity', { min: 1 }), capital = fin(b.capital, 'Allocation', { min: 1, max: equity }), maxLoss = fin(b.maxLoss, 'Maximum planned loss', { min: 0.01 });
   const riskPct = maxLoss / equity * 100; if (riskPct > 5) throw httpErr(400, 'Maximum planned loss cannot exceed 5% of equity');
-  const cfg = { equity, capital, riskPct, maxLots: callLots, callLots, putLots, directionalPct: fin(b.directionalPct, 'Directional increment', { min: 0, max: 100 }),
+  const cfg = { equity, capital, riskPct, maxLots: Math.min(20, debitLots * 2), callLots, putLots, directionalPct: fin(b.directionalPct, 'Directional increment', { min: 0, max: 100 }),
     maxSpreadPct: fin(b.maxSpreadPct, 'Maximum bid/ask width', { min: 0.1, max: 100 }), commission: fin(b.commission, 'Commission', { min: 0, max: 100 }), futureFeePct: fin(b.feePct, 'Futures fee', { min: 0, max: 5 }),
     slippagePct: fin(b.slippagePct, 'Slippage', { min: 0, max: 5 }), targetR: fin(b.targetR, 'Target R', { min: 1, max: 20 }), minStopPct: fin(b.minStopPct, 'Minimum stop', { min: 0.1, max: 10 }),
     strategy: b.strategy === 'condor' ? 'condor' : 'directional', maxQuoteAgeMs: b.allowStale === false ? 120000 : MAX_STALE_MS };
@@ -332,6 +357,9 @@ async function ratioSetup(b, stockSymbols) {
   const now = Date.now(), analysis = Technicals.analyze(candles, now, { minStopPct: cfg.minStopPct });
   const reference = { perpBid: book.bid, perpAsk: book.ask, perpMid: book.mid, bookTime: book.time, stock: chainData.stock?.price ?? null, stockTime: chainData.stock?.time ?? null, basis: chainData.stock ? book.mid - chainData.stock.price : null, provider: chainData.label };
   if (analysis.direction === 'WAIT') return { status: 'WAIT', symbol, reason: analysis.reason, analysis, reference };
+  // Reference sheets: the CREDIT spread carries 2× the lots of the DEBIT spread (70 of 78 sheets). LONG perp → call credit
+  // spread + put debit spread; SHORT perp → call debit + put credit. (The original code always used puts = 2× calls.)
+  if (cfg.strategy === 'directional') { if (analysis.direction === 'LONG') { callLots = debitLots * 2; putLots = debitLots; } else { callLots = debitLots; putLots = debitLots * 2; } cfg.callLots = callLots; cfg.putLots = putLots; }
   const [c] = LiveHedge.optimize({ symbol, chain: chainData, analysis, meta, price: book.mid, now, cfg, interval, duration: INTERVALS[interval] });
   const long = c.signedFutureQty > 0, slip = cfg.slippagePct / 100, limit = long ? book.ask * (1 + slip) : book.bid * (1 - slip);
   const depth = (long ? book.asks.filter(l => l.px <= limit) : book.bids.filter(l => l.px >= limit)).reduce((n, l) => n + l.sz, 0);
@@ -357,12 +385,12 @@ async function ratioSetup(b, stockSymbols) {
     plannedCombinedRisk: c.plannedRisk, optionRisk: c.optionRisk, futureStopRisk: c.futureRisk, budget: maxLoss, stop: c.stop, target: c.target, netFutureRR: c.netRR,
     reference: { ...reference, stock: c.stock, stockTime: c.stockTime, basis }, availableFuturesDepth: depth, future, legs, spreads,
     netPremiumBeforeCommission: netPremium, entryCommission, openingCash: netPremium - entryCommission,
-    formula: { 'neutral futures': '−Σ(side sign × lots × 100 × provider delta)', 'directional futures': 'neutral × (1 + increment%) rounded to 10^−szDecimals', 'put lots': '2 × call lots (1:2)', 'risk gate': 'option max loss + futures stop risk ≤ maximum planned loss', 'futures limit': 'best ' + (long ? 'ask × (1 + slippage)' : 'bid × (1 − slippage)') },
+    formula: { 'neutral futures': '−Σ(side sign × lots × 100 × provider delta)', 'directional futures': 'neutral × (1 + increment%) rounded to 10^−szDecimals', 'lots': 'credit-spread lots = 2 × debit-spread lots (1:2, per the reference sheets)', 'risk gate': 'option max loss + futures stop risk ≤ maximum planned loss', 'futures limit': 'best ' + (long ? 'ask × (1 + slippage)' : 'bid × (1 − slippage)') },
     model, bounds: { maxProfit: bounds.maxProfit === Infinity ? null : bounds.maxProfit, maxLoss: bounds.maxLoss === Infinity ? null : bounds.maxLoss, profitUnbounded: bounds.maxProfit === Infinity, lossUnbounded: bounds.maxLoss === Infinity, breakEvens: bounds.breakEvens, tailSlope: bounds.tailSlope }, curve,
     orderPreview: { note: 'Manual preview only. No orders were sent.', futures: { venue: 'Hyperliquid', symbol, side: long ? 'BUY' : 'SELL', quantity: Math.abs(c.signedFutureQty), limitPrice: limit }, options: legs.map(l => ({ contract: l.contract, side: l.side.toUpperCase(), contracts: l.qty, limitPrice: l.premium })) },
     quoteState: stale ? 'STALE / last available quotes' : 'fresh', provider: chainData.label, quoteExpiresAt: now + 60000,
     assumptions: [c.explanation, 'Options data: ' + chainData.label + '. ' + (stale ? 'Quotes are older than 2 minutes (market closed or indicative feed); use only for analysis.' : 'Quotes are under 2 minutes old.'),
-      'Expiry payoff holds the observed perp-minus-stock basis constant; funding, assignment, early exercise and liquidation are not modeled.', 'Put lots are fixed at twice the call lots (the 1:2 structure).', 'Futures quantity is a Greek delta hedge plus your directional increment; it must be rechecked as delta changes.'],
+      'Expiry payoff holds the observed perp-minus-stock basis constant; funding, assignment, early exercise and liquidation are not modeled.', 'Credit-spread lots are twice the debit-spread lots (the 1:2 structure of the reference sheets): ' + callLots + ' call / ' + putLots + ' put lots.', 'Futures quantity is a Greek delta hedge plus your directional increment; it must be rechecked as delta changes.'],
   };
 }
 
@@ -370,11 +398,11 @@ async function ratioSetup(b, stockSymbols) {
 function router({ stockSymbols }) {
   const r = express.Router();
   r.get('/derivatives/status', (req, res) => res.json({ alpaca: alpaca.status(), fallback: fallbackEnabled() ? 'cboe-delayed' : null, analysisMaxQuoteAgeMs: MAX_STALE_MS, liveMaxQuoteAgeMs: 120000,
-    message: alpaca.configured() ? 'Alpaca connected on the server · options feed ' + alpaca.status().optionsFeed.toUpperCase() : fallbackEnabled() ? 'Alpaca keys missing · using Cboe public DELAYED fallback (OPTIONS_FALLBACK=cboe)' : alpaca.NO_KEYS }));
+    message: alpaca.configured() ? 'Alpaca connected on the server · options feed ' + alpaca.status().optionsFeed.toUpperCase() : fallbackEnabled() ? 'Alpaca keys not configured · using Cboe public DELAYED quotes (set ALPACA_KEY_ID / ALPACA_SECRET_KEY for Alpaca; OPTIONS_FALLBACK=off disables Cboe)' : alpaca.NO_KEYS }));
   r.get('/option-universe', wrap(async (req, res) => res.json(await symbolDirectory())));
   r.post('/options', wrap(async (req, res) => {
     const b = req.body || {};
-    if (b.action === 'universe') { if (!alpaca.configured()) throw httpErr(503, alpaca.NO_KEYS); return res.json(await alpaca.optionableAssets()); }
+    if (b.action === 'universe') return res.json(alpaca.configured() ? await alpaca.optionableAssets() : { ...(await symbolDirectory()), note: 'Alpaca keys not configured: US-listed symbol directory, optionability not verified (the fetched chain confirms it)' });
     if (b.action === 'legs') return res.json(await getLegs((b.contracts || []).map(s => String(s).toUpperCase())));
     res.json(await getChain({ symbol: b.symbol, near: b.near, far: b.far, pageToken: b.pageToken || null }));
   }));
@@ -387,4 +415,4 @@ function router({ stockSymbols }) {
   return r;
 }
 
-module.exports = { router, manualFourLeg, sheetScenarios, sheetAudit, positionPnl, ratioSetup, piecewiseBounds, symbolDirectory };
+module.exports = { getChain, getExpiries, providerInfo, perpBook, perpMeta, nyToUtc, router, manualFourLeg, sheetScenarios, sheetAudit, positionPnl, ratioSetup, piecewiseBounds, symbolDirectory };

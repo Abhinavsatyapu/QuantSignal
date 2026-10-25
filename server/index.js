@@ -168,6 +168,7 @@ async function stockSymbols() { const d = await stockCatalogue(); return d.rows.
 app.get('/api/stocks', wrap(async (req, res) => res.json(await stockCatalogue())));
 app.get('/api/paper-background', (req, res) => res.status(404).json({ error: 'Server paper runner not enabled; paper trading runs in the browser.' }));
 app.use('/api', derivatives.router({ stockSymbols }));
+app.use('/api', require('./strategy').router({ stockSymbols }));
 app.all(/^\/api\/.*/, (req, res) => res.status(404).json({ error: 'Unknown API endpoint ' + req.path }));
 
 // ------------------------------------------------------------------ frontend
@@ -175,6 +176,8 @@ const PUB = path.join(config.ROOT, 'public');
 app.use(express.static(PUB, { extensions: ['html'], maxAge: '5m', index: 'index.html' }));
 for (const p of ['/signals', '/news', '/webhook', '/risk', '/paper', '/hedge', '/autotrader', '/options', '/gamma', '/ratio']) app.get(p, (req, res) => res.sendFile(path.join(PUB, 'index.html')));
 app.get('/manual', (req, res) => res.sendFile(path.join(PUB, 'manual.html')));
+app.get('/builder', (req, res) => res.sendFile(path.join(PUB, 'builder.html')));
+app.get('/docs/four-leg-methodology.md', (req, res) => res.type('text/markdown; charset=utf-8').sendFile(path.join(__dirname, '..', 'docs', 'four-leg-methodology.md')));
 app.get('/sheet-lab', (req, res) => res.sendFile(path.join(PUB, 'sheet-lab.html')));
 
 const cfg = config.get();

@@ -826,11 +826,11 @@ async function loadAlpacaUnderlyings() {
     if (!Array.isArray(data.assets))
       throw Error("Invalid asset directory response");
     optionState.assets = data.assets;
-    optionState.assetsVerified = true;
+    optionState.assetsVerified = data.verifiedOptions !== false;
     renderUnderlyingSuggestions();
     $("#optionUniverseStatus").textContent =
       data.assets.length.toLocaleString() +
-      " Alpaca optionable underlyings loaded · " +
+      (data.verifiedOptions === false ? " US-listed symbols loaded (optionability not verified) · " : " Alpaca optionable underlyings loaded · ") +
       data.source +
       ". The fetched chain confirms currently available contracts. Search any symbol or company name.";
   } catch (e) {

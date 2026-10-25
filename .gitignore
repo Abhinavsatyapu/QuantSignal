@@ -1,7 +1,9 @@
 .env
 .env.*
 node_modules/
-data/
+node_modules
+data/*
+!data/reference/
 logs/
 *.db
 *.db-wal

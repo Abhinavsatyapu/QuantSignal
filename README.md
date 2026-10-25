@@ -124,7 +124,7 @@ Four-Leg Lab and Sheet Scenario Lab work fully with typed premiums.
 | `ALPACA_OPTIONS_FEED` | `indicative` | `indicative` (free, modified quotes) or `opra` (needs an Alpaca options data subscription) |
 | `ALPACA_STOCK_FEED` | `iex` | `iex`, `sip` (subscription) or `delayed_sip` |
 | `ALPACA_ENV` | paper | `live` to use live-account keys for the contracts/assets endpoints |
-| `OPTIONS_FALLBACK` | off | `cboe` = use Cboe's public *delayed* chain when no Alpaca keys are set (labelled DELAYED) |
+| `OPTIONS_FALLBACK` | on (`cboe`) | Cboe's public *delayed* chain is used when no Alpaca keys are set (labelled DELAYED with quote time/age); `off` disables it |
 
 Shared state (ticker, expiry, legs, hedge) flows between the pages via `localStorage` (`public/deriv-shared.js`).
 "Analysis mode" (Options Studio, on by default) lets Gamma/Live Hedge/1:2 use the last available quotes (≤5 days, labelled
@@ -165,3 +165,18 @@ restart, so update the TradingView alert URL after each one.
 ## Scripts
 
 `node scripts/scan-probe.js [intervals] [coins]`: a read-only probe that runs the scanner rules over many markets.
+
+
+## Strategy Builder (`/builder`)
+Pick any US ticker → expiry (from the real chain) → target P&L, capital and max-loss %. The server
+(`POST /api/strategy/build`, engine `public/strategy-engine.js`, shared by all derivatives pages) returns the
+four option legs (strike, call/put, buy/sell, contracts, live bid/ask/mid), the Hyperliquid US-stock perp
+quantity (`xyz:TICKER`; tickers without a perp, e.g. SPY, return `NO_PERP`), net debit/credit, max
+profit/loss, breakevens, greeks, payoff at expiry and today, how/where the target is reached, and capital/margin.
+Method: reverse-engineered from the reference sheets — see `docs/four-leg-methodology.md`
+(regenerate with `node scripts/build-methodology-doc.js`; dataset in `data/reference/`).
+Every run is stored in SQLite (`strategy_runs`; reference rows in `reference_trades`) with a History table where
+realised P&L can be recorded; per-ticker calibration uses both. On Render free `DATA_DIR=/tmp/data` is ephemeral,
+so history is lost on restart unless a disk is attached. "Execute on Alpaca" is a disabled stub that only
+previews the multi-leg order payload; no orders are ever sent. Verify a saved run independently with
+`python3 scripts/verify-strategy.py <runId>`.

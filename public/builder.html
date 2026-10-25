@@ -1,0 +1,66 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Strategy Builder · QuantSignal</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234c8dff'/%3E%3Cpath d='M9 20l5-6 4 4 5-8' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/deriv-pages.css"><link rel="stylesheet" href="/builder.css"></head>
+<body class="deriv-page">
+<header class="deriv-top"><a class="deriv-brand" href="/"><span class="logo">Q</span><span>QuantSignal<small>DERIVATIVES</small></span></a><nav class="deriv-nav"><a href="/builder" class="active">Strategy Builder</a><a href="/options">Options Studio</a><a href="/gamma">Gamma Book</a><a href="/hedge">Live Hedge Compare</a><a href="/ratio">1:2 Options + Futures</a><a href="/manual">Manual Four-Leg Lab</a><a href="/sheet-lab">Sheet Scenario Lab</a></nav><span id="derivShared" class="deriv-shared"></span></header>
+<main class="deriv-main">
+<div class="b-head"><div><p class="eyebrow">DERIVATIVES · FOUR-LEG + PERP</p><h1>Strategy Builder</h1><p class="market-note">Pick any US ticker, an expiry from its real option chain and a target P&amp;L. The builder applies the reference-sheet methodology (<a href="/docs/four-leg-methodology.md" target="_blank">rules &amp; accuracy</a>) to the live chain and sizes the Hyperliquid US-stock perp leg. Analysis only: no orders are sent.</p></div><span class="label watch">ANALYSIS · NO ORDERS</span></div>
+<p id="providerLine" class="b-provider">Checking options data source…</p>
+
+<section class="panel b-panel"><h2>1 · Underlying &amp; expiry</h2>
+<div class="b-grid">
+<label>US ticker<input id="bTicker" list="bTickers" placeholder="e.g. NVDA" maxlength="10" autocomplete="off"><datalist id="bTickers"></datalist></label>
+<div class="b-btn"><button id="bLoad">Load expiries</button></div>
+<label>Expiry (from the live chain)<select id="bExpiry" disabled><option value="">Load a ticker first</option></select></label>
+</div>
+<p id="bPerp" class="market-note"></p><p id="bExpiryNote" class="market-note"></p>
+</section>
+
+<section class="panel b-panel"><h2>2 · Target &amp; risk</h2>
+<div class="b-grid">
+<label>Target P&amp;L at the scenario prices ($)<input id="bTarget" type="number" min="1" step="50" value="1000"></label>
+<label>Capital available ($)<input id="bCapital" type="number" min="100" step="500" value="20000"></label>
+<label>Max loss within ±2σ (% of capital)<input id="bMaxLoss" type="number" min="1" max="100" step="1" value="50"></label>
+<label>Perp side<select id="bSide"><option value="AUTO">Auto (compare both)</option><option value="SHORT">SHORT perp · bullish option spreads</option><option value="LONG">LONG perp · bearish option spreads</option></select></label>
+</div>
+<details class="b-adv"><summary>Advanced</summary><div class="b-grid">
+<label>Method<select id="bMethod"><option value="reference">Reference sheets (default)</option><option value="delta">Live Hedge delta method (original 1:2 code)</option></select></label>
+<label>Basket / MM allowance ($)<input id="bMm" type="number" min="0" step="5" value="50"></label>
+<label>Max bid/ask spread (% of mid)<input id="bSpread" type="number" min="1" max="100" step="1" value="25"></label>
+<label>Max debit-spread lots<input id="bLots" type="number" min="1" max="200" step="1" value="30"></label>
+<label>Perp leverage (×)<input id="bLev" type="number" min="1" max="50" step="1" value="5"></label>
+<label>Option commission ($/contract)<input id="bComm" type="number" min="0" step="0.05" value="0.65"></label>
+<label>Perp fee (% per side)<input id="bFee" type="number" min="0" step="0.005" value="0.045"></label>
+<label>Debit short strike (σ) · blank = calibrated<input id="bDebitSigma" type="number" min="0.2" max="3" step="0.05" placeholder="calibrated"></label><label>Credit short strike (σ) · blank = calibrated<input id="bCreditSigma" type="number" min="0.2" max="3" step="0.05" placeholder="calibrated"></label>
+<label>Credit wing (σ) · blank = calibrated<input id="bWingSigma" type="number" min="0.1" max="3" step="0.05" placeholder="calibrated"></label>
+<label class="check-label"><input id="bCal" type="checkbox" checked> Use per-ticker calibration (reference sheets + recorded outcomes)</label>
+<label>Delta method: direction<select id="bDir"><option value="LONG">LONG perp</option><option value="SHORT">SHORT perp</option><option value="NEUTRAL">NEUTRAL (condor)</option></select></label>
+</div><p id="bCalNote" class="market-note"></p></details>
+<div class="row"><button id="bBuild" disabled>Build recommendation</button><span id="bStatus" class="market-note" role="status"></span></div>
+</section>
+
+<section id="bResult" class="panel b-panel" hidden>
+<div class="b-res-head"><h2 id="bTitle">Recommendation</h2><span id="bBadge" class="label"></span></div>
+<p id="bDataLine" class="b-provider"></p>
+<div id="bErrors" class="b-errors" hidden></div>
+<div id="bBody">
+<div id="bMetrics" class="b-metrics"></div>
+<h3>Legs</h3><div class="market-scroll"><table class="b-table" id="bLegs"></table></div>
+<p id="bThin" class="market-note negative"></p>
+<h3>How the target is reached</h3><div id="bTargetBox" class="b-target"></div>
+<div class="b-chart-wrap"><canvas id="bChart" width="1200" height="420" aria-label="Payoff chart"></canvas><div class="b-legend"><span class="lg exp">At expiry</span><span class="lg tod">Today (Black-Scholes, current IV)</span><span class="lg tgt">Target</span><span class="lg spot">Spot</span></div></div>
+<h3>Sheet scenarios</h3><div class="market-scroll"><table class="b-table" id="bScen"></table></div>
+<h3>Why these legs</h3><ul id="bWhy" class="b-why"></ul>
+<h3>Greeks (whole book)</h3><div id="bGreeks" class="b-metrics small"></div>
+<h3>Alternatives considered</h3><div class="market-scroll"><table class="b-table" id="bAlts"></table></div>
+<div class="row b-actions"><button id="bToManual" class="ghost">Send → Manual Four-Leg Lab</button><button id="bToSheet" class="ghost">Send → Sheet Lab current P&amp;L</button><button id="bExecute" disabled title="Order execution is not enabled">Execute on Alpaca (disabled)</button></div>
+<details><summary>Order preview (not sent)</summary><pre id="bOrder" class="b-pre"></pre></details>
+<p class="market-note" id="bAssumptions"></p>
+</div>
+</section>
+
+<section class="panel b-panel"><div class="b-res-head"><h2>History</h2><div class="row"><label class="check-label"><input id="hOnlyTicker" type="checkbox"> Only this ticker</label><button id="hRefresh" class="ghost">Refresh</button></div></div>
+<p class="market-note">Every recommendation is saved with its inputs, chain summary, legs and expected P&amp;L. Record the realised P&amp;L after you close a trade; closed results feed the per-ticker calibration.</p>
+<div class="market-scroll"><table class="b-table" id="hTable"></table></div></section>
+</main>
+<script src="/deriv-shared.js"></script><script src="/strategy-engine.js"></script><script src="/builder.js"></script><script src="/deriv-nav.js"></script>
+</body></html>
