@@ -40,7 +40,7 @@
     "killSwitch": false,
     "autoTrade": true
   },
-  "upstreamApi": "https://quant-signal-frontend.satyapuabhinav1609.chatgpt.site",
+  "upstreamApi": "",
   "market": {
     "dex": "xyz",
     "type": "us-stock-perps"

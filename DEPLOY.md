@@ -35,7 +35,10 @@ Render injects `PORT`, and the server binds to it on `0.0.0.0`.
 | `NETWORK` | no | `testnet` (default). This **always overrides** config. Mainnet also needs the next two |
 | `HL_MAINNET_CONFIRM` / `HL_MAINNET_PRIVATE_KEY` | no | Only if you deliberately go mainnet (`yes` + key) |
 | `PORT`, `HOST` | no | Render sets `PORT`; `HOST` defaults to `0.0.0.0` |
-| `UPSTREAM_API` | no | Original site backend for options-math endpoints and the stock catalogue (falls back to Hyperliquid data) |
+| `ALPACA_KEY_ID` / `ALPACA_SECRET_KEY` | for options data | Alpaca market-data keys (secret, server-side only) for the derivatives pages |
+| `ALPACA_OPTIONS_FEED` | no | `indicative` (default) or `opra` (subscription) |
+| `ALPACA_STOCK_FEED` | no | `iex` (default), `sip`, `delayed_sip` |
+| `OPTIONS_FALLBACK` | no | `cboe` = Cboe delayed chain when no Alpaca keys (off by default) |
 | `STOCK_DEX` | no | HIP-3 dex to trade (default `xyz`) |
 | `SCANNER_ASSETS`, `SCANNER_INTERVAL`, `SCANNER_ENABLED` | no | e.g. `NVDA,TSLA,AAPL`, `1h` |
 | `RISK_PER_TRADE_PCT`, `MAX_LEVERAGE`, `MAX_CONCURRENT_POSITIONS`, `MAX_POSITION_USD`, `DAILY_LOSS_LIMIT_PCT`, `TAKE_PROFIT_R`, `SLIPPAGE_PCT`, `DRY_RUN_EQUITY` | no | Seed values |

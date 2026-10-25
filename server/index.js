@@ -8,6 +8,7 @@ config.load();
 const store = require('./db');
 const engine = require('./engine');
 const hl = require('./hl');
+const derivatives = require('./derivatives');
 const { Finance } = globalThis;
 
 const app = express();
@@ -137,49 +138,37 @@ app.get('/api/news', wrap(async (req, res) => {
   res.json(data);
 }));
 
-// Crypto universe natively; everything else (stock-perp catalogue, Alpaca options proxy, options-math
-// endpoints) is forwarded to the original hosted backend, since its server code is not published.
-app.get('/api/stream/universe', wrap(async (req, res, next) => {
+// US stock-perp universe, options chain (Alpaca, server-side keys) and the derivatives calculation endpoints.
+// Everything is served natively; nothing is proxied to the original hosted backend any more.
+app.get('/api/stream/universe', wrap(async (req, res) => {
   if (req.query.scope === 'crypto') return res.status(400).json({ error: 'Crypto markets are disabled (US stock perps only).' });
-  try { const d = await stockCatalogue(); return res.json({ symbols: d.rows.filter(r => r.kind === 'us-stock').map(r => r.symbol) }); }
+  try { return res.json({ symbols: await stockSymbols() }); }
   catch (e) { return res.status(502).json({ error: e.message }); }
 }));
-async function proxyUpstream(req, res) {
-  const base = config.get().upstreamApi;
-  if (!base) return res.status(501).json({ error: 'This endpoint needs the upstream API (config.upstreamApi).' });
-  const url = base.replace(/\/$/, '') + req.originalUrl;
-  const init = { method: req.method, headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 QuantSignal-selfhosted', Accept: 'application/json' }, signal: AbortSignal.timeout(90000) };
-  if (!['GET', 'HEAD'].includes(req.method)) init.body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {});
-  try {
-    const r = await fetch(url, init);
-    const text = await r.text();
-    res.status(r.status).type(r.headers.get('content-type') || 'application/json').send(text);
-  } catch (e) { res.status(502).json({ error: 'Upstream API unavailable: ' + e.message }); }
-}
-// US stock-perp catalogue (dashboard table, signals, paper trading). Prefer the original site's curated list
-// (company names + stock/ETF classification); fall back to Hyperliquid's own perpCategories data.
+// US stock-perp catalogue from Hyperliquid's own perpCategories ("stocks"), with company names / ETF flags joined
+// from the public Nasdaq Trader symbol directory. Tickers not in that US-listed directory (e.g. Korean names) are
+// marked kind 'non-us' and excluded from the stock-perp universe (US stocks only).
 let stockCache = null;
 const ETF = new Set(['SPY', 'QQQ', 'IWM', 'DIA', 'SMH', 'XLE', 'XBI', 'TLT', 'GDX', 'IGV', 'EWJ', 'EWY', 'EWT', 'EWZ', 'SOXL', 'URNM', 'KORU', 'MAGS', 'ARKK']);
 async function stockCatalogue() {
   if (stockCache && Date.now() - stockCache.at < 60e3) return stockCache.data;
-  let data = null;
-  const base = config.get().upstreamApi;
-  if (base) { try { const r = await fetch(base.replace(/\/$/, '') + '/api/stocks', { headers: { 'User-Agent': 'Mozilla/5.0 QuantSignal' }, signal: AbortSignal.timeout(20000) }); if (r.ok) { const j = await r.json(); if (Array.isArray(j.rows) && j.rows.length) data = { ...j, source: 'upstream' }; } } catch {} }
-  if (!data) {
-    const cats = await hl.info('mainnet', { type: 'perpCategories' });
-    const stockSet = new Set(cats.filter(c => /^stocks?$/i.test(c[1])).map(c => c[0]));
-    const dexes = [...new Set([...stockSet].map(s => s.split(':')[0]))];
-    const rows = [], errors = [];
-    await Promise.all(dexes.map(async dex => { try { const m = await hl.meta('mainnet', dex); for (const v of m.values()) if (stockSet.has(v.name)) { const t = v.name.split(':')[1]; rows.push({ symbol: v.name, ticker: t, dex, name: t, kind: ETF.has(t) ? 'etf' : 'us-stock', price: v.markPx, change: null, volume: v.dayNtlVlm, funding: Number.isFinite(v.funding) ? v.funding * 100 : null, maxLeverage: v.maxLeverage }); } } catch { errors.push(dex); } }));
-    rows.sort((a, b) => b.volume - a.volume);
-    data = { rows, errors, source: 'hyperliquid perpCategories', fetchedAt: new Date().toISOString() };
-  }
+  const cats = await hl.info('mainnet', { type: 'perpCategories' });
+  const stockSet = new Set(cats.filter(c => /^stocks?$/i.test(c[1])).map(c => c[0]));
+  const dexes = [...new Set([...stockSet].map(s => s.split(':')[0]))];
+  let names = new Map();
+  try { names = new Map((await derivatives.symbolDirectory()).assets.map(a => [a.symbol, a])); } catch {}
+  const rows = [], errors = [];
+  await Promise.all(dexes.map(async dex => { try { const m = await hl.meta('mainnet', dex); for (const v of m.values()) if (stockSet.has(v.name)) { const t = v.name.split(':')[1], d = names.get(t); rows.push({ symbol: v.name, ticker: t, dex, name: d?.name || t, kind: names.size && !d ? 'non-us' : d?.etf || ETF.has(t) ? 'etf' : 'us-stock', price: v.markPx, change: v.prevDayPx > 0 && v.markPx > 0 ? (v.markPx / v.prevDayPx - 1) * 100 : null, volume: v.dayNtlVlm, funding: Number.isFinite(v.funding) ? v.funding * 100 : null, maxLeverage: v.maxLeverage }); } } catch { errors.push(dex); } }));
+  rows.sort((a, b) => b.volume - a.volume);
+  const data = { rows, errors, source: 'hyperliquid perpCategories + Nasdaq Trader names', fetchedAt: new Date().toISOString() };
   stockCache = { at: Date.now(), data };
   return data;
 }
+async function stockSymbols() { const d = await stockCatalogue(); return d.rows.filter(r => r.kind === 'us-stock').map(r => r.symbol); }
 app.get('/api/stocks', wrap(async (req, res) => res.json(await stockCatalogue())));
 app.get('/api/paper-background', (req, res) => res.status(404).json({ error: 'Server paper runner not enabled; paper trading runs in the browser.' }));
-app.all(/^\/api\/.*/, (req, res) => { if (req.path.startsWith('/api/autotrader')) return res.status(404).json({ error: 'Not found' }); return proxyUpstream(req, res); });
+app.use('/api', derivatives.router({ stockSymbols }));
+app.all(/^\/api\/.*/, (req, res) => res.status(404).json({ error: 'Unknown API endpoint ' + req.path }));
 
 // ------------------------------------------------------------------ frontend
 const PUB = path.join(config.ROOT, 'public');

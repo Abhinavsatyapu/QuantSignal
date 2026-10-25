@@ -1,0 +1,27 @@
+/* Shared chrome for the standalone derivatives pages (Manual Four-Leg Lab, Sheet Scenario Lab).
+   Uses the terminal's dark theme tokens from styles.css so all derivatives pages look alike. */
+body.deriv-page{display:block;--qs-bg:#07090d;--qs-panel:#0f131a;--qs-raise:#171d2a;--qs-line:#1d2431;--qs-text:#e6eaf2;--qs-muted:#7a8597;--qs-accent:#4c8dff;--qs-green:#1fc77e;--qs-red:#f0525f;--qs-amber:#f2b33d;background:var(--qs-bg);color:var(--qs-text);font-family:"Inter","SF Pro Text",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0}
+.deriv-page a{color:var(--qs-accent)}
+.deriv-top{position:relative;z-index:20;display:flex;align-items:center;gap:22px;flex-wrap:wrap;padding:12px max(20px,calc((100vw - 1400px)/2));background:rgba(7,9,13,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--qs-line)}
+.deriv-brand{display:flex;align-items:center;gap:10px;font-weight:700;color:var(--qs-text)!important;text-decoration:none;font-size:15px}
+.deriv-brand .logo{display:grid;place-items:center;width:28px;height:28px;border-radius:7px;background:var(--qs-accent);color:#fff;font-weight:800}
+.deriv-brand small{display:block;font-size:9px;letter-spacing:.16em;color:var(--qs-muted);font-weight:600}
+.deriv-top nav.deriv-nav{display:flex;flex-direction:row;gap:4px;flex-wrap:wrap;font-size:13px}
+.deriv-nav a{color:var(--qs-muted)!important;text-decoration:none;padding:6px 10px;border-radius:7px}
+.deriv-nav a:hover{color:var(--qs-text)!important;background:var(--qs-raise)}
+.deriv-nav a.active{color:var(--qs-text)!important;background:rgba(76,141,255,.14);box-shadow:inset 0 0 0 1px rgba(76,141,255,.35)}
+.deriv-shared{margin-left:auto;font-size:11px;color:var(--qs-muted);font-family:"JetBrains Mono",ui-monospace,monospace}
+.deriv-main{max-width:1400px;margin:auto;padding:24px}
+.deriv-page .eyebrow{color:var(--qs-accent);font-size:10px;letter-spacing:.2em;font-weight:700;margin:0}
+.deriv-page h1{font-size:clamp(28px,3.4vw,40px);letter-spacing:-.03em;margin:6px 0 8px}
+/* Manual lab tables / panels */
+.deriv-page .manual-head .label{align-self:flex-start;font-size:11px;padding:6px 10px;border-radius:999px;height:auto;width:auto;line-height:1.2}
+.deriv-page table{border-collapse:collapse;width:100%;font-size:13px}
+.deriv-page th{color:var(--qs-muted);font-weight:600;text-align:left;font-size:11px;letter-spacing:.04em;text-transform:uppercase;border-bottom:1px solid var(--qs-line);padding:8px}
+.deriv-page td{border-bottom:1px solid var(--qs-line);padding:7px 8px;font-variant-numeric:tabular-nums}
+.deriv-page input,.deriv-page select{background:var(--qs-raise);color:var(--qs-text);border:1px solid var(--qs-line);border-radius:7px;padding:8px 10px;font:inherit}
+.deriv-page input:focus,.deriv-page select:focus{outline:none;border-color:var(--qs-accent)}
+.deriv-page input:disabled,.deriv-page select:disabled{opacity:.5}
+/* Sheet Scenario Lab: align its teal accent with the terminal blue */
+.deriv-page.sheet{--cyan:#4c8dff;--line:#1d2431;--muted:#7a8597;--green:#1fc77e;--red:#f0525f;background:var(--qs-bg)}
+.deriv-page.sheet main{padding-top:8px}

@@ -38,7 +38,7 @@ async function meta(network, dex = '') {
       name: u.name, index: offset + i, szDecimals: u.szDecimals, maxLeverage: u.maxLeverage,
       onlyIsolated: !!u.onlyIsolated || ['noCross', 'strictIsolated'].includes(u.marginMode), marginMode: u.marginMode || 'cross',
       markPx: Number(x.markPx) || null, oraclePx: Number(x.oraclePx) || null, midPx: Number(x.midPx) || null,
-      dayNtlVlm: Number(x.dayNtlVlm) || 0, openInterest: Number(x.openInterest) || 0, funding: Number(x.funding),
+      dayNtlVlm: Number(x.dayNtlVlm) || 0, prevDayPx: Number(x.prevDayPx) || null, openInterest: Number(x.openInterest) || 0, funding: Number(x.funding),
     });
   });
   metaCache[key] = { at: Date.now(), map };

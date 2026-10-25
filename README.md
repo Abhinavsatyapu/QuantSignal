@@ -109,8 +109,29 @@ On startup the engine logs the API wallet's `userRole`. `missing` means it is no
   (`mainnet` = public read-only mainnet candles, as on the original site; `trading` = candles of the trading
   network), `maxSignalAgeMinutes`.
 * `webhook`: `enabled`, `allowExits`.  `trading`: `killSwitch` (persisted), `autoTrade`.
-* `upstreamApi`: the original hosted backend. Options-math endpoints (Alpaca options proxy, ratio setup,
-  manual four-leg, sheet lab, US stock-perp catalogue) are forwarded there, because their server code isn't public.
+* `upstreamApi`: no longer used (kept empty). All derivatives endpoints are now served natively by this server (`server/derivatives.js`).
+
+## Derivatives pages (Options Studio, Gamma Book, Live Hedge Compare, 1:2, Manual Four-Leg Lab, Sheet Scenario Lab)
+
+Option chains, IV and Greeks come from Alpaca market data, fetched **server-side only** (`server/alpaca.js`). The browser never
+sees the keys and nothing is sent to the old hosted backend. The perp leg is always a Hyperliquid US-stock perp (`xyz:` dex);
+non-US "stock" perps and crypto are excluded. Without keys every page still loads and explains what is missing; Manual
+Four-Leg Lab and Sheet Scenario Lab work fully with typed premiums.
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `ALPACA_KEY_ID`, `ALPACA_SECRET_KEY` | – | Alpaca API keys (paper account keys are fine for market data). Secret. |
+| `ALPACA_OPTIONS_FEED` | `indicative` | `indicative` (free, modified quotes) or `opra` (needs an Alpaca options data subscription) |
+| `ALPACA_STOCK_FEED` | `iex` | `iex`, `sip` (subscription) or `delayed_sip` |
+| `ALPACA_ENV` | paper | `live` to use live-account keys for the contracts/assets endpoints |
+| `OPTIONS_FALLBACK` | off | `cboe` = use Cboe's public *delayed* chain when no Alpaca keys are set (labelled DELAYED) |
+
+Shared state (ticker, expiry, legs, hedge) flows between the pages via `localStorage` (`public/deriv-shared.js`).
+"Analysis mode" (Options Studio, on by default) lets Gamma/Live Hedge/1:2 use the last available quotes (≤5 days, labelled
+STALE) when the market is closed; switch it off for the strict 120-second freshness rule.
+Endpoints: `GET /api/derivatives/status`, `GET /api/option-universe`, `POST /api/options` (`action: chain|legs|universe`),
+`POST /api/manual-four-leg`, `POST /api/sheet-scenarios`, `GET /api/sheet-audit`, `POST /api/position-pnl`, `POST /api/ratio-setup`.
+Tests: `npm test` (Alpaca client against documented response shapes, mocked).
 
 Risk, scanner and webhook settings can also be edited in the Auto-Trader view. Changes are validated and saved back to `config.json`.
 

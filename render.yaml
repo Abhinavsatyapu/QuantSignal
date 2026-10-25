@@ -26,5 +26,9 @@ services:
         sync: false          # set in the Render dashboard (secret)
       - key: HL_ACCOUNT_ADDRESS
         sync: false
-      - key: UPSTREAM_API
-        value: https://quant-signal-frontend.satyapuabhinav1609.chatgpt.site
+      - key: ALPACA_KEY_ID
+        sync: false          # secret, set in the Render dashboard
+      - key: ALPACA_SECRET_KEY
+        sync: false          # secret, set in the Render dashboard
+      - key: ALPACA_OPTIONS_FEED
+        value: indicative

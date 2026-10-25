@@ -1,29 +1,597 @@
-let hedgeDraft=[],hedgeReference=null,hedgeBlueprint=null,hedgeBusy=false,hedgeNext=0,gammaBlueprint=null;
-const sheetLabels=['LONG CALL','SHORT CALL','SHORT PUT','LONG PUT'],auditNames=['Today up','Expiry up','Today down','Expiry down'];
-$('#hedgeExpiry').value=futureFriday(14);$('#sheetPage').innerHTML=SHEET_DATA.map(r=>`<option value="${r.page}">Page ${r.page} · ${r.symbol}${r.notes?' · review flag':''}</option>`).join('');$('#sheetPage').value='1';
-function selectedSheet(){return SHEET_DATA[Number($('#sheetPage').value)-1];}
-function sheetAuditRow(r){try{const a=SheetMath.historical(r);if(a.error)return {error:a.error};return {...a,arithmetic:[a.sumTodayUp,a.sumExpiryUp,a.sumTodayDown,a.sumExpiryDown],differences:[a.sumTodayUp-r.printedNet[0],a.sumExpiryUp-r.printedNet[1],a.sumTodayDown-r.printedNet[2],a.sumExpiryDown-r.printedNet[3]]};}catch(e){return {error:e.message};}}
-function sheetRender(){const r=selectedSheet(),a=sheetAuditRow(r);$('#sheetImage').src=r.image;$('#sheetNotes').textContent=`Page ${r.page} · ${r.symbol} · historical image values. ${r.notes||'No special transcription note; see numerical audits below.'} ${r.confidence}`;let html='<table class="stream-table"><thead><tr><th>Leg</th><th>Strike</th><th>Signed option units</th><th>Inferred standard lots</th><th>Entry premium / share</th><th>Entry cash</th></tr></thead><tbody>'+r.strikes.map((k,i)=>`<tr><td>${sheetLabels[i]}</td><td>${k}</td><td>${r.units[i]}</td><td>${Math.abs(r.units[i])/100}</td><td>${r.premiums[i]??'UNREADABLE'}</td><td>${r.premiums[i]!=null?money(-r.units[i]*r.premiums[i]):'Unavailable'}</td></tr>`).join('')+'</tbody></table>';html+=`<p class="market-note">Printed signed futures quantity ${r.futureQty} · entry ${r.futureEntry} · upside distance ${r.up} · downside distance ${r.down} · MM allowance ${money(r.mmLoss)}. Positive futures quantity means LONG; negative means SHORT. Sign disagreements are flagged, never silently flipped.</p>`;
- if(a.error)html+=`<p class="error">${escapeHtml(a.error)}</p>`;else{html+=`<p class="market-note">Reconstructed option entry cash ${money(a.entryCash)} before fees. Expiry scenarios assume stock and perp both equal F0 ± printed distance because no separate stock anchor/basis is shown. These are explicit reconstruction assumptions, not recovered workbook formulas.</p><table class="stream-table"><thead><tr><th>Scenario</th><th>Printed option P&amp;L</th><th>Futures from signed quantity</th><th>MM deduction</th><th>Re-added net</th><th>Printed net</th><th>Difference</th></tr></thead><tbody>`+auditNames.map((n,i)=>`<tr><td>${n}</td><td>${money(r.printedOptions[i])}</td><td>${money(i<2?r.futureQty*r.up:-r.futureQty*r.down)}</td><td>${money(-r.mmLoss)}</td><td>${money(a.arithmetic[i])}</td><td>${money(r.printedNet[i])}</td><td>${Math.abs(a.differences[i])<.015?'Matches':money(a.differences[i])+' · CHECK'}</td></tr>`).join('')+'</tbody></table>';html+=`<p class="market-note">Independent intrinsic expiry check: upside options ${money(a.upper.optionPnl)} versus printed ${money(r.printedOptions[1])}; downside options ${money(a.lower.optionPnl)} versus printed ${money(r.printedOptions[3])}. Combined reconstructed upside ${money(a.upper.net)}, downside ${money(a.lower.net)}. Before actual commissions/funding. Mismatches may reflect formula errors, different anchors, missing inputs or image transcription uncertainty; they are not silently corrected.</p>`;if(r.secondModelPage)html+=`<p class="market-note">Page ${r.page} also contains a second full position, corresponding to page ${r.secondModelPage}. Select that page to inspect its full leg model.</p>`;}
- if(r.closedSummary){const [booked,mm,total,apy,capital,days]=r.closedSummary,computed=booked+mm,calculatedApy=capital&&days?computed/capital*365/days*100:null;html+=`<p class="market-note">Closed-book arithmetic: strategy ${money(booked)} + separate MM ${money(mm)} = ${money(computed)}; printed total ${money(total)}; difference ${money(computed-total)}. ${apy!=null?'Printed APY '+apy+'%. ':''}${calculatedApy!=null?'Simple annualization from the visible capital/holding period: '+calculatedApy.toFixed(2)+'% (not a forward expected return).':'Holding period/capital unavailable or inconsistent; APY cannot be verified.'} Visible booked profit is not independently verified against executions.</p>`;}html+='<p class="market-note">TODAY option scenarios cannot be verified: the PDF supplies no per-leg scenario exit premiums, IV surface, Greeks, rates or model date/time. Basket distance/count/loss are grid settings; their loss requires the underlying grid fills. “Investment” is a stated capital allocation, not a recoverable margin formula. APY needs the capital denominator, holding period and annualization convention. Booked P&amp;L needs execution records; total booked = booked strategy P&amp;L + separate market-making P&amp;L, without adding APY.</p>';$('#sheetAudit').innerHTML=html;
+let hedgeDraft = [],
+  hedgeReference = null,
+  hedgeBlueprint = null,
+  hedgeBusy = false,
+  hedgeNext = 0,
+  gammaBlueprint = null;
+const sheetLabels = ["LONG CALL", "SHORT CALL", "SHORT PUT", "LONG PUT"],
+  auditNames = ["Today up", "Expiry up", "Today down", "Expiry down"];
+$("#hedgeExpiry").value = futureFriday(14);
+$("#sheetPage").innerHTML = SHEET_DATA.map(
+  (r) =>
+    `<option value="${r.page}">Page ${r.page} · ${r.symbol}${r.notes ? " · review flag" : ""}</option>`,
+).join("");
+$("#sheetPage").value = "1";
+function selectedSheet() {
+  return SHEET_DATA[Number($("#sheetPage").value) - 1];
 }
-function sheetAllRender(){$('#sheetAllAudit').innerHTML='<table class="stream-table"><thead><tr><th>PDF page</th><th>Stock</th><th>Call / put lots</th><th>Signed futures</th><th>Scenario additions</th><th>Expiry input reconstruction</th><th>Additional note</th></tr></thead><tbody>'+SHEET_DATA.map(r=>{const a=sheetAuditRow(r),count=a.error?null:a.differences.filter(v=>Math.abs(v)>.015).length,expiry=a.error?'Blocked':Math.abs(a.upper.optionPnl-r.printedOptions[1])>.015||Math.abs(a.lower.optionPnl-r.printedOptions[3])>.015?'Does not reconcile at F0 ± distance':'Reconciles before costs';return `<tr><td>${r.page}</td><td>${r.symbol}</td><td>${r.units[0]/100} / ${Math.abs(r.units[2])/100}</td><td>${r.futureQty}</td><td>${a.error?escapeHtml(a.error):count?count+' of 4 need review':'4 of 4 reconcile'}</td><td>${expiry}</td><td>${escapeHtml(r.notes||'Original formulas unavailable')}</td></tr>`;}).join('')+'</tbody></table>';}
-function hedgeGcd(a,b){return b?hedgeGcd(b,a%b):a;}
-function applySheet(){hedgeBlueprint=null;gammaBlueprint=null;$('#hedgeStatus').textContent='Strategy structure selected. No historical strikes, quantities, premiums or offsets imported. Compare current chains to build a new setup.';}
-function hedgePick(data,S,symbol,expiry,direction,callLots,putLots,blueprint=null){let specs;const w=S*.025;specs=direction==='LONG'?[['call','buy',S+2*w,callLots],['call','sell',S+w,callLots],['put','sell',S-2*w,putLots],['put','buy',S-w,putLots]]:[['call','buy',S+w,callLots],['call','sell',S+2*w,callLots],['put','sell',S-w,putLots],['put','buy',S-2*w,putLots]];const available=data.filter(q=>q.underlying===symbol&&q.expiry===expiry&&gammaFresh(q)),pair=type=>{const b=specs.find(x=>x[0]===type&&x[1]==='buy'),s=specs.find(x=>x[0]===type&&x[1]==='sell');return gammaPairSelect(available,type,b[2],s[2],direction==='LONG');},calls=pair('call'),puts=pair('put'),legs=[gammaLeg(calls[0],'buy',callLots,S),gammaLeg(calls[1],'sell',callLots,S),gammaLeg(puts[1],'sell',putLots,S),gammaLeg(puts[0],'buy',putLots,S)];const lc=legs.find(l=>l.type==='call'&&l.side==='buy'),sc=legs.find(l=>l.type==='call'&&l.side==='sell'),lp=legs.find(l=>l.type==='put'&&l.side==='buy'),sp=legs.find(l=>l.type==='put'&&l.side==='sell');if(direction==='LONG'?(lc.strike<=sc.strike||lp.strike<=sp.strike):(lc.strike>=sc.strike||lp.strike>=sp.strike))throw Error('Nearest listed strikes do not preserve the requested spread ordering. Edit/select a different geometry.');return legs;}
-function hedgeCosts(){return {commission:Number($('#hedgeCommission').value),futureFeePct:Number($('#hedgeFee').value),funding:Number($('#hedgeFunding').value),mmLoss:Number($('#hedgeMm').value)};}
-function hedgeFuture(){if(hedgeReference&&$('#hedgeDirection').value!==hedgeReference.direction)throw Error('Direction changed: rebuild the provider baseline');const qty=Number($('#hedgeQty').value);if(!($('#hedgeQty').value.trim())||!(qty>=0&&Number.isFinite(qty)))throw Error('Enter a futures quantity, or load provider Greeks to calculate an initial delta hedge.');return {entry:hedgeReference.futureEntry,qty:($('#hedgeDirection').value==='LONG'?1:-1)*qty};}
-function hedgeLegRender(){$('#hedgeLegs').innerHTML='<table class="stream-table"><thead><tr><th>Leg</th><th>Strike</th><th>Lots</th><th>Entry premium/share</th><th>Live bid/ask</th><th>Δ / Γ / IV</th><th>Entry source</th></tr></thead><tbody>'+hedgeDraft.map((l,i)=>`<tr><td>${l.side.toUpperCase()} ${l.type.toUpperCase()}</td>${['strike','qty','premium'].map(f=>`<td><input type="number" data-h="${i}" data-f="${f}" value="${Number.isFinite(l[f])?l[f]:''}" step="${f==='qty'?'1':'any'}" min="${f==='premium'?'0':'1'}"></td>`).join('')}<td>${quotePrice(l.quote?.bid)} / ${quotePrice(l.quote?.ask)}</td><td>${l.quote?.greeks?.delta?.toFixed(3)??'—'} / ${l.quote?.greeks?.gamma?.toFixed(4)??'—'} / ${l.iv>0?(l.iv*100).toFixed(1)+'%':'—'}</td><td>${escapeHtml(l.source)}</td></tr>`).join('')+'</tbody></table>';$('#hedgeLegs').querySelectorAll('[data-f]').forEach(el=>el.onchange=()=>{const l=hedgeDraft[Number(el.dataset.h)];l[el.dataset.f]=Number(el.value);l.source='MANUAL ANALYSIS OVERRIDE';if(el.dataset.f==='strike'){l.quote=null;l.iv=NaN;l.contract=occForLeg(l);}hedgeLegRender();hedgeRender();});}
-async function hedgeLoad(){if(hedgeBusy)return;hedgeBusy=true;try{const symbol=$('#hedgeSymbol').value.trim(),underlying=symbol.split(':')[1],expiry=$('#hedgeExpiry').value,nc=Number($('#hedgeCallLots').value),np=Number($('#hedgePutLots').value);if(![nc,np].every(n=>Number.isInteger(n)&&n>0&&n<=100)||!expiry||expiry<=isoDay(new Date()))throw Error('Choose an unexpired date and 1–100 whole lots per call/put pair.');const directory=await streamJson('/api/stream/universe?scope=stocks');if(!directory.symbols.includes(symbol))throw Error('This symbol is not a verified Hyperliquid US stock perp.');const [chain,mids]=await Promise.all([gammaApi({symbol:underlying,near:expiry,far:expiry}),streamPrices([symbol])]);if(!(chain.stock?.price>0)||!chain.stock.time||Date.now()-Date.parse(chain.stock.time)>120000)throw Error('Fresh Alpaca underlying quote unavailable. No substitute stock price used.');if(!(mids[symbol]>0))throw Error('Live Hyperliquid price unavailable');const legs=hedgePick(chain.contracts,chain.stock.price,underlying,expiry,$('#hedgeDirection').value,nc,np,hedgeBlueprint);hedgeDraft=legs;hedgeReference={symbol,underlying,expiry,direction:$('#hedgeDirection').value,stockEntry:chain.stock.price,stockTime:chain.stock.time,futureEntry:mids[symbol],futureMark:mids[symbol],futureTime:Date.now(),loadedAt:Date.now(),stockMark:chain.stock.price};if(!$('#hedgeQty').value.trim()){const delta=legs.reduce((n,l)=>n+(l.side==='buy'?1:-1)*l.quote.greeks.delta*l.qty*100,0);$('#hedgeQty').value=Math.abs(delta).toFixed(4);}hedgeLegRender();hedgeRender();$('#hedgeStatus').textContent='Live OPRA bid/ask baseline and Hyperliquid futures loaded. Quantities and scenarios are analysis inputs, not a signal.';}catch(e){$('#hedgeStatus').textContent='Live build blocked: '+e.message;}finally{hedgeBusy=false;hedgeNext=Date.now()+30000;}}
-async function hedgeRefresh(){if(hedgeBusy||!hedgeReference)return;hedgeBusy=true;try{const [data,mids]=await Promise.all([gammaApi({action:'legs',contracts:hedgeDraft.map(occForLeg)}),streamPrices([hedgeReference.symbol])]);for(const l of hedgeDraft){const q=data.contracts.find(q=>q.symbol===occForLeg(l));if(!gammaFresh(q))throw Error('Selected options are stale or missing. Previous marks retained with timestamps; no fabricated refresh.');l.quote=q;if(l.source!=='MANUAL ANALYSIS OVERRIDE')l.iv=q.iv;const stock=data.stocks[l.symbol];if(stock?.price>0){l.spot=stock.price;hedgeReference.stockMark=stock.price;hedgeReference.stockTime=stock.time;}}if(!(mids[hedgeReference.symbol]>0))throw Error('Futures mid unavailable');hedgeReference.futureMark=mids[hedgeReference.symbol];hedgeReference.futureTime=Date.now();hedgeLegRender();hedgeRender();$('#hedgeStatus').textContent='Quotes/IV/Greeks refreshed; entry prices remain fixed for P&L.';}catch(e){$('#hedgeStatus').textContent='Refresh blocked: '+e.message;hedgeRender();}finally{hedgeBusy=false;hedgeNext=Date.now()+30000;}}
-function hedgeRender(){try{if(!hedgeReference||!hedgeDraft.length)return;const future=hedgeFuture(),costs=hedgeCosts(),basis=$('#hedgeBasis').value.trim()?Number($('#hedgeBasis').value):hedgeReference.futureMark-hedgeReference.stockMark,up=Number($('#hedgeUp').value),down=Number($('#hedgeDown').value);if(!(up>0&&up<=200&&down>0&&down<100)||!Number.isFinite(basis))throw Error('Use upside 0–200%, downside 0–100% and finite basis');const bounds=SheetMath.bounds(hedgeDraft,future,basis,costs),manual=hedgeDraft.some(l=>l.source==='MANUAL ANALYSIS OVERRIDE'),fresh=hedgeDraft.every(l=>gammaFresh(l.quote))&&Date.now()-hedgeReference.futureTime<=45000,optionDelta=hedgeDraft.reduce((n,l)=>n+(l.side==='buy'?1:-1)*(l.quote?.greeks?.delta??0)*l.qty*100,0),netDelta=future.qty+optionDelta,feeEntry=hedgeDraft.reduce((n,l)=>n+costs.commission*l.qty,0),cash=hedgeDraft.reduce((n,l)=>n-(l.side==='buy'?1:-1)*l.premium*l.qty*100,0)-feeEntry,mark=fresh?cash+hedgeDraft.reduce((n,l)=>n+(l.side==='buy'?1:-1)*(l.side==='buy'?l.quote.bid:l.quote.ask)*l.qty*100,0):null,futureMark=future.qty*(hedgeReference.futureMark-future.entry)-Math.abs(future.qty)*future.entry*costs.futureFeePct/100;
- $('#hedgeSummary').innerHTML=[['Option entry cash',money(cash)],['Liquidation option mark',mark==null?'STALE / unavailable':money(mark)],['Futures mark P&L',money(futureMark)],['Combined mark',mark==null?'STALE / unavailable':money(mark+futureMark-costs.funding)],['Net share delta',netDelta.toFixed(2)],['Current delta-neutral futures qty',fresh?(-optionDelta).toFixed(4):'STALE / unavailable'],['5× futures margin',money(Math.abs(future.qty)*future.entry/5)]].map(([k,v])=>`<article><span>${k}</span><strong>${v}</strong></article>`).join('');$('#hedgeSources').textContent=`Hyperliquid ${hedgeReference.symbol}: entry ${quotePrice(future.entry)}, latest ${quotePrice(hedgeReference.futureMark)} at ${new Date(hedgeReference.futureTime).toLocaleString()} · Alpaca stock ${quotePrice(hedgeReference.stockMark)} at ${hedgeReference.stockTime||'unavailable'} · OPRA leg quote times ${hedgeDraft.map(l=>l.quote?.quoteTime||'missing').join(' / ')} · ${manual?'MANUAL BASELINE':'PROVIDER ENTRY BASELINE'} · ${fresh?'quotes fresh':'STALE / missing quotes'}`;$('#hedgeLimits').textContent=`Combined expiry bounds at constant basis: max profit ${bounds.maxProfit===Infinity?'UNBOUNDED':money(bounds.maxProfit)}; max loss ${bounds.maxLoss===Infinity?'UNBOUNDED':money(bounds.maxLoss)}. Upper-tail slope ${bounds.tailSlope.toFixed(3)} dollars per $1 move. Break-evens ${bounds.breakEvens.length?bounds.breakEvens.map(quotePrice).join(', '):'none / flat interval may exist'}. Endpoint profits do not prove profitability across the range.`;
- const shocks=[-down,-down/2,0,up/2,up],rows=shocks.map(shock=>{const S=hedgeReference.stockMark*(1+shock/100),F=Math.max(0,S+basis),v=SheetMath.totals(hedgeDraft,future,S,F,costs);let model=null;try{model=Finance.pnl(hedgeDraft,{timeMillis:Date.now(),shock,ivShift:0,rate:Number($('#hedgeRate').value),dividend:Number($('#hedgeDividend').value)},costs.commission)-hedgeDraft.reduce((n,l)=>n+costs.commission*l.qty,0);}catch{}return {shock,S,F,v,model};});$('#hedgePayoff').innerHTML='<table class="stream-table"><thead><tr><th>Move</th><th>Stock / perp scenario</th><th>Expiry options</th><th>Current-time options model</th><th>Futures gross</th><th>Futures costs</th><th>Funding / MM</th><th>Combined expiry</th><th>Combined current-time model</th></tr></thead><tbody>'+rows.map(r=>`<tr><td>${r.shock}%</td><td>${quotePrice(r.S)} / ${quotePrice(r.F)}</td><td>${money(r.v.optionPnl)}</td><td>${r.model==null?'IV required':money(r.model)}</td><td>${money(r.v.futureGross)}</td><td>${money(r.v.futureFees)}</td><td>${money(r.v.funding)} / ${money(r.v.mmLoss)}</td><td>${money(r.v.net)}</td><td>${r.model==null?'Unavailable':money(r.model+r.v.futurePnl-r.v.mmLoss)}</td></tr>`).join('')+'</tbody></table><h3>Per-leg expiry calculation at the selected upside endpoint</h3><table class="stream-table"><thead><tr><th>Leg</th><th>Signed units</th><th>Premium cash</th><th>Intrinsic / share</th><th>Intrinsic value</th><th>Leg P&amp;L incl. two-sided commission</th></tr></thead><tbody>'+rows.at(-1).v.details.map(l=>`<tr><td>${l.side.toUpperCase()} ${l.type} ${l.strike}</td><td>${l.signedUnits}</td><td>${money(l.entryCash)}</td><td>${quotePrice(l.intrinsic)}</td><td>${money(l.value)}</td><td>${money(l.pnl)}</td></tr>`).join('')+'</tbody></table>';hedgeChart(bounds,basis,hedgeReference.stockMark,up,down);
- }catch(e){$('#hedgePayoff').innerHTML='<p class="error">'+escapeHtml(e.message)+'</p>';$('#hedgeSummary').innerHTML='';$('#hedgeLimits').textContent='Calculation blocked until inputs are valid.';}}
-function hedgeChart(bounds,basis,S,up,down){const canvas=$('#hedgeChart'),c=canvas.getContext('2d');if(!c)return;const pts=Array.from({length:121},(_,i)=>{const x=S*(1-down/100)+(S*(up+down)/100)*i/120;return {x,y:bounds.value(Math.max(Math.max(0,-basis),x))};}),min=Math.min(0,...pts.map(p=>p.y)),max=Math.max(0,...pts.map(p=>p.y)),range=max-min||1,W=canvas.width||1000,H=canvas.height||360,y=v=>H-40-(v-min)/range*(H-80);c.clearRect(0,0,W,H);c.strokeStyle='#536179';c.beginPath();c.moveTo(60,y(0));c.lineTo(W-20,y(0));c.stroke();c.strokeStyle='#5f8cff';c.lineWidth=2;c.beginPath();pts.forEach((p,i)=>{const x=60+i/120*(W-80);i?c.lineTo(x,y(p.y)):c.moveTo(x,y(p.y));});c.stroke();c.fillStyle='#aab7ce';c.font='12px sans-serif';c.fillText(money(max),4,24);c.fillText(money(min),4,H-30);c.fillText(quotePrice(pts[0].x),60,H-10);c.fillText('Option stock price · constant perp basis',W/3,H-10);c.fillText(quotePrice(pts.at(-1).x),W-70,H-10);}
-$('#hedgeGuide').innerHTML=`<p><b>Position model.</b> For a bullish option overlay, buy the lower-strike call, sell the higher-strike call, sell the higher-strike put and buy the lower-strike put; pair it with short futures. Reverse each spread direction for a bearish overlay paired with long futures. Unequal call/put pair sizes change delta, premium cash and each endpoint independently.</p><p><b>Option quantity.</b> Standard underlying units = lots × 100. Premium cash = −signed units × entry premium. A buy has positive signed units; a sell negative. Expiry call intrinsic = max(stock price − strike, 0); put intrinsic = max(strike − stock price, 0). Leg P&amp;L = signed units × (intrinsic − premium) − entry/exit commissions.</p><p><b>Futures.</b> P&amp;L = signed quantity × (exit/mark price − entry price), less fees and funding. Leverage changes initial margin, not P&amp;L per unit: 5× margin = absolute quantity × entry / 5. Initial delta hedge quantity = −sum(option delta × signed units); it is an initial hedge and must be rechecked as delta changes.</p><p><b>Combined net.</b> Sum the four option P&amp;Ls + futures net P&amp;L − MM loss allowance. A realized MM profit is separate; add it once to actual booked strategy P&amp;L. An MM reserve is not an option loss or guaranteed maximum loss.</p><p><b>Sheet columns without recoverable formulas.</b> Investment is stated allocation; grid basket counts/distance/loss need fill rules; today option scenarios need IV and per-leg prices; booked profit needs trades; APY = profit / deployed capital × 365 / holding days × 100 only under simple annualization. Those inputs and formula cells are absent, so they are not invented.</p><p><b>Tail risk and Greek risk.</b> Two bounded spreads plus an uncapped futures leg can leave unlimited upside loss for a short-futures book. Delta-neutral at entry does not imply gamma-neutral or risk-free. Assignment, expiration handling, funding, liquidity, spread costs and changing basis can materially change results. This simulator does not emulate assignment or liquidation.</p>`;
-$('#sheetPage').onchange=sheetRender;$('#sheetApply').onclick=applySheet;$('#hedgeLoad').onclick=hedgeLoad;$('#hedgeReprice').onclick=hedgeRefresh;for(const id of ['hedgeQty','hedgeUp','hedgeDown','hedgeBasis','hedgeCommission','hedgeFee','hedgeFunding','hedgeMm','hedgeRate','hedgeDividend'])$('#'+id).oninput=hedgeRender;
-$('#hedgeDirection').onchange=()=>{hedgeDraft=[];hedgeReference=null;$('#hedgeLegs').innerHTML='';$('#hedgeSummary').innerHTML='';$('#hedgePayoff').innerHTML='';$('#hedgeStatus').textContent='Direction changed. Rebuild with fresh provider quotes.';};
-$('#hedgeToGamma').onclick=()=>{try{if(!hedgeReference||!hedgeDraft.length)throw Error('Load a live draft first');SheetMath.validate(hedgeDraft);gammaDraft=JSON.parse(JSON.stringify(hedgeDraft));gammaBlueprint=null;$('#gammaSymbol').value=hedgeReference.symbol;$('#gammaExpiry').value=hedgeReference.expiry;$('#gammaLots').value=hedgeDraft.find(l=>l.type==='call').qty;$('#gammaPutLots').value=hedgeDraft.find(l=>l.type==='put').qty;$('#gammaFutureQty').value=$('#hedgeQty').value;gammaDraftRender();$('#gammaStatus').textContent='Live analysis draft copied. Indicators, fresh quotes and risk sizing are still required before paper entry. Futures override cannot exceed the risk-sized quantity.';document.querySelector('[data-view="gamma"]').click();}catch(e){$('#hedgeStatus').textContent=e.message;}};
-$('#hedgeExport').onclick=()=>{const data={exportedAt:new Date().toISOString(),historicalPage:selectedSheet().page,reference:hedgeReference,legs:hedgeDraft,costs:hedgeCosts(),future:hedgeReference?hedgeFuture():null,mode:'analysis only, no actual broker orders'},blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='hedge-calculation-audit.json';a.click();URL.revokeObjectURL(a.href);};
-setInterval(()=>{if(document.hidden||activeView!=='hedge'||!$('#hedgeAuto').checked||hedgeBusy||!hedgeReference||Date.now()<hedgeNext)return;hedgeRefresh();},1000);sheetRender();sheetAllRender();if(location.pathname==='/hedge')document.querySelector('[data-view="hedge"]').click();
+function sheetAuditRow(r) {
+  try {
+    const a = SheetMath.historical(r);
+    if (a.error) return { error: a.error };
+    return {
+      ...a,
+      arithmetic: [
+        a.sumTodayUp,
+        a.sumExpiryUp,
+        a.sumTodayDown,
+        a.sumExpiryDown,
+      ],
+      differences: [
+        a.sumTodayUp - r.printedNet[0],
+        a.sumExpiryUp - r.printedNet[1],
+        a.sumTodayDown - r.printedNet[2],
+        a.sumExpiryDown - r.printedNet[3],
+      ],
+    };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+function sheetRender() {
+  const r = selectedSheet(),
+    a = sheetAuditRow(r);
+  $("#sheetImage").src = r.image;
+  $("#sheetNotes").textContent =
+    `Page ${r.page} · ${r.symbol} · historical image values. ${r.notes || "No special transcription note; see numerical audits below."} ${r.confidence}`;
+  let html =
+    '<table class="stream-table"><thead><tr><th>Leg</th><th>Strike</th><th>Signed option units</th><th>Inferred standard lots</th><th>Entry premium / share</th><th>Entry cash</th></tr></thead><tbody>' +
+    r.strikes
+      .map(
+        (k, i) =>
+          `<tr><td>${sheetLabels[i]}</td><td>${k}</td><td>${r.units[i]}</td><td>${Math.abs(r.units[i]) / 100}</td><td>${r.premiums[i] ?? "UNREADABLE"}</td><td>${r.premiums[i] != null ? money(-r.units[i] * r.premiums[i]) : "Unavailable"}</td></tr>`,
+      )
+      .join("") +
+    "</tbody></table>";
+  html += `<p class="market-note">Printed signed futures quantity ${r.futureQty} · entry ${r.futureEntry} · upside distance ${r.up} · downside distance ${r.down} · MM allowance ${money(r.mmLoss)}. Positive futures quantity means LONG; negative means SHORT. Sign disagreements are flagged, never silently flipped.</p>`;
+  if (a.error) html += `<p class="error">${escapeHtml(a.error)}</p>`;
+  else {
+    html +=
+      `<p class="market-note">Reconstructed option entry cash ${money(a.entryCash)} before fees. Expiry scenarios assume stock and perp both equal F0 ± printed distance because no separate stock anchor/basis is shown. These are explicit reconstruction assumptions, not recovered workbook formulas.</p><table class="stream-table"><thead><tr><th>Scenario</th><th>Printed option P&amp;L</th><th>Futures from signed quantity</th><th>MM deduction</th><th>Re-added net</th><th>Printed net</th><th>Difference</th></tr></thead><tbody>` +
+      auditNames
+        .map(
+          (n, i) =>
+            `<tr><td>${n}</td><td>${money(r.printedOptions[i])}</td><td>${money(i < 2 ? r.futureQty * r.up : -r.futureQty * r.down)}</td><td>${money(-r.mmLoss)}</td><td>${money(a.arithmetic[i])}</td><td>${money(r.printedNet[i])}</td><td>${Math.abs(a.differences[i]) < 0.015 ? "Matches" : money(a.differences[i]) + " · CHECK"}</td></tr>`,
+        )
+        .join("") +
+      "</tbody></table>";
+    html += `<p class="market-note">Independent intrinsic expiry check: upside options ${money(a.upper.optionPnl)} versus printed ${money(r.printedOptions[1])}; downside options ${money(a.lower.optionPnl)} versus printed ${money(r.printedOptions[3])}. Combined reconstructed upside ${money(a.upper.net)}, downside ${money(a.lower.net)}. Before actual commissions/funding. Mismatches may reflect formula errors, different anchors, missing inputs or image transcription uncertainty; they are not silently corrected.</p>`;
+    if (r.secondModelPage)
+      html += `<p class="market-note">Page ${r.page} also contains a second full position, corresponding to page ${r.secondModelPage}. Select that page to inspect its full leg model.</p>`;
+  }
+  if (r.closedSummary) {
+    const [booked, mm, total, apy, capital, days] = r.closedSummary,
+      computed = booked + mm,
+      calculatedApy =
+        capital && days ? (((computed / capital) * 365) / days) * 100 : null;
+    html += `<p class="market-note">Closed-book arithmetic: strategy ${money(booked)} + separate MM ${money(mm)} = ${money(computed)}; printed total ${money(total)}; difference ${money(computed - total)}. ${apy != null ? "Printed APY " + apy + "%. " : ""}${calculatedApy != null ? "Simple annualization from the visible capital/holding period: " + calculatedApy.toFixed(2) + "% (not a forward expected return)." : "Holding period/capital unavailable or inconsistent; APY cannot be verified."} Visible booked profit is not independently verified against executions.</p>`;
+  }
+  html +=
+    '<p class="market-note">TODAY option scenarios cannot be verified: the PDF supplies no per-leg scenario exit premiums, IV surface, Greeks, rates or model date/time. Basket distance/count/loss are grid settings; their loss requires the underlying grid fills. “Investment” is a stated capital allocation, not a recoverable margin formula. APY needs the capital denominator, holding period and annualization convention. Booked P&amp;L needs execution records; total booked = booked strategy P&amp;L + separate market-making P&amp;L, without adding APY.</p>';
+  $("#sheetAudit").innerHTML = html;
+}
+function sheetAllRender() {
+  $("#sheetAllAudit").innerHTML =
+    '<table class="stream-table"><thead><tr><th>PDF page</th><th>Stock</th><th>Call / put lots</th><th>Signed futures</th><th>Scenario additions</th><th>Expiry input reconstruction</th><th>Additional note</th></tr></thead><tbody>' +
+    SHEET_DATA.map((r) => {
+      const a = sheetAuditRow(r),
+        count = a.error
+          ? null
+          : a.differences.filter((v) => Math.abs(v) > 0.015).length,
+        expiry = a.error
+          ? "Blocked"
+          : Math.abs(a.upper.optionPnl - r.printedOptions[1]) > 0.015 ||
+              Math.abs(a.lower.optionPnl - r.printedOptions[3]) > 0.015
+            ? "Does not reconcile at F0 ± distance"
+            : "Reconciles before costs";
+      return `<tr><td>${r.page}</td><td>${r.symbol}</td><td>${r.units[0] / 100} / ${Math.abs(r.units[2]) / 100}</td><td>${r.futureQty}</td><td>${a.error ? escapeHtml(a.error) : count ? count + " of 4 need review" : "4 of 4 reconcile"}</td><td>${expiry}</td><td>${escapeHtml(r.notes || "Original formulas unavailable")}</td></tr>`;
+    }).join("") +
+    "</tbody></table>";
+}
+function hedgeGcd(a, b) {
+  return b ? hedgeGcd(b, a % b) : a;
+}
+function applySheet() {
+  hedgeBlueprint = null;
+  gammaBlueprint = null;
+  $("#hedgeStatus").textContent =
+    "Strategy structure selected. No historical strikes, quantities, premiums or offsets imported. Compare current chains to build a new setup.";
+}
+function hedgePick(
+  data,
+  S,
+  symbol,
+  expiry,
+  direction,
+  callLots,
+  putLots,
+  blueprint = null,
+) {
+  let specs;
+  const w = S * 0.025;
+  specs =
+    direction === "LONG"
+      ? [
+          ["call", "buy", S + 2 * w, callLots],
+          ["call", "sell", S + w, callLots],
+          ["put", "sell", S - 2 * w, putLots],
+          ["put", "buy", S - w, putLots],
+        ]
+      : [
+          ["call", "buy", S + w, callLots],
+          ["call", "sell", S + 2 * w, callLots],
+          ["put", "sell", S - w, putLots],
+          ["put", "buy", S - 2 * w, putLots],
+        ];
+  const available = data.filter(
+      (q) => q.underlying === symbol && q.expiry === expiry && gammaFresh(q),
+    ),
+    pair = (type) => {
+      const b = specs.find((x) => x[0] === type && x[1] === "buy"),
+        s = specs.find((x) => x[0] === type && x[1] === "sell");
+      return gammaPairSelect(available, type, b[2], s[2], direction === "LONG");
+    },
+    calls = pair("call"),
+    puts = pair("put"),
+    legs = [
+      gammaLeg(calls[0], "buy", callLots, S),
+      gammaLeg(calls[1], "sell", callLots, S),
+      gammaLeg(puts[1], "sell", putLots, S),
+      gammaLeg(puts[0], "buy", putLots, S),
+    ];
+  const lc = legs.find((l) => l.type === "call" && l.side === "buy"),
+    sc = legs.find((l) => l.type === "call" && l.side === "sell"),
+    lp = legs.find((l) => l.type === "put" && l.side === "buy"),
+    sp = legs.find((l) => l.type === "put" && l.side === "sell");
+  if (
+    direction === "LONG"
+      ? lc.strike <= sc.strike || lp.strike <= sp.strike
+      : lc.strike >= sc.strike || lp.strike >= sp.strike
+  )
+    throw Error(
+      "Nearest listed strikes do not preserve the requested spread ordering. Edit/select a different geometry.",
+    );
+  return legs;
+}
+function hedgeCosts() {
+  return {
+    commission: Number($("#hedgeCommission").value),
+    futureFeePct: Number($("#hedgeFee").value),
+    funding: Number($("#hedgeFunding").value),
+    mmLoss: Number($("#hedgeMm").value),
+  };
+}
+function hedgeFuture() {
+  if (hedgeReference && $("#hedgeDirection").value !== hedgeReference.direction)
+    throw Error("Direction changed: rebuild the provider baseline");
+  const qty = Number($("#hedgeQty").value);
+  if (!$("#hedgeQty").value.trim() || !(qty >= 0 && Number.isFinite(qty)))
+    throw Error(
+      "Enter a futures quantity, or load provider Greeks to calculate an initial delta hedge.",
+    );
+  return {
+    entry: hedgeReference.futureEntry,
+    qty: ($("#hedgeDirection").value === "LONG" ? 1 : -1) * qty,
+  };
+}
+function hedgeLegRender() {
+  $("#hedgeLegs").innerHTML =
+    '<table class="stream-table"><thead><tr><th>Leg</th><th>Strike</th><th>Lots</th><th>Entry premium/share</th><th>Live bid/ask</th><th>Δ / Γ / IV</th><th>Entry source</th></tr></thead><tbody>' +
+    hedgeDraft
+      .map(
+        (l, i) =>
+          `<tr><td>${l.side.toUpperCase()} ${l.type.toUpperCase()}</td>${["strike", "qty", "premium"].map((f) => `<td><input type="number" data-h="${i}" data-f="${f}" value="${Number.isFinite(l[f]) ? l[f] : ""}" step="${f === "qty" ? "1" : "any"}" min="${f === "premium" ? "0" : "1"}"></td>`).join("")}<td>${quotePrice(l.quote?.bid)} / ${quotePrice(l.quote?.ask)}</td><td>${l.quote?.greeks?.delta?.toFixed(3) ?? "—"} / ${l.quote?.greeks?.gamma?.toFixed(4) ?? "—"} / ${l.iv > 0 ? (l.iv * 100).toFixed(1) + "%" : "—"}</td><td>${escapeHtml(l.source)}</td></tr>`,
+      )
+      .join("") +
+    "</tbody></table>";
+  $("#hedgeLegs")
+    .querySelectorAll("[data-f]")
+    .forEach(
+      (el) =>
+        (el.onchange = () => {
+          const l = hedgeDraft[Number(el.dataset.h)];
+          l[el.dataset.f] = Number(el.value);
+          l.source = "MANUAL ANALYSIS OVERRIDE";
+          if (el.dataset.f === "strike") {
+            l.quote = null;
+            l.iv = NaN;
+            l.contract = occForLeg(l);
+          }
+          hedgeLegRender();
+          hedgeRender();
+        }),
+    );
+}
+async function hedgeLoad() {
+  if (hedgeBusy) return;
+  hedgeBusy = true;
+  try {
+    const symbol = $("#hedgeSymbol").value.trim(),
+      underlying = symbol.split(":")[1],
+      expiry = $("#hedgeExpiry").value,
+      nc = Number($("#hedgeCallLots").value),
+      np = Number($("#hedgePutLots").value);
+    if (
+      ![nc, np].every((n) => Number.isInteger(n) && n > 0 && n <= 100) ||
+      !expiry ||
+      expiry <= isoDay(new Date())
+    )
+      throw Error(
+        "Choose an unexpired date and 1–100 whole lots per call/put pair.",
+      );
+    const directory = await streamJson("/api/stream/universe?scope=stocks");
+    if (!directory.symbols.includes(symbol))
+      throw Error("This symbol is not a verified Hyperliquid US stock perp.");
+    const [chain, mids] = await Promise.all([
+      gammaApi({ symbol: underlying, near: expiry, far: expiry }),
+      streamPrices([symbol]),
+    ]);
+    if (
+      !(chain.stock?.price > 0) ||
+      !chain.stock.time ||
+      Date.now() - Date.parse(chain.stock.time) > Deriv.maxQuoteAgeMs()
+    )
+      throw Error(
+        "Fresh underlying stock quote unavailable. No substitute stock price used.",
+      );
+    if (!(mids[symbol] > 0)) throw Error("Live Hyperliquid price unavailable");
+    const legs = hedgePick(
+      chain.contracts,
+      chain.stock.price,
+      underlying,
+      expiry,
+      $("#hedgeDirection").value,
+      nc,
+      np,
+      hedgeBlueprint,
+    );
+    hedgeDraft = legs;
+    hedgeReference = {
+      symbol,
+      underlying,
+      expiry,
+      direction: $("#hedgeDirection").value,
+      stockEntry: chain.stock.price,
+      stockTime: chain.stock.time,
+      futureEntry: mids[symbol],
+      futureMark: mids[symbol],
+      futureTime: Date.now(),
+      loadedAt: Date.now(),
+      stockMark: chain.stock.price,
+    };
+    if (!$("#hedgeQty").value.trim()) {
+      const delta = legs.reduce(
+        (n, l) =>
+          n + (l.side === "buy" ? 1 : -1) * l.quote.greeks.delta * l.qty * 100,
+        0,
+      );
+      $("#hedgeQty").value = Math.abs(delta).toFixed(4);
+    }
+    hedgeLegRender();
+    hedgeRender();
+    $("#hedgeStatus").textContent =
+      "Live provider bid/ask baseline and Hyperliquid futures loaded. Quantities and scenarios are analysis inputs, not a signal.";
+  } catch (e) {
+    $("#hedgeStatus").textContent = "Live build blocked: " + e.message;
+  } finally {
+    hedgeBusy = false;
+    hedgeNext = Date.now() + 30000;
+  }
+}
+async function hedgeRefresh() {
+  if (hedgeBusy || !hedgeReference) return;
+  hedgeBusy = true;
+  try {
+    const [data, mids] = await Promise.all([
+      gammaApi({ action: "legs", contracts: hedgeDraft.map(occForLeg) }),
+      streamPrices([hedgeReference.symbol]),
+    ]);
+    for (const l of hedgeDraft) {
+      const q = data.contracts.find((q) => q.symbol === occForLeg(l));
+      if (!gammaFresh(q))
+        throw Error(
+          "Selected options are stale or missing. Previous marks retained with timestamps; no fabricated refresh.",
+        );
+      l.quote = q;
+      if (l.source !== "MANUAL ANALYSIS OVERRIDE") l.iv = q.iv;
+      const stock = data.stocks[l.symbol];
+      if (stock?.price > 0) {
+        l.spot = stock.price;
+        hedgeReference.stockMark = stock.price;
+        hedgeReference.stockTime = stock.time;
+      }
+    }
+    if (!(mids[hedgeReference.symbol] > 0))
+      throw Error("Futures mid unavailable");
+    hedgeReference.futureMark = mids[hedgeReference.symbol];
+    hedgeReference.futureTime = Date.now();
+    hedgeLegRender();
+    hedgeRender();
+    $("#hedgeStatus").textContent =
+      "Quotes/IV/Greeks refreshed; entry prices remain fixed for P&L.";
+  } catch (e) {
+    $("#hedgeStatus").textContent = "Refresh blocked: " + e.message;
+    hedgeRender();
+  } finally {
+    hedgeBusy = false;
+    hedgeNext = Date.now() + 30000;
+  }
+}
+function hedgeRender() {
+  try {
+    if (!hedgeReference || !hedgeDraft.length) return;
+    const future = hedgeFuture(),
+      costs = hedgeCosts(),
+      basis = $("#hedgeBasis").value.trim()
+        ? Number($("#hedgeBasis").value)
+        : hedgeReference.futureMark - hedgeReference.stockMark,
+      up = Number($("#hedgeUp").value),
+      down = Number($("#hedgeDown").value);
+    if (
+      !(up > 0 && up <= 200 && down > 0 && down < 100) ||
+      !Number.isFinite(basis)
+    )
+      throw Error("Use upside 0–200%, downside 0–100% and finite basis");
+    const bounds = SheetMath.bounds(hedgeDraft, future, basis, costs),
+      manual = hedgeDraft.some((l) => l.source === "MANUAL ANALYSIS OVERRIDE"),
+      fresh =
+        hedgeDraft.every((l) => gammaFresh(l.quote)) &&
+        Date.now() - hedgeReference.futureTime <= 45000,
+      optionDelta = hedgeDraft.reduce(
+        (n, l) =>
+          n +
+          (l.side === "buy" ? 1 : -1) *
+            (l.quote?.greeks?.delta ?? 0) *
+            l.qty *
+            100,
+        0,
+      ),
+      netDelta = future.qty + optionDelta,
+      feeEntry = hedgeDraft.reduce((n, l) => n + costs.commission * l.qty, 0),
+      cash =
+        hedgeDraft.reduce(
+          (n, l) => n - (l.side === "buy" ? 1 : -1) * l.premium * l.qty * 100,
+          0,
+        ) - feeEntry,
+      mark = fresh
+        ? cash +
+          hedgeDraft.reduce(
+            (n, l) =>
+              n +
+              (l.side === "buy" ? 1 : -1) *
+                (l.side === "buy" ? l.quote.bid : l.quote.ask) *
+                l.qty *
+                100,
+            0,
+          )
+        : null,
+      futureMark =
+        future.qty * (hedgeReference.futureMark - future.entry) -
+        (Math.abs(future.qty) * future.entry * costs.futureFeePct) / 100;
+    $("#hedgeSummary").innerHTML = [
+      ["Option entry cash", money(cash)],
+      [
+        "Liquidation option mark",
+        mark == null ? "STALE / unavailable" : money(mark),
+      ],
+      ["Futures mark P&L", money(futureMark)],
+      [
+        "Combined mark",
+        mark == null
+          ? "STALE / unavailable"
+          : money(mark + futureMark - costs.funding),
+      ],
+      ["Net share delta", netDelta.toFixed(2)],
+      [
+        "Current delta-neutral futures qty",
+        fresh ? (-optionDelta).toFixed(4) : "STALE / unavailable",
+      ],
+      ["5× futures margin", money((Math.abs(future.qty) * future.entry) / 5)],
+    ]
+      .map(
+        ([k, v]) => `<article><span>${k}</span><strong>${v}</strong></article>`,
+      )
+      .join("");
+    $("#hedgeSources").textContent =
+      `Hyperliquid ${hedgeReference.symbol}: entry ${quotePrice(future.entry)}, latest ${quotePrice(hedgeReference.futureMark)} at ${new Date(hedgeReference.futureTime).toLocaleString()} · stock ${quotePrice(hedgeReference.stockMark)} at ${hedgeReference.stockTime ? new Date(hedgeReference.stockTime).toLocaleString() : "unavailable"} · ${escapeHtml(hedgeDraft[0]?.quote?.provider || "provider")} leg quote times ${hedgeDraft.map((l) => (l.quote?.quoteTime ? new Date(l.quote.quoteTime).toLocaleString() : "missing")).join(" / ")}${hedgeDraft.some((l) => Deriv.isStale(l.quote)) ? " · STALE (market closed / indicative)" : ""} · ${manual ? "MANUAL BASELINE" : "PROVIDER ENTRY BASELINE"} · ${fresh ? "quotes fresh" : "STALE / missing quotes"}`;
+    $("#hedgeLimits").textContent =
+      `Combined expiry bounds at constant basis: max profit ${bounds.maxProfit === Infinity ? "UNBOUNDED" : money(bounds.maxProfit)}; max loss ${bounds.maxLoss === Infinity ? "UNBOUNDED" : money(bounds.maxLoss)}. Upper-tail slope ${bounds.tailSlope.toFixed(3)} dollars per $1 move. Break-evens ${bounds.breakEvens.length ? bounds.breakEvens.map(quotePrice).join(", ") : "none / flat interval may exist"}. Endpoint profits do not prove profitability across the range.`;
+    const shocks = [-down, -down / 2, 0, up / 2, up],
+      rows = shocks.map((shock) => {
+        const S = hedgeReference.stockMark * (1 + shock / 100),
+          F = Math.max(0, S + basis),
+          v = SheetMath.totals(hedgeDraft, future, S, F, costs);
+        let model = null;
+        try {
+          model =
+            Finance.pnl(
+              hedgeDraft,
+              {
+                timeMillis: Date.now(),
+                shock,
+                ivShift: 0,
+                rate: Number($("#hedgeRate").value),
+                dividend: Number($("#hedgeDividend").value),
+              },
+              costs.commission,
+            ) - hedgeDraft.reduce((n, l) => n + costs.commission * l.qty, 0);
+        } catch {}
+        return { shock, S, F, v, model };
+      });
+    $("#hedgePayoff").innerHTML =
+      '<table class="stream-table"><thead><tr><th>Move</th><th>Stock / perp scenario</th><th>Expiry options</th><th>Current-time options model</th><th>Futures gross</th><th>Futures costs</th><th>Funding / MM</th><th>Combined expiry</th><th>Combined current-time model</th></tr></thead><tbody>' +
+      rows
+        .map(
+          (r) =>
+            `<tr><td>${r.shock}%</td><td>${quotePrice(r.S)} / ${quotePrice(r.F)}</td><td>${money(r.v.optionPnl)}</td><td>${r.model == null ? "IV required" : money(r.model)}</td><td>${money(r.v.futureGross)}</td><td>${money(r.v.futureFees)}</td><td>${money(r.v.funding)} / ${money(r.v.mmLoss)}</td><td>${money(r.v.net)}</td><td>${r.model == null ? "Unavailable" : money(r.model + r.v.futurePnl - r.v.mmLoss)}</td></tr>`,
+        )
+        .join("") +
+      '</tbody></table><h3>Per-leg expiry calculation at the selected upside endpoint</h3><table class="stream-table"><thead><tr><th>Leg</th><th>Signed units</th><th>Premium cash</th><th>Intrinsic / share</th><th>Intrinsic value</th><th>Leg P&amp;L incl. two-sided commission</th></tr></thead><tbody>' +
+      rows
+        .at(-1)
+        .v.details.map(
+          (l) =>
+            `<tr><td>${l.side.toUpperCase()} ${l.type} ${l.strike}</td><td>${l.signedUnits}</td><td>${money(l.entryCash)}</td><td>${quotePrice(l.intrinsic)}</td><td>${money(l.value)}</td><td>${money(l.pnl)}</td></tr>`,
+        )
+        .join("") +
+      "</tbody></table>";
+    hedgeChart(bounds, basis, hedgeReference.stockMark, up, down);
+  } catch (e) {
+    $("#hedgePayoff").innerHTML =
+      '<p class="error">' + escapeHtml(e.message) + "</p>";
+    $("#hedgeSummary").innerHTML = "";
+    $("#hedgeLimits").textContent =
+      "Calculation blocked until inputs are valid.";
+  }
+}
+function hedgeChart(bounds, basis, S, up, down) {
+  const canvas = $("#hedgeChart"),
+    c = canvas.getContext("2d");
+  if (!c) return;
+  const pts = Array.from({ length: 121 }, (_, i) => {
+      const x = S * (1 - down / 100) + (((S * (up + down)) / 100) * i) / 120;
+      return { x, y: bounds.value(Math.max(Math.max(0, -basis), x)) };
+    }),
+    min = Math.min(0, ...pts.map((p) => p.y)),
+    max = Math.max(0, ...pts.map((p) => p.y)),
+    range = max - min || 1,
+    W = canvas.width || 1000,
+    H = canvas.height || 360,
+    y = (v) => H - 40 - ((v - min) / range) * (H - 80);
+  c.clearRect(0, 0, W, H);
+  c.strokeStyle = "#536179";
+  c.beginPath();
+  c.moveTo(60, y(0));
+  c.lineTo(W - 20, y(0));
+  c.stroke();
+  c.strokeStyle = "#5f8cff";
+  c.lineWidth = 2;
+  c.beginPath();
+  pts.forEach((p, i) => {
+    const x = 60 + (i / 120) * (W - 80);
+    i ? c.lineTo(x, y(p.y)) : c.moveTo(x, y(p.y));
+  });
+  c.stroke();
+  c.fillStyle = "#aab7ce";
+  c.font = "12px sans-serif";
+  c.fillText(money(max), 4, 24);
+  c.fillText(money(min), 4, H - 30);
+  c.fillText(quotePrice(pts[0].x), 60, H - 10);
+  c.fillText("Option stock price · constant perp basis", W / 3, H - 10);
+  c.fillText(quotePrice(pts.at(-1).x), W - 70, H - 10);
+}
+$("#hedgeGuide").innerHTML =
+  `<p><b>Position model.</b> For a bullish option overlay, buy the lower-strike call, sell the higher-strike call, sell the higher-strike put and buy the lower-strike put; pair it with short futures. Reverse each spread direction for a bearish overlay paired with long futures. Unequal call/put pair sizes change delta, premium cash and each endpoint independently.</p><p><b>Option quantity.</b> Standard underlying units = lots × 100. Premium cash = −signed units × entry premium. A buy has positive signed units; a sell negative. Expiry call intrinsic = max(stock price − strike, 0); put intrinsic = max(strike − stock price, 0). Leg P&amp;L = signed units × (intrinsic − premium) − entry/exit commissions.</p><p><b>Futures.</b> P&amp;L = signed quantity × (exit/mark price − entry price), less fees and funding. Leverage changes initial margin, not P&amp;L per unit: 5× margin = absolute quantity × entry / 5. Initial delta hedge quantity = −sum(option delta × signed units); it is an initial hedge and must be rechecked as delta changes.</p><p><b>Combined net.</b> Sum the four option P&amp;Ls + futures net P&amp;L − MM loss allowance. A realized MM profit is separate; add it once to actual booked strategy P&amp;L. An MM reserve is not an option loss or guaranteed maximum loss.</p><p><b>Sheet columns without recoverable formulas.</b> Investment is stated allocation; grid basket counts/distance/loss need fill rules; today option scenarios need IV and per-leg prices; booked profit needs trades; APY = profit / deployed capital × 365 / holding days × 100 only under simple annualization. Those inputs and formula cells are absent, so they are not invented.</p><p><b>Tail risk and Greek risk.</b> Two bounded spreads plus an uncapped futures leg can leave unlimited upside loss for a short-futures book. Delta-neutral at entry does not imply gamma-neutral or risk-free. Assignment, expiration handling, funding, liquidity, spread costs and changing basis can materially change results. This simulator does not emulate assignment or liquidation.</p>`;
+$("#sheetPage").onchange = sheetRender;
+$("#sheetApply").onclick = applySheet;
+$("#hedgeLoad").onclick = hedgeLoad;
+$("#hedgeReprice").onclick = hedgeRefresh;
+for (const id of [
+  "hedgeQty",
+  "hedgeUp",
+  "hedgeDown",
+  "hedgeBasis",
+  "hedgeCommission",
+  "hedgeFee",
+  "hedgeFunding",
+  "hedgeMm",
+  "hedgeRate",
+  "hedgeDividend",
+])
+  $("#" + id).oninput = hedgeRender;
+$("#hedgeDirection").onchange = () => {
+  hedgeDraft = [];
+  hedgeReference = null;
+  $("#hedgeLegs").innerHTML = "";
+  $("#hedgeSummary").innerHTML = "";
+  $("#hedgePayoff").innerHTML = "";
+  $("#hedgeStatus").textContent =
+    "Direction changed. Rebuild with fresh provider quotes.";
+};
+$("#hedgeToGamma").onclick = () => {
+  try {
+    if (!hedgeReference || !hedgeDraft.length)
+      throw Error("Load a live draft first");
+    SheetMath.validate(hedgeDraft);
+    gammaDraft = JSON.parse(JSON.stringify(hedgeDraft));
+    gammaBlueprint = null;
+    $("#gammaSymbol").value = hedgeReference.symbol;
+    $("#gammaExpiry").value = hedgeReference.expiry;
+    $("#gammaLots").value = hedgeDraft.find((l) => l.type === "call").qty;
+    $("#gammaPutLots").value = hedgeDraft.find((l) => l.type === "put").qty;
+    $("#gammaFutureQty").value = $("#hedgeQty").value;
+    gammaDraftRender();
+    $("#gammaStatus").textContent =
+      "Live analysis draft copied. Indicators, fresh quotes and risk sizing are still required before paper entry. Futures override cannot exceed the risk-sized quantity.";
+    document.querySelector('[data-view="gamma"]').click();
+  } catch (e) {
+    $("#hedgeStatus").textContent = e.message;
+  }
+};
+$("#hedgeExport").onclick = () => {
+  const data = {
+      exportedAt: new Date().toISOString(),
+      historicalPage: selectedSheet().page,
+      reference: hedgeReference,
+      legs: hedgeDraft,
+      costs: hedgeCosts(),
+      future: hedgeReference ? hedgeFuture() : null,
+      mode: "analysis only, no actual broker orders",
+    },
+    blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    }),
+    a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "hedge-calculation-audit.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+setInterval(() => {
+  if (
+    document.hidden ||
+    activeView !== "hedge" ||
+    !$("#hedgeAuto").checked ||
+    hedgeBusy ||
+    !hedgeReference ||
+    Date.now() < hedgeNext
+  )
+    return;
+  hedgeRefresh();
+}, 1000);
+sheetRender();
+sheetAllRender();
+if (location.pathname === "/hedge")
+  document.querySelector('[data-view="hedge"]').click();
+
+// ---- shared derivatives state
+async function hedgeSyncFromShared() {
+  const st = Deriv.get();
+  if (hedgeReference) return; // keep a loaded draft intact
+  if (st.ticker && document.activeElement !== $("#hedgeSymbol")) {
+    const perp = Deriv.perpFor(st.ticker, await Deriv.perpSymbols());
+    if (perp) {
+      $("#hedgeSymbol").value = perp;
+      if (!$("#compareSymbols").value.trim()) $("#compareSymbols").value = perp;
+    }
+  }
+  if (st.expiry && st.expiry > isoDay(new Date())) {
+    $("#hedgeExpiry").value = st.expiry;
+    if ($("#compareNear").value > st.expiry || !$("#compareNear").value) $("#compareNear").value = st.expiry;
+    if ($("#compareFar").value < st.expiry) $("#compareFar").value = st.expiry;
+  }
+}
+$("#hedgeSymbol").addEventListener("change", () => Deriv.set({ ticker: Deriv.tickerOf($("#hedgeSymbol").value.trim()) }));
+$("#hedgeExpiry").addEventListener("change", () => Deriv.set({ expiry: $("#hedgeExpiry").value }));
+window.addEventListener("viewchange", (e) => { if (e.detail === "hedge") hedgeSyncFromShared(); });
+hedgeSyncFromShared();
