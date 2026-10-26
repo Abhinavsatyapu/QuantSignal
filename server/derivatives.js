@@ -39,13 +39,23 @@ function nyToUtc(local) {
 // Cboe delayed-quote files are large (SPY / QQQ: tens of MB of JSON with every expiry). Keep only the fields the app reads,
 // share one in-flight fetch per ticker, and cap the cache, so a 30-ticker Weekly Plan fits a 512 MB instance.
 const cboeCache = new Map(), cboeInflight = new Map(), CBOE_KEYS = ['option', 'bid', 'ask', 'bid_size', 'ask_size', 'iv', 'delta', 'gamma', 'theta', 'vega', 'rho', 'last_trade_price', 'last_trade_time', 'open_interest', 'volume'];
-function slimCboe(j) { const d = (j && j.data) || {}; return { data: { current_price: d.current_price, bid: d.bid, ask: d.ask, last_trade_time: d.last_trade_time, options: (d.options || []).map((o) => { const x = {}; for (const k of CBOE_KEYS) if (o[k] !== undefined && o[k] !== null) x[k] = o[k]; return x; }) } }; }
-async function cboeRaw(t) {
-  const c = cboeCache.get(t);
-  if (c && Date.now() - c.at <= 60e3) return c;
+function slimCboe(j) { const d = (j && j.data) || {}; return { timestamp: j && j.timestamp, data: { current_price: d.current_price, bid: d.bid, ask: d.ask, last_trade_time: d.last_trade_time, options: (d.options || []).map((o) => { const x = {}; for (const k of CBOE_KEYS) if (o[k] !== undefined && o[k] !== null) x[k] = o[k]; return x; }) } }; }
+// US regular session in New York time (holidays not modelled): { open, minutesSinceOpen, sessionOpenMs }
+function nySession(now = Date.now()) {
+  const p = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(now)).reduce((o, x) => ((o[x.type] = x.value), o), {});
+  const day = p.year + '-' + p.month + '-' + p.day, mins = +p.hour * 60 + +p.minute, weekday = !['Sat', 'Sun'].includes(p.weekday);
+  return { open: weekday && mins >= 570 && mins < 960, weekday, minutesSinceOpen: weekday ? mins - 570 : null, sessionOpenMs: Date.parse(nyToUtc(day + 'T09:30:00')), day };
+}
+// cache: 30 s while the US session is open (Cboe regenerates the file every few seconds), 5 min otherwise; a cached file whose
+// quotes are older than 20 min during the session is refetched; { fresh: true } (the "Refresh quotes" option) always refetches
+async function cboeRaw(t, { fresh = false } = {}) {
+  const c = cboeCache.get(t), ses = nySession(), ttl = ses.open ? 30e3 : 5 * 60e3;
+  const old = c && ses.open && c.data.timestamp && Date.now() - Date.parse(String(c.data.timestamp).replace(' ', 'T') + 'Z') > 20 * 60e3;
+  if (!fresh && c && Date.now() - c.at <= ttl && !old) return c;
   if (cboeInflight.has(t)) return cboeInflight.get(t);
   const p = (async () => {
-    const r = await fetch('https://cdn.cboe.com/api/global/delayed_quotes/options/' + encodeURIComponent(t) + '.json', { headers: { 'User-Agent': 'Mozilla/5.0 QuantSignal' }, redirect: 'follow', signal: AbortSignal.timeout(20000) });
+    // cdn.cboe.com 307-redirects here; the query string defeats any intermediate cache (Cloudflare serves s-maxage=5)
+    const r = await fetch('https://cdn-api.cboe.com/api/global/delayed_quotes/options/' + encodeURIComponent(t) + '.json?_=' + Date.now(), { headers: { 'User-Agent': 'Mozilla/5.0 QuantSignal', 'Cache-Control': 'no-cache' }, redirect: 'follow', signal: AbortSignal.timeout(20000) });
     if (r.status === 403 || r.status === 404) throw httpErr(404, 'No listed options found for ' + t + ' (Cboe)');
     if (r.status === 429) throw httpErr(429, 'Cboe is rate-limiting requests (HTTP 429)');
     if (!r.ok) throw httpErr(502, 'Cboe delayed quotes HTTP ' + r.status);
@@ -57,11 +67,30 @@ async function cboeRaw(t) {
   cboeInflight.set(t, p);
   try { return await p; } finally { cboeInflight.delete(t); }
 }
-async function cboeChain({ symbol, near, far }) {
+// honest quote time for a Cboe file: the feed is 15 min delayed, so the market time is the file time − 15 min — unless no
+// option has traded since today's open (pre-open, the first 15 min after the open, or the feed lagging), in which case the
+// quotes are the last session's and are dated by the newest option trade / the stock's last trade
+const CBOE_DELAY_MIN = 15;
+function cboeQuoteTime(c, symbolFilter) {
+  const d = c.data.data || {}, ses = nySession();
+  const fileMs = c.data.timestamp ? Date.parse(String(c.data.timestamp).replace(' ', 'T') + 'Z') : c.modified ? Date.parse(c.modified) : null;
+  let newest = null; for (const o of d.options || []) { if (symbolFilter && !symbolFilter(o)) continue; const t = o.last_trade_time ? Date.parse(nyToUtc(o.last_trade_time)) : NaN; if (Number.isFinite(t) && (newest == null || t > newest)) newest = t; }
+  const stockMs = d.last_trade_time ? Date.parse(nyToUtc(d.last_trade_time)) : null;
+  const sinceOpen = ses.weekday && Number.isFinite(ses.sessionOpenMs) && Date.now() >= ses.sessionOpenMs;
+  const lastSession = !!(sinceOpen && (newest == null || newest < ses.sessionOpenMs));
+  const quoteMs = lastSession || !ses.open ? Math.max(newest || 0, stockMs || 0) || (fileMs ? fileMs - CBOE_DELAY_MIN * 6e4 : null) : fileMs ? fileMs - CBOE_DELAY_MIN * 6e4 : null;
+  let note = null;
+  if (lastSession && ses.open && ses.minutesSinceOpen < CBOE_DELAY_MIN + 5) note = "Cboe's free feed is " + CBOE_DELAY_MIN + ' min delayed: today\'s option quotes appear from 9:' + (30 + CBOE_DELAY_MIN) + ' ET (' + new Date(ses.sessionOpenMs + CBOE_DELAY_MIN * 6e4).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit' }) + ' IST today); until then these are the last session\'s closing quotes. Use Refresh quotes after that.';
+  else if (lastSession && ses.open) note = 'The market has been open ' + ses.minutesSinceOpen + ' min but Cboe has not published a trade for these options today yet (the delayed feed is lagging or the options are not trading) — quotes are the last session\'s.';
+  else if (!ses.open) note = 'US market closed: these are the last session\'s quotes.';
+  return { quoteTime: quoteMs ? new Date(quoteMs).toISOString() : null, fileTime: fileMs ? new Date(fileMs).toISOString() : null, newestOptionTrade: newest ? new Date(newest).toISOString() : null, lastSession, delayMinutes: CBOE_DELAY_MIN, marketOpen: ses.open, note };
+}
+async function cboeChain({ symbol, near, far, fresh }) {
   const t = String(symbol || '').trim().toUpperCase();
   if (!/^[A-Z][A-Z0-9.]{0,9}$/.test(t)) throw httpErr(400, 'Enter a valid US ticker');
-  const c = await cboeRaw(t);
-  const d = c.data.data || {}, qt = nyToUtc(d.last_trade_time) || (c.modified ? new Date(c.modified).toISOString() : null);
+  const c = await cboeRaw(t, { fresh: !!fresh });
+  const inRange = (o) => { const p = alpaca.parseOcc(o.option); return p && p.expiry >= near && p.expiry <= far; };
+  const qi = cboeQuoteTime(c, inRange), d = c.data.data || {}, qt = qi.quoteTime;
   const contracts = [];
   for (const o of d.options || []) {
     const p = alpaca.parseOcc(o.option); if (!p || p.root !== t.replace('.', '') || p.expiry < near || p.expiry > far) continue;
@@ -70,7 +99,7 @@ async function cboeChain({ symbol, near, far }) {
       mid: ask > 0 && ask >= bid ? (bid + ask) / 2 : null, iv: o.iv > 0 ? o.iv : null, greeks: { delta: o.delta, gamma: o.gamma, theta: o.theta, vega: o.vega, rho: o.rho },
       quoteTime: qt, last: o.last_trade_price || null, lastTime: nyToUtc(o.last_trade_time), openInterest: o.open_interest, volume: o.volume, provider: 'Cboe delayed' });
   }
-  return { provider: 'cboe', feed: 'delayed', label: 'Cboe public DELAYED quotes (~15 min; last close when the market is shut) · used because Alpaca keys are not configured', delayed: true, contracts, snapshotTime: qt, fileTime: c.modified ? new Date(c.modified).toISOString() : null,
+  return { provider: 'cboe', feed: 'delayed', label: 'Cboe public DELAYED quotes (~15 min; last close when the market is shut) · used because Alpaca keys are not configured', delayed: true, contracts, snapshotTime: qt, fileTime: qi.fileTime, quoteInfo: qi,
     stock: d.current_price > 0 ? { price: d.current_price, bid: d.bid, ask: d.ask, time: qt, source: 'Cboe delayed' } : null, partial: false, nextPageToken: null, fetchedAt: new Date().toISOString() };
 }
 async function cboeExpiries(symbol) {
@@ -368,4 +397,4 @@ function router({ stockSymbols }) {
   return r;
 }
 
-module.exports = { getChain, getExpiries, providerInfo, perpBook, perpMeta, nyToUtc, router, manualFourLeg, sheetScenarios, sheetAudit, positionPnl, piecewiseBounds, symbolDirectory };
+module.exports = { nySession, cboeQuoteTime, getChain, getExpiries, providerInfo, perpBook, perpMeta, nyToUtc, router, manualFourLeg, sheetScenarios, sheetAudit, positionPnl, piecewiseBounds, symbolDirectory };

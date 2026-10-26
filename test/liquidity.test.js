@@ -47,7 +47,15 @@ test('fillAnalysis: market-fill cost = far side of every leg + perp half-spread;
   const nat = legs.map((l) => ({ ...l, premium: l.side === 'buy' ? l.ask : l.bid }));
   const g = S.fillAnalysis({ legs: nat, hedge: null, fq: 0, exits: [500], target: 400, ev: 10, spot: 150 }, {});
   assert.ok(Math.abs(g.modelCharged - 240) < 1e-6); assert.equal(g.extraVsModel, 0); assert.equal(g.targetAfterSlippage, 500); assert.equal(g.exitsAtLimit, 740);
-  const why = S.recommendBlockers(f, {}); assert.equal(why.length, 3); assert.match(why[0], /expected value after a market fill is −\$217/);
+  const why = S.recommendBlockers(f, {}); assert.equal(why.length, 3); assert.match(why[0], /expected value at the expected combo fill is −\$214/); // all legs illiquid (OI 50) → natural; perp at 60% of its half-spread: 240 + 4.2
+  assert.ok(Math.abs(f.expectedFillCost - 244.2) < 1e-6); assert.ok(Math.abs(f.evAtExpected - (30 - 244.2)) < 1e-6); assert.ok(Math.abs(f.exitsAtExpected - (420 - 244.2)) < 1e-6);
+  // liquid legs: the expected combo fill pays 60% of the half-spread (adjustable), natural stays the worst case
+  const G = (side, qty, strike, type, bid, ask) => ({ ...L(side, qty, strike, type, bid, ask), openInterest: 900, volume: 200 });
+  const good = [G('buy', 2, 152.5, 'call', 3.15, 3.25), G('sell', 2, 160, 'call', 1.15, 1.25), G('buy', 4, 137, 'put', 0.95, 1.05), G('sell', 4, 140, 'put', 1.65, 1.75)], gf = S.fillAnalysis({ legs: good, hedge: null, fq: 0, exits: [420], target: 400, ev: 30, spot: 150 }, {});
+  assert.equal(gf.counts.Illiquid, 0); assert.ok(Math.abs(gf.optionsMarket - 60) < 1e-6); assert.ok(Math.abs(gf.expectedFillCost - 0.6 * 60) < 1e-6); assert.ok(Math.abs(S.fillAnalysis({ legs: good, fq: 0, exits: [420], target: 400, ev: 30, spot: 150 }, { expectedFillPct: 50 }).expectedFillCost - 30) < 1e-6);
+  assert.ok(Math.abs(S.fillAnalysis({ legs: good, fq: 0, exits: [420], target: 400, ev: 30, spot: 150 }, { slippage: 1 }).expectedFillCost - 60) < 1e-6);
+  // stale quotes: negative EV is a recheck caution, not a blocker
+  assert.ok(!S.recommendBlockers(f, { staleQuotes: true }).some((w) => /expected value/.test(w))); assert.match(S.recommendCautions(f, { staleQuotes: true })[0], /stale quotes — recheck/);
   assert.equal(S.recommendBlockers(f, { requirePositiveEv: false, rejectIlliquidLegs: false, rejectTooIlliquid: false }).length, 0);
 });
 
@@ -68,12 +76,18 @@ test('executionPlan: one combo at mid, steps toward natural, max net price that 
 
 test('optimizer gates: negative EV after a market fill is never recommended; a priced-rich chain passes with a liquid structure', () => {
   const flat = opt(chain(100, 0.6)); // fair-priced fixture: no edge, so every structure loses the spread on average
-  assert.equal(flat.status, 'NO_ACCEPTABLE_STRUCTURE'); assert.equal(flat.liquidityVerdict.verdict, 'TOO_ILLIQUID');
-  assert.match(flat.errors[0], /No liquid structure pays the \$400 target at natural \(market-fill\) prices .* positive expected value/);
+  assert.equal(flat.status, 'NO_ACCEPTABLE_STRUCTURE');
+  assert.match(flat.errors[0], /No liquid structure pays the \$400 target with a positive expected value at the expected combo fill/);
+  // gates demote, they do not hide: the best candidate is a full card, badged NOT RECOMMENDED with its reasons
+  assert.equal(flat.demoted, true); assert.ok(flat.best && flat.best.legs.length === 4 && flat.best.futures); assert.ok(flat.best.fill && Number.isFinite(flat.best.fill.evAtExpected));
+  assert.equal(flat.liquidityVerdict.recommended, false); assert.match(flat.liquidityVerdict.blockers.join(' '), /expected combo fill/); assert.match(flat.recommendation.reason, /^NOT RECOMMENDED/);
+  assert.ok(flat.rejected.length >= 1);
+  // stale quotes: the EV gate cautions instead of refusing
+  const st = opt(chain(100, 0.6), { staleQuotes: true }); assert.ok(st.best); assert.ok(!(st.best.whatIf.gates || []).some((g) => /expected combo fill/.test(g))); assert.ok((st.best.whatIf.cautions || []).some((g) => /stale quotes — recheck/.test(g)));
   const rich = opt(chain(100, 0.6, { quotedIv: 0.45 }));
-  assert.equal(rich.status, 'OK'); assert.ok(rich.best.fill.evAfterSlippage > 0); assert.equal(rich.best.fill.counts.Illiquid, 0);
+  assert.equal(rich.status, 'OK'); assert.ok(rich.best.fill.evAtExpected > 0); assert.ok(rich.best.fill.evAtLimit >= rich.best.fill.evAtExpected && rich.best.fill.evAtExpected >= rich.best.fill.evAfterSlippage); assert.equal(rich.best.fill.counts.Illiquid, 0);
   assert.equal(rich.liquidityVerdict.recommended, true); assert.ok(rich.execPlan && rich.execPlan.steps.length >= 4);
-  assert.ok(rich.best.whatIf.liquidity && rich.best.whatIf.liquidity.evAfterSlippage > 0);
+  assert.ok(rich.best.whatIf.probs.expectedValue > 0);
   // switching the gates off restores the old behaviour on the fair-priced fixture
   assert.equal(opt(chain(100, 0.6), { requirePositiveEv: false, rejectIlliquidLegs: false, rejectTooIlliquid: false }).status, 'OK');
 });
@@ -93,7 +107,7 @@ test('optimizer: an illiquid rule strike moves to the nearest liquid strike, and
 test('weekly ATR method: same gates and fill model on by default', () => {
   const wa = { atr: 9, n: 14, source: 'fixture', upperMult: 0.42, lowerMult: 0.41, zoneMinSigma: 0.7, zoneMaxSigma: 1.2, scaleToExpiry: false };
   const out = opt(chain(100, 0.6, { quotedIv: 0.45 }), {}, { weeklyAtr: wa });
-  if (out.status === 'OK') { assert.ok(out.best.fill.evAfterSlippage > 0); assert.equal(out.best.fill.counts.Illiquid, 0); assert.ok(out.execPlan); }
+  if (out.status === 'OK') { assert.ok(out.best.fill.evAtExpected > 0); assert.equal(out.best.fill.counts.Illiquid, 0); assert.ok(out.execPlan); }
   else assert.match(out.errors.join(' '), /positive expected value|risk|target/);
   const flat = opt(chain(100, 0.6), {}, { weeklyAtr: wa }); assert.notEqual(flat.status, 'OK');
 });
@@ -102,8 +116,8 @@ test('reference method: EV at natural prices, NOT RECOMMENDED when it is negativ
   const run = (contracts, cfg = {}) => S.attachLiquidity(S.buildReference({ ticker: 'TEST', expiry: EXP, nowMs: NOW, contracts, stock: { price: 100 }, perp: perp(100), cfg: { futuresSide: 'LONG', targetPnl: 400, capital: 100000, ...cfg } }), cfg);
   const flat = run(chain(100, 0.6));
   assert.equal(flat.status, 'OK'); assert.ok(Number.isFinite(flat.best.fill.evAfterSlippage));
-  assert.ok(flat.best.fill.evAfterSlippage < 0, 'fair-priced fixture: negative EV at natural'); assert.equal(flat.liquidityVerdict.recommended, false);
-  assert.match(flat.liquidityVerdict.blockers.join(' '), /expected value after a market fill/); assert.ok(flat.warnings.some((w) => /^Not recommended:/.test(w)));
+  assert.ok(flat.best.fill.evAtExpected < 0, 'fair-priced fixture: negative EV at the expected fill'); assert.equal(flat.liquidityVerdict.recommended, false);
+  assert.match(flat.liquidityVerdict.blockers.join(' '), /expected value at the expected combo fill/); assert.ok(flat.warnings.some((w) => /^Not recommended:/.test(w)));
   assert.equal(run(chain(100, 0.6), { requirePositiveEv: false }).liquidityVerdict.recommended, true);
   // the EV integral: a structure's EV equals the lognormal mean of its expiry payoff (hand check with a coarse sum)
   const b = flat.best, E = S.evaluate({ legs: b.legs, future: { qty: b.futures.signedQty, entry: b.futures.entry, basis: flat.basis || 0 }, commission: flat.cfg.commission, futureFeePct: flat.cfg.futureFeePct, r: 0.04, nowMs: 0, expiryMs: flat.days * 864e5 });

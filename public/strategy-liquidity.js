@@ -11,7 +11,7 @@
   // defaults (all adjustable in Advanced): Good = spread ≤ 6% of mid AND (≤ $0.15 wide or ≤ 3%) AND OI ≥ 500 AND volume ≥ 50;
   // Illiquid = no bid, spread > 15% of mid or OI < 100; everything else Thin. A structure is "too illiquid for this target"
   // when its market-fill slippage exceeds 25% of the target (caution above 12% or with any illiquid leg).
-  const LIQ_DEFAULTS = { liqGoodSpreadPct: 6, liqGoodSpreadAbs: 0.15, liqIlliquidSpreadPct: 15, liqGoodOI: 500, liqMinOI: 100, liqGoodVolume: 50, tooIlliquidPct: 25, cautionPct: 12, comboSteps: 5 };
+  const LIQ_DEFAULTS = { liqGoodSpreadPct: 6, liqGoodSpreadAbs: 0.15, liqIlliquidSpreadPct: 15, liqGoodOI: 500, liqMinOI: 100, liqGoodVolume: 50, tooIlliquidPct: 25, cautionPct: 12, comboSteps: 5, expectedFillPct: 60 };
   const GRADE_PENALTY = { Good: 0, Thin: 0.5, Illiquid: 2 };
   const GRADE_RANK = { Good: 0, Thin: 1, Illiquid: 2 };
   const opts = (o) => ({ ...LIQ_DEFAULTS, ...Object.fromEntries(Object.entries(o || {}).filter(([k, v]) => k in LIQ_DEFAULTS && fin(+v) && v !== "" && v != null).map(([k, v]) => [k, +v])) });
@@ -36,23 +36,27 @@
     }
     return { grade, penalty: GRADE_PENALTY[grade], spreadPct, spreadAbs, halfSpread: spreadAbs != null ? spreadAbs / 2 : null, mid, openInterest: oi, volume: vol, zeroBid, round: fin(spot) ? roundStrike(q.strike, spot) : null, why: why.join(", ") || "tight spread, deep open interest" };
   }
-  // the cost of entering the whole structure: limit at mid (best case) vs market at the far side (fallback), $ vs mid
+  // the cost of entering the whole structure, three ways ($ vs mid): limit at mid (best case); EXPECTED combo fill = a combo limit
+  // worked from mid toward natural typically fills at ~60% of the half-spread per leg on Good / Thin legs (illiquid legs at the
+  // far side) — adjustable, default 60%; and MARKET / natural = every leg at the far side (worst case)
+  const fillFrac = (grade, c, o) => (o && o.slippage != null && o.slippage !== "" && fin(+o.slippage) ? Math.max(0, Math.min(1, +o.slippage)) : grade === "Illiquid" ? 1 : Math.max(0, Math.min(100, c.expectedFillPct)) / 100);
   // legs: built legs {side, qty, bid, ask, mid, premium, strike, type}; hedge: {bid, ask, mid, symbol, isStock}; fq signed hedge qty;
   // fEntry the hedge entry the model used; exits: modelled exit P&L(s); target: $ target; ev: modelled EV
   function fillAnalysis(a, o) {
     const c = opts(o), legs = a.legs || [], h = a.hedge || null, fq = fin(a.fq) ? a.fq : 0, spot = a.spot;
-    let optMarket = 0, optCharged = 0, worst = "Good";
+    let optMarket = 0, optCharged = 0, optExpected = 0, worst = "Good";
     const rows = legs.map((l) => {
       const g = legLiquidity(l, c, spot), q = Math.abs(l.qty || 0), mid = g.mid;
       const far = l.side === "buy" ? +l.ask : +l.bid, market = mid != null && fin(far) ? Math.abs(far - mid) * q * 100 : null;
       const charged = mid != null && fin(+l.premium) ? (l.side === "buy" ? l.premium - mid : mid - l.premium) * q * 100 : 0;
-      if (market != null) optMarket += market; optCharged += charged;
+      const expected = market != null ? market * fillFrac(g.grade, c, o) : null;
+      if (market != null) optMarket += market; if (expected != null) optExpected += expected; optCharged += charged;
       if (GRADE_RANK[g.grade] > GRADE_RANK[worst]) worst = g.grade;
-      return { tag: (l.side === "buy" ? "+" : "−") + q + " " + l.strike + (l.type === "call" ? "C" : "P"), side: l.side, type: l.type, strike: l.strike, qty: q, bid: +l.bid, ask: +l.ask, ...g, marketCost: market, modelCost: charged };
+      return { tag: (l.side === "buy" ? "+" : "−") + q + " " + l.strike + (l.type === "call" ? "C" : "P"), side: l.side, type: l.type, strike: l.strike, qty: q, bid: +l.bid, ask: +l.ask, ...g, marketCost: market, expectedCost: expected, modelCost: charged };
     });
     const hMid = h && fin(+h.mid) ? +h.mid : null, hHalf = h && +h.ask > 0 && +h.bid > 0 && h.ask >= h.bid ? (h.ask - h.bid) / 2 : null;
     const perpMarket = hHalf != null ? Math.abs(fq) * hHalf : 0, perpCharged = hMid != null && fin(a.fEntry) ? Math.abs(fq) * Math.abs(a.fEntry - hMid) : 0;
-    const market = optMarket + perpMarket, charged = optCharged + perpCharged, extra = Math.max(0, market - charged);
+    const market = optMarket + perpMarket, charged = optCharged + perpCharged, extra = Math.max(0, market - charged), expectedCost = optExpected + perpMarket * fillFrac("Good", c, o);
     const exits = (a.exits || []).filter(fin), minExit = exits.length ? Math.min(...exits) : null, T0 = a.target;
     const share = T0 > 0 ? market / T0 : null, counts = { Good: 0, Thin: 0, Illiquid: 0 }; for (const r of rows) counts[r.grade]++;
     const afterSlip = minExit != null ? minExit - extra : null, atLimit = minExit != null ? minExit + charged : null;
@@ -64,16 +68,26 @@
     return { legs: rows, worstGrade: worst, counts, gradePenalty: rows.length ? rows.reduce((m, r) => m + r.penalty, 0) / rows.length : 0, roundStrikes: rows.filter((r) => r.round).length,
       optionsMarket: optMarket, perpMarket, marketSlippage: market, modelCharged: charged, extraVsModel: extra, shareOfTarget: share,
       exitsAtLimit: atLimit, targetAfterSlippage: afterSlip, evAfterSlippage: fin(a.ev) ? a.ev - extra : null, evAtLimit: fin(a.ev) ? a.ev + charged : null,
+      expectedFillCost: expectedCost, expectedFillPct: c.expectedFillPct, exitsAtExpected: atLimit != null ? atLimit - expectedCost : null, evAtExpected: fin(a.ev) ? a.ev + charged - expectedCost : null,
       verdict, verdictText: text, thresholds: { tooIlliquidPct: c.tooIlliquidPct, cautionPct: c.cautionPct },
-      model: "limit at mid = best case; market = every option leg at the far side (buy at ask, sell at bid) + the " + (h && h.isStock ? "stock" : "perp") + " half-spread; targets, risk caps and EV are checked at the market-fill price" };
+      model: "limit at mid = best case; expected combo fill = " + c.expectedFillPct + "% of the half-spread on Good / Thin legs, illiquid legs at the far side (used for the target, risk caps and the EV check); natural / market = every leg at the far side (buy at ask, sell at bid) + the " + (h && h.isStock ? "stock" : "perp") + " half-spread (worst case, shown alongside)" };
   }
-  // reasons a structure must not be shown as a recommendation (each switchable in Advanced, all on by default)
+  // reasons a structure must not be shown as a recommendation (each switchable in Advanced, all on by default). The EV check
+  // uses the EXPECTED combo fill; on stale quotes a negative EV is a "recheck" caution instead of a blocker.
+  const evExp = (f) => (fin(f.evAtExpected) ? f.evAtExpected : f.evAfterSlippage);
   function recommendBlockers(f, cfg) {
     const c = cfg || {}, out = [];
     if (!f) return out;
-    if (c.requirePositiveEv !== false && fin(f.evAfterSlippage) && f.evAfterSlippage < 0) out.push("expected value after a market fill is " + usd(f.evAfterSlippage));
+    if (c.requirePositiveEv !== false && !c.staleQuotes && fin(evExp(f)) && evExp(f) < 0) out.push("expected value at the expected combo fill is " + usd(evExp(f)));
     if (c.rejectIlliquidLegs !== false && f.counts && f.counts.Illiquid) out.push(f.counts.Illiquid + " illiquid leg" + (f.counts.Illiquid > 1 ? "s" : "") + " (" + f.legs.filter((r) => r.grade === "Illiquid").map((r) => r.tag + ": " + r.why).join(", ") + ")");
     if (c.rejectTooIlliquid !== false && f.verdict === "TOO_ILLIQUID") out.push("a market fill costs " + Math.round(f.shareOfTarget * 100) + "% of the target");
+    return out;
+  }
+  function recommendCautions(f, cfg) {
+    const c = cfg || {}, out = [];
+    if (!f) return out;
+    if (c.staleQuotes && fin(evExp(f)) && evExp(f) < 0) out.push("EV " + usd(evExp(f)) + " on stale quotes — recheck once today's quotes are in");
+    if (fin(f.evAfterSlippage) && f.evAfterSlippage < 0 && !(fin(evExp(f)) && evExp(f) < 0)) out.push("worst case: a full market (natural) fill turns the EV to " + usd(f.evAfterSlippage) + " — use the combo limit order");
     return out;
   }
   const gcd = (x, y) => (y ? gcd(y, x % y) : x);
@@ -127,7 +141,7 @@
     for (const v of out.variants || []) if (v && v.best && v.best.legs && !v.best.fill) v.best.fill = mk(v.best);
     const acct = cfg.account || (out.cfg && out.cfg.account) || null, wiA = b.whatIf && b.whatIf.account;
     out.execPlan = executionPlan({ legs: b.legs, fill: b.fill, target: T0, hedge, fq: b.futures ? b.futures.signedQty : 0, ticker: out.ticker, stale: o && o.stale, riskLoss: wiA ? wiA.riskLoss : null, riskCap: acct && acct.capital > 0 && acct.maxLossPct > 0 ? acct.capital * acct.maxLossPct / 100 : null }, cfg);
-    out.liquidityVerdict = { verdict: b.fill.verdict, text: b.fill.verdictText, marketSlippage: b.fill.marketSlippage, shareOfTarget: b.fill.shareOfTarget, targetAfterSlippage: b.fill.targetAfterSlippage, worstGrade: b.fill.worstGrade, counts: b.fill.counts };
+    out.liquidityVerdict = { verdict: b.fill.verdict, text: b.fill.verdictText, expectedFillCost: b.fill.expectedFillCost, evAtLimit: b.fill.evAtLimit, evAtExpected: b.fill.evAtExpected, evAfterSlippage: b.fill.evAfterSlippage, marketSlippage: b.fill.marketSlippage, shareOfTarget: b.fill.shareOfTarget, targetAfterSlippage: b.fill.targetAfterSlippage, worstGrade: b.fill.worstGrade, counts: b.fill.counts };
     out.warnings = out.warnings || [];
     // liquidity strike moves (any method): report only those that ended up in the final structure
     const mlist = out.liquidityMoveList || (out.distanceBand && out.distanceBand.liquidityMoveList) || [];
@@ -135,8 +149,12 @@
     if (out.liquidityMoves.length) { const w = "Liquidity: " + out.liquidityMoves.join("; ") + "."; if (!out.warnings.includes(w)) out.warnings.push(w); }
     if (b.fill.verdict !== "OK" && !out.warnings.some((w) => w === b.fill.verdictText)) out.warnings.unshift(b.fill.verdictText);
     // never present a structure as a recommendation when it loses money on average after a market fill, or a leg has no real market
-    const why = recommendBlockers(b.fill, cfg);
-    out.liquidityVerdict.recommended = !why.length; out.liquidityVerdict.blockers = why;
+    // a demoted result (every candidate failed a gate) keeps its gates as blockers: shown as a full card, never as a pick
+    const gateWhy = out.status !== "OK" && b.whatIf && Array.isArray(b.whatIf.gates) ? b.whatIf.gates : [];
+    const why = [...gateWhy, ...recommendBlockers(b.fill, cfg).filter((r) => !gateWhy.some((g) => g.includes(r.slice(0, 24))))];
+    out.liquidityVerdict.recommended = !why.length; out.liquidityVerdict.blockers = why; out.liquidityVerdict.demoted = out.status !== "OK";
+    out.liquidityVerdict.cautions = [...(b.whatIf && b.whatIf.cautions ? b.whatIf.cautions : []), ...recommendCautions(b.fill, cfg)].filter((x, i, a) => a.indexOf(x) === i);
+    out.liquidityVerdict.staleQuotes = !!cfg.staleQuotes;
     if (why.length) {
       const msg = "Not recommended: " + why.join("; ") + ".";
       if (!out.warnings.includes(msg)) out.warnings.unshift(msg);
@@ -152,5 +170,5 @@
     const score = g.length ? (good - 2 * ill) / g.length - (med != null ? med / 100 : 1) : -2; // higher = more liquid
     return { strikes: g.length, good, thin: g.length - good - ill, illiquid: ill, medianSpreadPct: med, score, grade: !g.length ? "Illiquid" : med != null && med <= 6 && good / g.length >= 0.4 ? "Good" : med == null || med > 15 || ill / g.length > 0.5 ? "Illiquid" : "Thin" };
   }
-  Object.assign(S, { LIQ_DEFAULTS, GRADE_PENALTY, legLiquidity, fillAnalysis, executionPlan, attachLiquidity, chainLiquidity, roundStrike, recommendBlockers, expectedValueAtExpiry });
+  Object.assign(S, { LIQ_DEFAULTS, GRADE_PENALTY, legLiquidity, fillAnalysis, executionPlan, attachLiquidity, chainLiquidity, roundStrike, recommendBlockers, recommendCautions, expectedValueAtExpiry });
 })(typeof globalThis !== "undefined" ? globalThis : window);

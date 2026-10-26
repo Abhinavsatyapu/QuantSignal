@@ -88,7 +88,7 @@
   function cfg() {
     const v = (id) => $(id).value, n = (id) => (v(id) === "" ? null : Number(v(id)));
     const sig = v("bSignal");
-    return { targetMode: v("bTargetMode"), targetPerLotSet: n("bTargetPer"), lotSets: n("bLotSets"), direction: sig === "AUTO" ? "AUTO" : sig, signal: sig === "BOTH" ? "AUTO" : sig, callLotUnits: n("bCallUnits"), putLotUnits: n("bPutUnits"), slippage: n("bSlip"), requirePositiveEv: $("bReqEv") ? $("bReqEv").checked : true, rejectIlliquidLegs: $("bRejIll") ? $("bRejIll").checked : true, rejectTooIlliquid: $("bRejToo") ? $("bRejToo").checked : true, minOpenInterest: n("bMinOI"), tooIlliquidPct: n("bLiqToo"), liqIlliquidSpreadPct: n("bLiqIll"), liqGoodSpreadPct: n("bLiqGood"), liqMinOI: n("bLiqMinOI"),
+    return { targetMode: v("bTargetMode"), targetPerLotSet: n("bTargetPer"), lotSets: n("bLotSets"), direction: sig === "AUTO" ? "AUTO" : sig, signal: sig === "BOTH" ? "AUTO" : sig, callLotUnits: n("bCallUnits"), putLotUnits: n("bPutUnits"), slippage: n("bSlip"), expectedFillPct: n("bFillPct"), requirePositiveEv: $("bReqEv") ? $("bReqEv").checked : true, rejectIlliquidLegs: $("bRejIll") ? $("bRejIll").checked : true, rejectTooIlliquid: $("bRejToo") ? $("bRejToo").checked : true, minOpenInterest: n("bMinOI"), tooIlliquidPct: n("bLiqToo"), liqIlliquidSpreadPct: n("bLiqIll"), liqGoodSpreadPct: n("bLiqGood"), liqMinOI: n("bLiqMinOI"),
       marginDivisor: n("bMarginDiv"), futuresRound: n("bRound"), targetPnl: Number(v("bTarget")), capital: n("bCapital"), maxLossPct: n("bMaxLoss"), mmLoss: n("bMm"), maxSpreadPct: n("bSpread"), maxLots: n("bLots"),
       leverage: n("bLev"), commission: n("bComm"), futureFeePct: n("bFee"), debitShortSigma: v("bDebitSigma"), creditShortSigma: v("bCreditSigma"), wingSigma: v("bWingSigma"), useCalibration: $("bCal").checked,
       deltaDirection: v("bDir"), upperMult: $("bAtrUp").value.trim() === "" ? null : n("bAtrUp"), lowerMult: $("bAtrDn").value.trim() === "" ? null : n("bAtrDn"), zoneMinSigma: n("bAtrZLo"), zoneMaxSigma: n("bAtrZHi"), atrPeriod: n("bAtrN"), atrSource: v("bAtrSrc"), scaleToExpiry: $("bAtrScale").checked, optimizerSearch: $("bOptOn").checked, searchBelowSigma: n("bSrchLo"), searchAboveSigma: n("bSrchHi"), searchLongSteps: n("bSrchLong"), hardMaxSigma: n("bHardMax"), overrideMargin: n("bOvMargin") / 100, overrideMaxPopDrop: n("bPopDrop") / 100, minShortSigma: $("bMinSig").value.trim() === "" ? null : n("bMinSig"), minShortAtr: $("bMinAtr").value.trim() === "" ? null : n("bMinAtr"), maxShortSigma: n("bMaxSig"), sheetBandLow: n("bSheetLo"), sheetBandHigh: n("bSheetHi") };
@@ -104,31 +104,41 @@
     if (m === "weekly_atr" && !((c.zoneMinSigma == null || c.zoneMinSigma >= 0) && (c.zoneMaxSigma == null || c.zoneMaxSigma > 0) && (c.zoneMinSigma == null || c.zoneMaxSigma == null || c.zoneMinSigma < c.zoneMaxSigma))) e.push("σ zone: min ≥ 0, max > min (blank = off).");
     if (m === "weekly_atr") { if (![c.upperMult, c.lowerMult].every((x) => x == null || (x > 0 && x <= 5))) e.push("Upper and lower distances must be blank (= the sheets' own × ATR) or > 0 and ≤ 5 × weekly ATR."); if (!(Number.isInteger(c.atrPeriod) && c.atrPeriod >= 2 && c.atrPeriod <= 52)) e.push("ATR period N must be a whole number 2–52."); }
     if (!isOpt(m) && !(c.capital > 0)) e.push("The reference / delta methods need a capital amount (Advanced).");
-    if (c.slippage != null && !(c.slippage >= 0 && c.slippage <= 1)) e.push("Haircut must be 0–1.");
+    if (c.slippage != null && !(c.slippage >= 0 && c.slippage <= 1)) e.push("Fill price override must be 0–1 (or blank).");
+    if (c.expectedFillPct != null && !(c.expectedFillPct >= 0 && c.expectedFillPct <= 100)) e.push("Expected combo fill must be 0–100% of the half-spread.");
     return e;
   }
-  $("bBuild").onclick = async () => {
+  $("bBuild").onclick = () => runBuild(false);
+  if ($("bRefreshQ")) $("bRefreshQ").onclick = () => runBuild(true);
+  // "Refresh quotes" is enabled whenever "Analyse" is
+  if ($("bRefreshQ") && typeof MutationObserver === "function") new MutationObserver(() => { $("bRefreshQ").disabled = $("bBuild").disabled; }).observe($("bBuild"), { attributes: true, attributeFilter: ["disabled"] });
+  async function runBuild(refresh) {
     const c = cfg(), bad = validate(c);
     if (bad.length) { $("bStatus").textContent = bad.join(" "); return; }
-    $("bBuild").disabled = true; $("bStatus").textContent = "Fetching the " + $("bExpiry").value + " chain, Hyperliquid book, indicators and events; searching strike sets and running the what-if analysis…";
+    if (refresh) c.refresh = true;
+    $("bBuild").disabled = true; if ($("bRefreshQ")) $("bRefreshQ").disabled = true; $("bStatus").textContent = (refresh ? "Refreshing quotes (cache bypassed) — fetching the " : "Fetching the ") + $("bExpiry").value + " chain, Hyperliquid book, indicators and events; searching strike sets and running the what-if analysis…";
     const m = $("bMethod").value; if (m === "delta") c.direction = c.deltaDirection; if (!isOpt(m)) { c.maxLossPct = c.maxLossPct ?? 50; }
     markStale(null);
     try { last = await api("/strategy/build", { ticker: $("bTicker").value, expiry: $("bExpiry").value, method: m, cfg: c }); render(last); $("bStatus").textContent = last.id ? "Saved as run #" + last.id + " (inputs, structure, alternatives, what-if summary and chain summary)." : ""; loadHistory(); }
     catch (e) { const msg = plainError(e.message); $("bStatus").textContent = "This run failed: " + msg; markStale(msg); }
-    finally { $("bBuild").disabled = false; }
-  };
+    finally { $("bBuild").disabled = false; if ($("bRefreshQ")) $("bRefreshQ").disabled = false; }
+  }
 
   function render(d) {
     $("bResult").hidden = false;
     const b = d.best, okk = d.status === "OK";
     $("bTitle").textContent = `${d.ticker || $("bTicker").value} · ${d.expiry || $("bExpiry").value}` + (b ? (b.futuresSide ? ` · perp ${b.futuresSide}` : "") : "");
     const lv = d.liquidityVerdict && d.liquidityVerdict.verdict;
-    const notRec = okk && d.liquidityVerdict && d.liquidityVerdict.recommended === false;
-    $("bBadge").textContent = notRec ? "NOT RECOMMENDED" : okk && lv === "TOO_ILLIQUID" ? "TOO ILLIQUID" : d.status.replace(/_/g, " "); $("bBadge").className = "label " + (okk ? (notRec || lv === "TOO_ILLIQUID" ? "bad" : d.data.delayed || lv === "CAUTION" ? "warn" : "ok") : "bad");
+    // gates demote, they do not hide: a rejected-but-best structure still renders as a full card, badged NOT RECOMMENDED
+    const demoted = !!b && (!okk || d.demoted), notRec = !!b && (demoted || (d.liquidityVerdict && d.liquidityVerdict.recommended === false));
+    const staleQ = !!(d.quoteFreshness && d.quoteFreshness.stale);
+    $("bBadge").textContent = notRec ? "NOT RECOMMENDED" : okk && staleQ ? "STALE QUOTES — RECHECK" : okk && lv === "TOO_ILLIQUID" ? "TOO ILLIQUID" : d.status.replace(/_/g, " ");
+    $("bBadge").className = "label " + (notRec ? "bad" : okk ? (lv === "TOO_ILLIQUID" ? "bad" : staleQ || d.data.delayed || lv === "CAUTION" ? "warn" : "ok") : "bad");
     const dl = d.data;
     const nyNow = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date()).reduce((o, p) => ((o[p.type] = p.value), o), {}), mins = +nyNow.hour * 60 + +nyNow.minute;
     const usOpen = !["Sat", "Sun"].includes(nyNow.weekday) && mins >= 570 && mins < 960, age = dl.ageMinutes, ageTxt = age == null ? "" : age >= 1440 ? nf(age / 1440, 1) + " days" : age >= 120 ? nf(age / 60, 1) + " h" : age + " min";
-    const staleWhy = age != null && age > 20 ? (usOpen ? " — <b>the market is open but these quotes are old</b>; the source may be lagging, so treat prices with care." : " — <b>US options market closed</b> (" + esc(nyNow.weekday) + " " + esc(nyNow.hour + ":" + nyNow.minute) + " ET; regular hours Mon–Fri 09:30–16:00 ET), so these are the last-session closing quotes. They refresh once trading resumes; fills at the next open can differ.") : "";
+    const qNote = (d.quoteFreshness && d.quoteFreshness.note) || dl.quoteNote;
+    const staleWhy = age != null && age > 20 && qNote ? " — " + esc(qNote) + (d.quoteFreshness && d.quoteFreshness.refreshed ? " (cache bypassed)" : "") : age != null && age > 20 ? (usOpen ? " — <b>the market is open but these quotes are old</b>; the source may be lagging, so treat prices with care." : " — <b>US options market closed</b> (" + esc(nyNow.weekday) + " " + esc(nyNow.hour + ":" + nyNow.minute) + " ET; regular hours Mon–Fri 09:30–16:00 ET), so these are the last-session closing quotes. They refresh once trading resumes; fills at the next open can differ.") : "";
     $("bDataLine").innerHTML = `Source: ${esc(dl.label)} · quotes as of ${ist(dl.quoteTime)}${age != null ? ` (<span class="${age > 20 ? "stale" : "live"}">${age > 20 ? "STALE " : ""}${ageTxt} old</span>${staleWhy})` : ""} · spot ${nf(d.spot)} (${esc(d.spotSource || dl.stockSource || "")})` + (d.perp ? ` · perp ${esc(d.perp.symbol)} mid ${nf(d.perp.mid)} · basis ${nf(d.basis)}` : "") + (d.atmIV ? ` · ATM IV ${nf(d.atmIV * 100, 1)}% · 1σ to expiry ${usd(d.expectedMove, 2)}` : "") + (d.liquidity ? ` · ${d.liquidity.usable}/${d.liquidity.listed} strikes usable` : "");
     const errs = d.errors || [];
     const exl = d.liquidity && Object.keys(d.liquidity.excluded || {}).length ? "Excluded strikes: " + Object.entries(d.liquidity.excluded).map(([k, v]) => v + " " + k).join(", ") + "." : "";
@@ -136,7 +146,8 @@
     const warns = [...(d.warnings || []), ...(d.marketNote ? [d.marketNote] : [])];
     $("bWarnings").hidden = !warns.length; $("bWarnings").innerHTML = warns.map((w) => "⚠ " + esc(w)).join("<br>");
     $("bDirection").hidden = !d.direction; if (d.direction) $("bDirection").innerHTML = "<b>Direction:</b> " + esc(d.direction.reason);
-    if (!b && d.rejected && d.rejected.length) $("bErrors").innerHTML += "<br><br>Candidates rejected by the what-if gates:<br>" + d.rejected.map((r) => esc(r.futuresSide + " " + r.variant + " " + r.legs.map((l) => (l.side === "buy" ? "+" : "−") + l.qty + " " + l.strike + l.type[0].toUpperCase()).join(" ") + " → " + r.whatIf.gates.join("; "))).join("<br>");
+    if (d.rejected && d.rejected.length) { $("bErrors").hidden = false; $("bErrors").innerHTML += (errs.length ? "<br><br>" : "") + "Candidates rejected by the what-if gates" + (b ? " (the first is shown below as a full card, NOT RECOMMENDED)" : "") + ":<br>" }
+    if (d.rejected && d.rejected.length) $("bErrors").innerHTML += + d.rejected.map((r) => esc(r.futuresSide + " " + r.variant + " " + r.legs.map((l) => (l.side === "buy" ? "+" : "−") + l.qty + " " + l.strike + l.type[0].toUpperCase()).join(" ") + " → " + r.whatIf.gates.join("; "))).join("<br>");
     renderVariants(d);
     renderAtr(d); renderPairs(d); renderLiq(d);
     if (d.data && d.data.quoteTime && Deriv.quoteTime) Deriv.quoteTime(d.data.quoteTime);
@@ -267,7 +278,7 @@
   const legChips = (legs, fill) => legs.map((l, i) => { const g = fill && fill.legs && fill.legs[i], t = (l.side === "buy" ? "+" : "−") + l.qty + " " + nf(l.strike, 1) + l.type[0].toUpperCase();
     return g ? `<span class="b-leg">${esc(t)} <i class="liq-chip liq-${esc(g.grade.toLowerCase())}" title="${esc(g.grade + ": " + g.why + (g.spreadPct != null ? " · spread " + nf(g.spreadPct, 1) + "% ($" + nf(g.spreadAbs, 2) + ")" : "") + (g.openInterest != null ? " · OI " + g.openInterest : "") + (g.volume != null ? " · vol " + g.volume : ""))}">${esc(g.grade)}</i></span>` : esc(t); }).join(" ");
   // per card: the immediate mark-to-mid loss of a market entry, and mid vs natural side by side for the worst exit
-  const fillRows = (f, T0) => (f ? `<dt>Immediate loss on entry at market</dt><dd class="${f.verdict === "OK" ? "" : f.verdict === "CAUTION" ? "warnc" : "negative"}">${usd(-f.marketSlippage)}${f.shareOfTarget != null ? " (" + nf(f.shareOfTarget * 100, 0) + "% of target)" : ""}</dd><dt>Worst exit · mid / natural</dt><dd><span class="${cls(f.exitsAtLimit)}">${usd(f.exitsAtLimit)}</span> / <b class="${f.targetAfterSlippage >= T0 - 0.5 ? "pos" : "negative"}">${usd(f.targetAfterSlippage)}</b><small class="muted">natural = buy at ask, sell at bid (used for the target check)</small></dd>${f.evAfterSlippage != null ? `<dt>EV · mid / natural</dt><dd>${f.evAtLimit != null ? `<span class="${cls(f.evAtLimit)}">${usd(f.evAtLimit)}</span> / ` : ""}<b class="${cls(f.evAfterSlippage)}">${usd(f.evAfterSlippage)}</b></dd>` : ""}` : "");
+  const fillRows = (f, T0) => (f ? `<dt>Immediate loss on entry at market</dt><dd class="${f.verdict === "OK" ? "" : f.verdict === "CAUTION" ? "warnc" : "negative"}">${usd(-f.marketSlippage)}${f.shareOfTarget != null ? " (" + nf(f.shareOfTarget * 100, 0) + "% of target)" : ""}${f.expectedFillCost != null ? '<small class="muted">expected combo fill ' + usd(-f.expectedFillCost) + "</small>" : ""}</dd><dt>Worst exit · mid / expected / natural</dt><dd><span class="${cls(f.exitsAtLimit)}">${usd(f.exitsAtLimit)}</span> / <b class="${f.exitsAtExpected >= T0 - 0.5 ? "pos" : "negative"}">${usd(f.exitsAtExpected)}</b> / <span class="${f.targetAfterSlippage >= T0 - 0.5 ? "pos" : "negative"}">${usd(f.targetAfterSlippage)}</span><small class="muted">expected = combo limit fill (${esc(f.expectedFillPct)}% of the half-spread on Good / Thin legs); natural = buy at ask, sell at bid (worst case)</small></dd>${f.evAfterSlippage != null ? `<dt>EV · mid / expected / natural</dt><dd>${f.evAtLimit != null ? `<span class="${cls(f.evAtLimit)}">${usd(f.evAtLimit)}</span> / ` : ""}<b class="${cls(f.evAtExpected)}">${usd(f.evAtExpected)}</b> / <span class="${cls(f.evAfterSlippage)}">${usd(f.evAfterSlippage)}</span></dd>` : ""}` : "");
   const VERDICT = { OK: "Liquid enough", CAUTION: "Thin market — combo limit order only", TOO_ILLIQUID: "Too illiquid for this target" };
   function renderLiq(d) {
     const box = $("bLiq"), b = d.best, f = b && b.fill, p = d.execPlan; if (!f) { box.hidden = true; box.innerHTML = ""; return; }
@@ -275,10 +286,11 @@
     const lines = [
       "<b>Verdict:</b> " + esc(VERDICT[f.verdict] || f.verdict) + " — " + esc(f.verdictText),
       "<b>Legs:</b> " + legChips(b.legs, f) + " · " + f.counts.Good + " good / " + f.counts.Thin + " thin / " + f.counts.Illiquid + " illiquid",
-      ...(f && d.liquidityVerdict && d.liquidityVerdict.recommended === false ? ["<b>Not recommended:</b> " + esc((d.liquidityVerdict.blockers || []).join("; "))] : []),
+      ...(f && d.liquidityVerdict && d.liquidityVerdict.recommended === false ? ['<b class="negative">NOT RECOMMENDED:</b> ' + esc((d.liquidityVerdict.blockers || []).join("; ")) + " — shown so the strikes can be checked."] : []),
+      ...(d.liquidityVerdict && (d.liquidityVerdict.cautions || []).length ? ['<b class="warnc">Caution:</b> ' + esc(d.liquidityVerdict.cautions.join("; "))] : []),
       "<b>Immediate loss on entry at market:</b> " + esc(usd(f.marketSlippage)) + " (options " + esc(usd(f.optionsMarket)) + " + " + (d.hedgeType === "STOCK" ? "stock" : "perp") + " " + esc(usd(f.perpMarket)) + ")" + (T0 ? " = " + esc(nf(f.shareOfTarget * 100, 0)) + "% of the " + esc(usd(T0)) + " target" : ""),
-      "<b>Target after slippage:</b> worst exit " + esc(usd(f.exitsAtLimit)) + " at mid / <b>" + esc(usd(f.targetAfterSlippage)) + "</b> at natural (buy at ask, sell at bid)" + (f.evAfterSlippage != null ? " · EV " + (f.evAtLimit != null ? esc(usd(f.evAtLimit)) + " at mid / " : "") + "<b>" + esc(usd(f.evAfterSlippage)) + "</b> at natural" : ""),
-      "<b>Quotes:</b> " + (q && q.stale ? '<span class="stale">' + esc(q.delayed ? "Cboe delayed" : "Quotes") + " · " + esc(q.ageMinutes >= 120 ? nf(q.ageMinutes / 60, 1) + " h" : q.ageMinutes + " min") + " old</span> — before the US open (7:00 PM IST) these are the last close; real spreads at the open are often wider. " : "") + esc(q ? q.oiNote : "Open interest is from the last session."),
+      "<b>Target after slippage:</b> worst exit " + esc(usd(f.exitsAtLimit)) + " at mid / <b>" + esc(usd(f.exitsAtExpected)) + "</b> at the expected combo fill (" + esc(f.expectedFillPct) + "% of the half-spread) / " + esc(usd(f.targetAfterSlippage)) + " at natural (worst case)" + (f.evAfterSlippage != null ? " · EV " + (f.evAtLimit != null ? esc(usd(f.evAtLimit)) + " / " : "") + "<b>" + esc(usd(f.evAtExpected)) + "</b> / " + esc(usd(f.evAfterSlippage)) : ""),
+      "<b>Quotes:</b> " + (q && q.stale ? '<span class="stale">' + esc(q.delayed ? "Cboe delayed" : "Quotes") + " · " + esc(q.ageMinutes >= 120 ? nf(q.ageMinutes / 60, 1) + " h" : q.ageMinutes + " min") + " old</span> — " + esc(q.note || "these are the last session's quotes; real spreads at the open are often wider.") + " " : "") + esc(q ? q.oiNote : "Open interest is from the last session."),
     ];
     box.hidden = false;
     box.className = "b-liq " + (f.verdict === "TOO_ILLIQUID" ? "bad" : f.verdict === "CAUTION" ? "warn" : "ok");
@@ -340,7 +352,7 @@
     const lvx = d.liquidityVerdict;
     const blk = lvx && lvx.recommended === false ? lvx.blockers || [] : [];
     $("bRecReason").className = "b-rec" + (lvx && (lvx.verdict === "TOO_ILLIQUID" || blk.length) ? " bad" : "");
-    $("bRecReason").innerHTML = (blk.length ? "<b>Not recommended</b> — " + esc(blk.join("; ")) + ". No liquid alternative with a positive expected value was found on this expiry; try a later expiry, a more liquid ticker, or skip it.<br>" : lvx && lvx.verdict === "TOO_ILLIQUID" ? "<b>Too illiquid for this target</b> — not a clean recommendation: a market fill would cost " + esc(usd(lvx.marketSlippage)) + " (" + esc(nf(lvx.shareOfTarget * 100, 0)) + "% of the target). Details below.<br>" : "") + (d.recommendation ? "<b>" + (d.recommendation.id ? "Recommended: " + esc(d.recommendation.id) : "No recommendation") + "</b>" + (rv ? " — CE short " + esc(nf(rv.exits[0].price)) + " / PE short " + esc(nf(rv.exits[1].price)) + ", exits pay " + esc(usd(rv.exits[0].pnlExpiry)) + " / " + esc(usd(rv.exits[1].pnlExpiry)) + " vs the " + esc(usd(d.cfg.targetPnl)) + " target" + (rw ? ", P(profit) " + nf(rw.probs.profit * 100, 0) + "%, " + (rw.acceptable ? "passes every what-if check and risk cap" : "fails: " + esc(rw.gates.join("; "))) : "") + "." : "") : "");
+    $("bRecReason").innerHTML = (blk.length ? "<b>Not recommended</b> — " + esc(blk.join("; ")) + ". " + (d.demoted || d.status !== "OK" ? "Every candidate failed a gate; the best one is shown in full so you can check its strikes — it is not a recommendation." : "No liquid alternative with a positive expected value was found on this expiry.") + " Try a later expiry, a more liquid ticker, Refresh quotes, or skip it.<br>" : lvx && lvx.verdict === "TOO_ILLIQUID" ? "<b>Too illiquid for this target</b> — not a clean recommendation: a market fill would cost " + esc(usd(lvx.marketSlippage)) + " (" + esc(nf(lvx.shareOfTarget * 100, 0)) + "% of the target). Details below.<br>" : "") + (d.recommendation ? "<b>" + (d.recommendation.id ? (d.recommendation.notRecommended ? "Best candidate (NOT RECOMMENDED): " : "Recommended: ") + esc(d.recommendation.id) : "No recommendation") + "</b>" + (rv ? " — CE short " + esc(nf(rv.exits[0].price)) + " / PE short " + esc(nf(rv.exits[1].price)) + ", exits pay " + esc(usd(rv.exits[0].pnlExpiry)) + " / " + esc(usd(rv.exits[1].pnlExpiry)) + " vs the " + esc(usd(d.cfg.targetPnl)) + " target" + (rw ? ", P(profit) " + nf(rw.probs.profit * 100, 0) + "%, " + (rw.acceptable ? "passes every what-if check and risk cap" : "fails: " + esc(rw.gates.join("; "))) : "") + "." : "") : "");
     $("bScoreDetails").hidden = !(d.recommendation && d.recommendation.reason);
     $("bScoreBody").innerHTML = d.recommendation ? esc(d.recommendation.reason) + (rv && rv.factors ? '<table class="b-table" style="margin-top:8px"><thead><tr><th>Factor</th><th>Weight</th><th>Value</th><th>Points</th></tr></thead><tbody>' + Object.entries(rv.factors).map(([k, f]) => `<tr><td>${esc(k)}</td><td class="num">${nf(f.weight, 2)}</td><td class="num">${nf(f.value, 3)}</td><td class="num">${nf(f.weighted, 3)}</td></tr>`).join("") + "</tbody></table>" : "") : "";
     renderStages(d, rv);

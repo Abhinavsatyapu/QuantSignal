@@ -416,7 +416,7 @@ const liquidityRecord = (out) => { const b = out.best, f = b && b.fill; if (!f) 
 function saveRun({ out, chain, perp, t, expiry, method, cfg, market, source, planId, multiplier }) {
     const quoteTimes = chain.contracts.map(q => Date.parse(q.quoteTime)).filter(Number.isFinite);
     const quoteTime = quoteTimes.length ? new Date(Math.max(...quoteTimes)).toISOString() : chain.stock?.time || null;
-    const data = { provider: chain.provider, label: chain.label, feed: chain.feed, delayed: !!chain.delayed, quoteTime, ageMinutes: quoteTime ? Math.round((Date.now() - Date.parse(quoteTime)) / 6e4) : null, stockSource: chain.stock?.source || null, partial: !!chain.partial, contractsAtExpiry: chain.contracts.length };
+    const data = { provider: chain.provider, label: chain.label, feed: chain.feed, delayed: !!chain.delayed, quoteTime, ageMinutes: quoteTime ? Math.round((Date.now() - Date.parse(quoteTime)) / 6e4) : null, stockSource: chain.stock?.source || null, partial: !!chain.partial, contractsAtExpiry: chain.contracts.length, lastSession: !!chain.quoteInfo?.lastSession, quoteNote: chain.quoteInfo?.note || null, fileTime: chain.quoteInfo?.fileTime || null, newestOptionTrade: chain.quoteInfo?.newestOptionTrade || null };
     const best = out.best, now = Date.now();
     const row = { ts: now, ticker: t, expiry, method, status: out.status, provider: chain.label, quote_time: quoteTime, spot: out.spot ?? null, atm_iv: out.atmIV ?? null, perp_symbol: perp.symbol || null,
       futures_qty: best?.futures?.signedQty ?? null, target_pnl: (out.cfg && out.cfg.targetPnl) ?? cfg.targetPnl ?? null, expected_up: best?.expected?.upExpiry ?? best?.target?.pnlAtTargetPrice ?? null, expected_down: best?.expected?.downExpiry ?? null, required_capital: best?.requiredCapital ?? null,
@@ -481,7 +481,8 @@ function router({ stockSymbols }) {
       notices.push(want ? `${t} has no options expiring ${want} (no weekly on that date?); using the nearest listed expiry ${pick}.` : `No expiry chosen; using ${pick}.`);
       expiry = pick;
     }
-    const [chain, perp] = await Promise.all([withRetry(() => deriv.getChain({ symbol: t, near: expiry, far: expiry })).catch(e => { throw httpErr(502, friendlyFetchError(e)); }), perpFor(t, stockSymbols)]);
+    const fresh = b.refresh === true || b.refresh === 'true' || (b.cfg && (b.cfg.refresh === true || b.cfg.refresh === 'true')); // "Refresh quotes": bypass every cache
+    const [chain, perp] = await Promise.all([withRetry(() => deriv.getChain({ symbol: t, near: expiry, far: expiry, fresh })).catch(e => { throw httpErr(502, friendlyFetchError(e)); }), perpFor(t, stockSymbols)]);
     const c = b.cfg || {};
     let atrOpts = null;
     if (method === 'weekly_atr') {
@@ -496,7 +497,7 @@ function router({ stockSymbols }) {
     const cfg = opt
       ? { targetMode: c.targetMode === 'fixed' ? 'fixed' : 'perLotSet', targetPerLotSet: num(c.targetPerLotSet, tickerTarget(getAccount(), t)), lotSets: num(c.lotSets, getAccount().defaultLotSets),
           targetPnl: c.targetMode === 'fixed' ? num(c.targetPnl ?? b.targetPnl) : null, direction: ['BULLISH', 'BEARISH', 'BOTH'].includes(c.direction) ? c.direction : ['BULLISH', 'BEARISH'].includes(c.signal) ? c.signal : 'AUTO',
-          callLotUnits: num(c.callLotUnits, null), putLotUnits: num(c.putLotUnits, null), slippage: num(c.slippage, 1), capital: num(c.capital, null), maxLossPct: num(c.maxLossPct, null), minOpenInterest: num(c.minOpenInterest, 10),
+          callLotUnits: num(c.callLotUnits, null), putLotUnits: num(c.putLotUnits, null), slippage: num(c.slippage, null), capital: num(c.capital, null), maxLossPct: num(c.maxLossPct, null), minOpenInterest: num(c.minOpenInterest, 10),
           maxSpreadPct: num(c.maxSpreadPct, 25), maxLots: num(c.maxLots, 60), mmLoss: num(c.mmLoss, 50), marginDivisor: num(c.marginDivisor, 2), leverage: num(c.leverage, 5), futuresRound: num(c.futuresRound, 5), commission: num(c.commission, 0.65), futureFeePct: num(c.futureFeePct, 0.045), maxPriceGapPct: num(c.maxPriceGapPct, 5), account: accountLimitsForBuild(), minShortSigma: num(c.minShortSigma, null), minShortAtr: num(c.minShortAtr, null), maxShortSigma: num(c.maxShortSigma, 1.2), sheetBandLow: num(c.sheetBandLow, 0.8), sheetBandHigh: num(c.sheetBandHigh, 1.3),
           selection: c.selection === 'band' ? 'band' : 'sheet', optimizerSearch: !(c.optimizerSearch === false || c.optimizerSearch === 'false'), searchBelowSigma: num(c.searchBelowSigma, 0.35), searchAboveSigma: num(c.searchAboveSigma, 0.5), searchLongSteps: num(c.searchLongSteps, 2), hardMaxSigma: num(c.hardMaxSigma, 1.5), overrideMargin: num(c.overrideMargin, 0.05), overrideMaxPopDrop: num(c.overrideMaxPopDrop, 0.03),
           ...(atrOpts ? { atrPeriod: atrOpts.n, upperMult: atrOpts.upperMult, lowerMult: atrOpts.lowerMult, zoneMinSigma: atrOpts.zoneMinSigma, zoneMaxSigma: atrOpts.zoneMaxSigma, scaleToExpiry: atrOpts.scaleToExpiry, atrSource: atrOpts.source } : {}) }
@@ -511,11 +512,15 @@ function router({ stockSymbols }) {
     if (method === 'optimizer') { input.bandAtr = wAtr && !wAtr.error ? { atr: wAtr.atr, source: wAtr.source } : { error: (wAtr && wAtr.error) || 'not fetched' }; input.sheetAnchor = anchor; }
     if (method === 'weekly_atr' && wAtr) input.weeklyAtr = { ...wAtr, upperMult: atrOpts.upperMult, lowerMult: atrOpts.lowerMult, multSource: atrOpts.multSource, zoneMinSigma: atrOpts.zoneMinSigma, zoneMaxSigma: atrOpts.zoneMaxSigma, scaleToExpiry: atrOpts.scaleToExpiry, tradingDays: Strategy.tradingDaysTo(expiry), debitLongSigma: c.useCalibration === false ? 0.1 : cal.debitLongSigma, wingSigma: c.useCalibration === false ? 0.47 : cal.wingSigma };
     for (const k of ['requirePositiveEv', 'rejectIlliquidLegs', 'rejectTooIlliquid']) if (c[k] === false || c[k] === 'false') cfg[k] = false; // liquidity gates: on unless switched off in Advanced
+    // quote freshness BEFORE building: on stale quotes (> 30 min old, e.g. the last session's) a negative EV is a "recheck"
+    // caution, not a refusal — the structure is still shown, badged, so the strikes can be re-checked once quotes refresh
+    const qts = chain.contracts.map(q => Date.parse(q.quoteTime)).filter(Number.isFinite), qAt = qts.length ? Math.max(...qts) : null, ageMin = qAt ? Math.round((Date.now() - qAt) / 6e4) : null;
+    const qi = chain.quoteInfo || null, isStale = (ageMin != null && ageMin > 30) || !!(qi && qi.lastSession);
+    cfg.staleQuotes = isStale;
     for (const k of Object.keys(Strategy.LIQ_DEFAULTS)) if (c[k] !== undefined && c[k] !== '' && c[k] !== null && Number.isFinite(Number(c[k]))) cfg[k] = Number(c[k]);
     const out = opt ? Strategy.optimize(input) : method === 'reference' ? Strategy.buildReference(input) : Strategy.build(input);
     // quote freshness (honest labelling) + liquidity / fill model / execution plan for EVERY method
-    const qts = chain.contracts.map(q => Date.parse(q.quoteTime)).filter(Number.isFinite), qAt = qts.length ? Math.max(...qts) : null, ageMin = qAt ? Math.round((Date.now() - qAt) / 6e4) : null;
-    out.quoteFreshness = { quoteTime: qAt ? new Date(qAt).toISOString() : null, ageMinutes: ageMin, delayed: !!chain.delayed, stale: ageMin != null && ageMin > 30, oiNote: 'Open interest is as of the last session close; volume is the current or last session.' };
+    out.quoteFreshness = { quoteTime: qAt ? new Date(qAt).toISOString() : null, ageMinutes: ageMin, delayed: !!chain.delayed, stale: isStale, lastSession: !!(qi && qi.lastSession), fileTime: qi ? qi.fileTime : null, newestOptionTrade: qi ? qi.newestOptionTrade : null, marketOpen: qi ? qi.marketOpen : null, note: qi ? qi.note : null, refreshed: fresh, oiNote: 'Open interest is as of the last session close; volume is the current or last session.' };
     const stale = out.quoteFreshness.stale ? (chain.delayed ? 'Cboe delayed quotes' : 'quotes') + ' from ' + new Date(qAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' IST (' + (ageMin >= 120 ? Math.round(ageMin / 60) + ' h' : ageMin + ' min') + ' old) — spreads at the open can be much wider, and open interest / volume are from the last session' : null;
     Strategy.attachLiquidity(out, { ...cfg, hedge: perp && perp.available ? perp : (chain.stock ? Strategy.hedgeFromStock(t, chain.stock) : null), stale });
     if (notices.length) out.warnings = [...notices, ...(out.warnings || [])];

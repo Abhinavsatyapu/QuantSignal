@@ -50,7 +50,8 @@
 </div><p class="market-note">The CE and PE short strikes are the exit / profit targets. Everything else (perp side from the signal, both lot ratios, perp qty floored to 5, margin, theta, long legs as in the reference method, liquidity filters, risk caps and the what-if) runs as for the optimizer.</p></fieldset>
 <label>Direction<select id="bSignal"><option value="AUTO">Auto from indicators (default)</option><option value="BULLISH">Bullish → LONG perp</option><option value="BEARISH">Bearish → SHORT perp</option><option value="BOTH">Compare both sides</option></select></label>
 <label>Fixed lot ratio · calls : puts (blank = compare both)<span class="b-ratio"><input id="bCallUnits" type="number" min="1" max="10" step="1" placeholder="auto" aria-label="Call lots"> : <input id="bPutUnits" type="number" min="1" max="10" step="1" placeholder="auto" aria-label="Put lots"></span></label>
-<label>Fill price for target / risk checks (1 = market fill at the far side, default · 0 = mid)<input id="bSlip" type="number" min="0" max="1" step="0.05" value="1"></label>
+<label><span data-tip="How far from mid a combo limit order is assumed to fill on Good / Thin legs (illiquid legs are always priced at the far side). Targets, risk caps and the EV gate use this; the full natural fill is always shown next to it as the worst case." tabindex="0">Expected combo fill (% of half-spread, default 60)</span><input id="bFillPct" type="number" min="0" max="100" step="5" value="60"></label>
+<label>Fill price override, every leg (blank = expected combo fill · 1 = natural · 0 = mid)<input id="bSlip" type="number" min="0" max="1" step="0.05" placeholder="auto"></label>
 <label>Capital limit ($, optional)<input id="bCapital" type="number" min="100" step="500" placeholder="no limit"></label>
 <label>Max loss within ±2σ (% of capital, optional)<input id="bMaxLoss" type="number" min="1" max="100" step="1" placeholder="none"></label>
 <label>Min open interest per leg<input id="bMinOI" type="number" min="0" step="1" value="10"></label>
@@ -58,7 +59,7 @@
 <label>Too illiquid if market-fill cost &gt; (% of target)<input id="bLiqToo" type="number" min="1" max="100" step="1" value="25"></label>
 <label>Leg "Illiquid" above spread (% of mid)<input id="bLiqIll" type="number" min="1" max="100" step="1" value="15"></label>
 <label>Leg "Good" up to spread (% of mid)<input id="bLiqGood" type="number" min="0.5" max="50" step="0.5" value="6"></label>
-<label class="check-label"><input id="bReqEv" type="checkbox" checked> Never recommend a negative expected value after a market fill</label>
+<label class="check-label"><input id="bReqEv" type="checkbox" checked> Never recommend a negative expected value at the expected combo fill</label>
 <label class="check-label"><input id="bRejIll" type="checkbox" checked> Reject structures with an illiquid leg</label>
 <label class="check-label"><input id="bRejToo" type="checkbox" checked> Reject structures that are too illiquid for the target</label>
 <label>Leg "Illiquid" below open interest<input id="bLiqMinOI" type="number" min="0" step="10" value="100"></label>
@@ -74,7 +75,7 @@
 <label class="check-label"><input id="bCal" type="checkbox" checked> Reference method: per-ticker calibration</label>
 <label>Delta method: direction<select id="bDir"><option value="LONG">LONG perp</option><option value="SHORT">SHORT perp</option><option value="NEUTRAL">NEUTRAL (condor)</option></select></label>
 </div><p id="bCalNote" class="market-note"></p><p id="bWeights" class="market-note"></p></details>
-<div class="row"><button id="bBuild" disabled>Analyse &amp; recommend</button><span id="bStatus" class="market-note" role="status"></span></div>
+<div class="row"><button id="bBuild" disabled>Analyse &amp; recommend</button><button id="bRefreshQ" class="ghost" type="button" disabled title="Bypass the quote cache and fetch a fresh Cboe chain, then rebuild">Refresh quotes</button><span id="bStatus" class="market-note" role="status"></span></div>
 </section>
 
 <section id="bResult" class="panel b-panel" hidden>
