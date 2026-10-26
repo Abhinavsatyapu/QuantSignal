@@ -117,6 +117,16 @@ Legs within N listed strikes of the sheet (all 4 legs pooled). LOTO = leave-one-
 * `public/strategy-weekly-atr.js`: defaults 0.42 / 0.41. The UI fields are blank, meaning "sheet".
 * UI ("How this was chosen"): steps are now *Sheet rule*, *Zone check* and *Variations tested*. The pairs header reads "sheet rule ± 2 strikes · zone clamp …". The card's *Sheet reference* is the rule strike.
 
+## 6b. Live check (deploy 4746978, 26 Oct 2026, expiry 30 Oct, Cboe delayed quotes from the 23 Oct close, $800 target)
+
+| Ticker | Spot · σ · weekly ATR | Sheet-rule strikes (debit long / debit short / credit short / wing) | Chosen | Steps from rule | Zone conflicts |
+|---|---|---|---|---|---|
+| HOOD | 94.90 · $9.64 · $14.98 | SHORT 1C:2P: 95C / 103C / 88P / 84P (HOOD sheets, 8 rows) | +4 96C −4 103C +8 84P −8 88P, perp −175 (CE 103 +8.5% 0.84σ; PE 88 −7.3% 0.72σ); exits $1,038 / $865; P(profit) 52% | debit long +1 | credit short 0.65σ → 0.70σ |
+| SPY | 759.97 · $13.68 · $17.45 | LONG 2C:1P: 759P / 750P / 770C / 775C (pooled) | −4 768C +4 775C −2 750P +2 759P, +100 shares (no perp); exits $862 / $863; P(profit) 70.5% | credit short −2 (770 → 768) | credit short 0.61σ → 0.70σ |
+| AAPL | 347.61 · $8.34 · $17.15 | SHORT 1C:2P: 350C / 355C / 342.5P / 337.5P (pooled) | +6 352.5C −6 357.5C +12 337.5P −12 340P, perp −170; exits $898 / $874; P(profit) 38% | 3 legs ±1 (the 2% risk cap at 6 lot sets) | credit short 0.67σ → 0.70σ |
+
+The earlier baselines for HOOD were 99/89 (run #92), 111/76 (band run #103) and 104/85 (the middle-zone anchor). HOOD's own sheets put the shorts at 6.3–9.4% / 5.0–5.7% from spot; today's rule gives +8.5% / −7.3%.
+
 ## 7. Per-page ground truth and engine result (optimizer, LOTO)
 
 CE/PE short distances are $ · % · σ · × weekly ATR from spot. Engine = CE long / CE short / PE short / PE long.
