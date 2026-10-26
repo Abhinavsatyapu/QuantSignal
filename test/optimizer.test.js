@@ -15,7 +15,7 @@ function chain(spot, iv, { oi = 500 } = {}) {
   return out;
 }
 const perp = (x) => ({ available: true, symbol: 'xyz:TEST', bid: x - 0.01, ask: x + 0.01, mid: x, szDecimals: 2, maxLeverage: 10, funding: 0.00001 });
-const WIDE = { minShortSigma: null, maxShortSigma: 2.5, sheetBandHigh: 2 }; // sheet band only, wider: the flat-IV fixture needs farther shorts for $150 per lot set
+const WIDE = { selection: 'band', minShortSigma: null, maxShortSigma: 2.5, sheetBandHigh: 2 }; // band selection (no two-stage rerun), sheet band only, wider: the flat-IV fixture needs farther shorts for $150 per lot set
 const run = (cfg = {}, extra = {}) => S.optimize({ nowMs: NOW, ticker: 'TEST', expiry: EXP, contracts: chain(100, 0.6), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { targetMode: 'fixed', targetPnl: 400, ...cfg }, market: { direction: 'LONG', score: 7, maxScore: 8, trend: 'UP', momentum: 'UP', rsi: 60 }, ...extra });
 
 test('decideDirection: signal, lean and override', () => {
@@ -161,7 +161,7 @@ test('sheet band: no liquid strike inside a band → nearest liquid strike used,
 });
 
 test('legacy band selection, middle zone (0.7–1.2σ): both shorts searched in the zone, sheet anchor clamped into it, chosen shorts inside', () => {
-  const o = run({ selection: 'band' }, { bandAtr: { atr: 9, source: 'fixture' }, sheetAnchor: ANCHOR }), b = o.distanceBand;
+  const o = run({ selection: 'band', minShortSigma: 0.7, maxShortSigma: 1.2 }, { bandAtr: { atr: 9, source: 'fixture' }, sheetAnchor: ANCHOR }), b = o.distanceBand;
   assert.equal(o.status, 'OK', JSON.stringify(o.errors)); assert.equal(b.mode, 'middle zone + sheet anchor'); assert.deepEqual([b.minShortSigma, b.maxShortSigma], [0.7, 1.2]);
   for (const v of b.variants) for (const k of ['ce', 'pe']) {
     assert.ok(Math.abs(v[k].loSigmas - 0.7) < 1e-9 && Math.abs(v[k].hiSigmas - 1.2) < 1e-9, v.variant + k);
@@ -169,7 +169,7 @@ test('legacy band selection, middle zone (0.7–1.2σ): both shorts searched in 
   }
   const v2 = b.variants.find(v => v.variant === '2C:1P'); // LONG 2C:1P: CE = credit short 0.61σ, PE = debit short 0.79σ → both anchored at the zone midpoint 0.95σ
   assert.equal(v2.rawSheet.creditShortSigma, 0.61); assert.ok(v2.ce.clampedToZone && Math.abs(v2.ce.sheetSigmas - 0.95) < 1e-9 && Math.abs(v2.pe.sheetSigmas - 0.95) < 1e-9);
-  const wideSheet = run({ selection: 'band' }, { sheetAnchor: { groups: { credit2: { ...ANCHOR.groups.credit2, debitShortSigma: 1.1, creditShortSigma: 1.6 } } } }).distanceBand.variants.find(v => v.variant === '2C:1P');
+  const wideSheet = run({ selection: 'band', minShortSigma: 0.7, maxShortSigma: 1.2 }, { sheetAnchor: { groups: { credit2: { ...ANCHOR.groups.credit2, debitShortSigma: 1.1, creditShortSigma: 1.6 } } } }).distanceBand.variants.find(v => v.variant === '2C:1P');
   assert.ok(Math.abs(wideSheet.pe.sheetSigmas - 1.1) < 1e-9 && Math.abs(wideSheet.ce.sheetSigmas - 1.2) < 1e-9); // wider sheets kept, clamped to the 1.2σ ceiling
   for (const v of o.variants.filter(x => x.reachable)) { const e = b.variants.find(x => x.variant === v.key); if (e.fallback) continue;
     assert.ok(v.distances.ce.sigmas >= 0.7 - 1e-9 && v.distances.ce.sigmas <= 1.2 + 1e-9, v.id + ' CE ' + v.distances.ce.sigmas); assert.ok(-v.distances.pe.sigmas >= 0.7 - 1e-9 && -v.distances.pe.sigmas <= 1.2 + 1e-9, v.id + ' PE'); }

@@ -16,20 +16,25 @@
   const usd = (x) => (x < 0 ? "−$" : "$") + Math.round(Math.abs(x)).toLocaleString("en-US");
   const OPT_DEFAULTS = { mmLoss: 50, maxLots: 60, maxSpreadPct: 25, minOpenInterest: 10, slippage: 0.5, commission: 0.65, futureFeePct: 0.045, marginDivisor: 2, leverage: 5, futuresRound: 5,
     thetaTolerancePct: 15, maxPriceGapPct: 5, riskSigma: 2, r: 0.04, capital: null, maxLossPct: null, topN: 3,
-    // strike selection: "sheet" (default) = the 4 strikes follow the learned reference-sheet geometry (see
-    // docs/strike-selection-audit.md) and the what-if only chooses among ±shortSteps / ±longSteps listed-strike variations;
+    // strike selection: "sheet" (default) = TWO STAGES. Stage A, the sheet baseline: the 4 strikes of the rule learned from
+    // the reference sheets (docs/strike-selection-audit.md), always given the full what-if. Stage B, the optimizer: a wider
+    // search around the baseline (each short from −searchBelowSigma to +searchAboveSigma of its sheet distance, capped at
+    // hardMaxSigma; longs and wing widths ± searchLongSteps listed strikes). The optimizer pick replaces the baseline only if
+    // it beats it clearly: score ≥ overrideMargin (5%) lower, EV not worse, P(profit) at most overrideMaxPopDrop (3 pts)
+    // lower and every gate / risk cap passed (or the baseline itself fails a gate and the pick passes).
     // "band" = the older search over the whole short-distance band. atrBlend = weight of the sheet × weekly ATR distance
     // vs the sheet σ distance (0.5 = average of both, as measured best on the sheets; 0 = σ only).
-    selection: "sheet", shortSteps: 2, longSteps: 1, atrBlend: 0.5, snapIntoZone: false,
+    selection: "sheet", optimizerSearch: true, searchBelowSigma: 0.35, searchAboveSigma: 0.5, searchLongSteps: 2, hardMaxSigma: 1.5,
+    overrideMargin: 0.05, overrideMaxPopDrop: 0.03, atrBlend: 0.5, snapIntoZone: false,
     // short-strike distance band, anchored to the reference sheets: each short is searched within
     // [sheetBandLow, sheetBandHigh] × the sheet distance for that short (per ticker, ratio and side), capped at maxShortSigma × σ.
     // minShortSigma / minShortAtr are optional floors (null = off): σ-to-expiry multiples / weekly-ATR multiples.
-    // Default = the "middle zone" 0.7–1.2σ for both shorts (not too close, not too wide); the sheet distance is clamped into it
-    // and used as the scoring anchor. Blank minShortSigma → the sheet band itself is searched (capped at maxShortSigma).
-    sheetBandLow: 0.8, sheetBandHigh: 1.3, minShortSigma: 0.7, minShortAtr: null, maxShortSigma: 1.2 };
+    // Zone [minShortSigma, maxShortSigma] (e.g. 0.7–1.2σ) = an optional sanity clamp on both shorts; OFF by default (the sheets'
+    // credit short sits at ≈ 0.63σ, inside it). Band selection: blank minShortSigma → the sheet band itself is searched.
+    sheetBandLow: 0.8, sheetBandHigh: 1.3, minShortSigma: null, minShortAtr: null, maxShortSigma: 1.2 };
   // Penalty weights (lower total = better). Stored server-side; tuned from recorded outcomes once enough runs are closed.
-  const DEFAULT_WEIGHTS = { fit: 3, capital: 1, risk: 1, theta: 1, liquidity: 1.5, reference: 1.5, skew: 0.5, probability: 1, robustness: 2, tail: 1, exitFit: 2, ev: 1.5, pop: 1.5, shortAnchor: 8, geometry: 6, ratio: 2 };
-  // geometry = mean listed-strike steps of the 4 strikes away from the sheet-rule strikes (shorts ×1, longs ×½) — "sheet" selection
+  const DEFAULT_WEIGHTS = { fit: 3, capital: 1, risk: 1, theta: 1, liquidity: 1.5, reference: 1.5, skew: 0.5, probability: 1, robustness: 2, tail: 1, exitFit: 2, ev: 1.5, pop: 1.5, shortAnchor: 8, geometry: 4, ratio: 2 };
+  // geometry = sheet-similarity prior: mean σ distance of the 4 strikes from the sheet-baseline strikes (shorts ×1, longs ×½) — "sheet" selection
   // ratio = 1 when the lot ratio is not the sheets' usual one (credit spread 2× the debit lots: 1C:2P on a SHORT hedge, 2C:1P on a LONG)
   // shortAnchor = mean |σ distance − anchor| of the CE and PE shorts (anchor = max(sheet, zone midpoint) in the middle zone)
   // exitFit = shortfall of the P&L if an exit (CE / PE short) is hit TODAY vs the target; ev = −EV/target; pop = 1 − P(profit) (what-if, analysed candidates)
@@ -152,13 +157,20 @@
   // TOTAL reaches that target, and say so (the per-lot-set P&L actually achievable is shown).
   function optimize(input) {
     const out = optimizeCore(input), c = input.cfg || {};
-    if (out.status !== "TARGET_NOT_REACHABLE" || c.targetMode === "fixed") return out;
-    const want = out.cfg.targetPnl, L = out.cfg.lotSets || 1;
+    if (c.targetMode === "fixed" || out.status === "INVALID") return out;
+    // per-lot-set mode: rerun sized to the same TOTAL target when nothing pays the per-lot target, when nothing passes the risk
+    // checks at the requested lot sets, or when the sheet baseline of the recommended ratio cannot pay it (two-stage needs it)
+    const rec = out.twoStage && out.twoStage.recommended, baseMissing = !!(rec && !rec.baseline);
+    if (!(out.status === "TARGET_NOT_REACHABLE" || out.status === "NO_ACCEPTABLE_STRUCTURE" || baseMissing)) return out;
+    const want = out.cfg ? out.cfg.targetPnl : null, L = (out.cfg && out.cfg.lotSets) || 1; if (!(want > 0)) return out;
     const alt = optimizeCore({ ...input, cfg: { ...c, targetMode: "fixed", targetPnl: want } });
-    if (alt.status === "TARGET_NOT_REACHABLE") return out;
+    if (alt.status === "TARGET_NOT_REACHABLE" || (out.status === "OK" && alt.status !== "OK")) return out;
+    if (out.status !== "OK" && alt.status !== "OK" && out.status === "NO_ACCEPTABLE_STRUCTURE") return out;
     const b = alt.best || (alt.rejected && alt.rejected[0]), per = b ? Math.min(b.exits[0].pnlExpiry, b.exits[1].pnlExpiry) / b.lotSets : null;
-    alt.targetAdjusted = { requestedPerLotSet: want / L, requestedLotSets: L, lotSets: b ? b.lotSets : null, achievablePerLotSet: per };
-    alt.warnings = ["No strike set on " + input.expiry + " pays $" + Math.round(want / L).toLocaleString("en-US") + " per lot set at " + L + " lot set" + (L > 1 ? "s" : "") + (out.bestAchievable != null ? "" : "") + ". Sized instead to reach $" + Math.round(want).toLocaleString("en-US") + " in total" + (b ? " with " + b.lotSets + " lot sets (≈ " + usd(per) + " per lot set)" : "") + ". Use a later expiry for more per lot set.", ...(alt.warnings || [])];
+    alt.targetAdjusted = { requestedPerLotSet: want / L, requestedLotSets: L, lotSets: b ? b.lotSets : null, achievablePerLotSet: per, reason: out.status === "OK" ? "baseline" : out.status };
+    const lead = out.status === "TARGET_NOT_REACHABLE" ? "No strike set on " + input.expiry + " pays $" + Math.round(want / L).toLocaleString("en-US") + " per lot set at " + L + " lot set" + (L > 1 ? "s" : "") + "."
+      : out.status === "NO_ACCEPTABLE_STRUCTURE" ? "No structure at " + L + " lot set" + (L > 1 ? "s" : "") + " passes the what-if gates and risk caps." : "The sheet baseline does not pay $" + Math.round(want / L).toLocaleString("en-US") + " per lot set at " + L + " lot set" + (L > 1 ? "s" : "") + ".";
+    alt.warnings = [lead + " Sized instead to reach $" + Math.round(want).toLocaleString("en-US") + " in total" + (b ? " with " + b.lotSets + " lot sets (≈ " + usd(per) + " per lot set)" : "") + "; every candidate, the sheet baseline included, is sized the same way. Use a later expiry for more per lot set.", ...(alt.warnings || [])];
     return alt;
   }
   function optimizeCore(input) {
@@ -180,8 +192,9 @@
       errs.push("Short-distance band: optional min σ and min × ATR must be ≥ 0 (blank = off), max σ must be > min σ and ≤ 5");
     if (!(fin(cfg.sheetBandLow) && fin(cfg.sheetBandHigh) && cfg.sheetBandLow > 0 && cfg.sheetBandHigh > cfg.sheetBandLow && cfg.sheetBandHigh <= 3)) errs.push("Sheet band: low × must be > 0 and below high ×, high × ≤ 3");
     if (!["sheet", "band"].includes(cfg.selection)) errs.push('Strike selection must be "sheet" or "band"');
-    if (!([cfg.shortSteps, cfg.longSteps].every((x) => Number.isInteger(+x) && +x >= 0 && +x <= 4) && fin(cfg.atrBlend) && cfg.atrBlend >= 0 && cfg.atrBlend <= 1)) errs.push("Sheet selection: ± strike steps must be whole numbers 0–4 and the ATR blend 0–1");
-    cfg.shortSteps = +cfg.shortSteps; cfg.longSteps = +cfg.longSteps;
+    cfg.optimizerSearch = cfg.optimizerSearch !== false && cfg.optimizerSearch !== "false"; for (const k of ["searchBelowSigma", "searchAboveSigma", "searchLongSteps", "hardMaxSigma", "overrideMargin", "overrideMaxPopDrop", "atrBlend"]) cfg[k] = +cfg[k];
+    if (!(cfg.searchBelowSigma >= 0 && cfg.searchBelowSigma <= 1 && cfg.searchAboveSigma >= 0 && cfg.searchAboveSigma <= 1.5 && Number.isInteger(cfg.searchLongSteps) && cfg.searchLongSteps >= 0 && cfg.searchLongSteps <= 4 && cfg.hardMaxSigma > 0.3 && cfg.hardMaxSigma <= 3 && cfg.overrideMargin >= 0 && cfg.overrideMargin <= 0.5 && cfg.overrideMaxPopDrop >= 0 && cfg.overrideMaxPopDrop <= 0.3 && cfg.atrBlend >= 0 && cfg.atrBlend <= 1))
+      errs.push("Optimizer search: below 0–1σ, above 0–1.5σ, long/wing steps 0–4, hard ceiling 0.3–3σ, override margin 0–50%, P(profit) drop 0–30 pts, ATR blend 0–1");
     if (errs.length) return { status: "INVALID", errors: errs };
     const now = input.nowMs ?? Date.now(), expiryMs = S.expiryCloseMs(input.expiry), T = (expiryMs - now) / (365 * 864e5);
     if (!(T > 0)) return { status: "INVALID", errors: ["Expiry " + input.expiry + " has passed"] };
@@ -243,7 +256,7 @@
     const sheetDist = (sg) => ({ sigmas: sg, dollars: sg * sigma, pct: sg * sigma / spot * 100, atrs: bAtr ? sg * sigma / bAtr.atr : null });
     const variantsAll = cfg.callLotUnits != null ? [{ key: cfg.callLotUnits + "C:" + cfg.putLotUnits + "P", call: cfg.callLotUnits, put: cfg.putLotUnits }] : VARIANTS;
     const geoSel = !wa && cfg.selection === "sheet";
-    const dband = wa ? null : { mode: geoSel ? (cfg.minShortSigma != null ? "sheet geometry + zone clamp" : "sheet geometry") : cfg.minShortSigma != null ? "middle zone + sheet anchor" : "sheet", selection: geoSel ? "sheet" : "band", shortSteps: cfg.shortSteps, longSteps: cfg.longSteps, atrBlend: cfg.atrBlend, conflicts: [], sheetBandLow: cfg.sheetBandLow, sheetBandHigh: cfg.sheetBandHigh, minShortSigma: cfg.minShortSigma, minShortAtr: cfg.minShortAtr, maxShortSigma: cfg.maxShortSigma, sigma,
+    const dband = wa ? null : { mode: geoSel ? (cfg.minShortSigma != null ? "sheet baseline + optimizer + zone clamp" : "sheet baseline + optimizer") : cfg.minShortSigma != null ? "middle zone + sheet anchor" : "sheet", selection: geoSel ? "sheet" : "band", optimizerSearch: cfg.optimizerSearch, searchBelowSigma: cfg.searchBelowSigma, searchAboveSigma: cfg.searchAboveSigma, searchLongSteps: cfg.searchLongSteps, hardMaxSigma: cfg.hardMaxSigma, atrBlend: cfg.atrBlend, conflicts: [], sheetBandLow: cfg.sheetBandLow, sheetBandHigh: cfg.sheetBandHigh, minShortSigma: cfg.minShortSigma, minShortAtr: cfg.minShortAtr, maxShortSigma: cfg.maxShortSigma, sigma,
       weeklyAtr: bAtr ? bAtr.atr : null, weeklyAtrSource: bAtr ? bAtr.source || null : null, anchorSource: SG.source, anchor: input.sheetAnchor || null, fallback: [], variants: [],
       note: bAtr ? null : (input.bandAtr && input.bandAtr.error ? "Weekly ATR unavailable (" + input.bandAtr.error + ")" : "Weekly ATR not supplied") + (cfg.minShortAtr != null ? ": the × weekly ATR floor is ignored." : "; distances are shown without the × ATR column.") };
     const vband = {};
@@ -255,8 +268,8 @@
     const ruleOf = (fs, g) => {
       const D = fs === "SHORT" ? calls : puts, C = fs === "SHORT" ? puts : calls, d = fs === "SHORT" ? 1 : -1, A = bAtr ? bAtr.atr : null;
       const blend = (sg, am) => (A && fin(am) && am > 0 && cfg.atrBlend > 0 ? (1 - cfg.atrBlend) * sg * sigma + cfg.atrBlend * am * A : sg * sigma);
-      const zone = (dist, leg) => { const raw = dist / sigma, lo = cfg.minShortSigma, hi = cfg.maxShortSigma, z = Math.min(hi, Math.max(lo ?? 0, raw));
-        if (Math.abs(z - raw) > 1e-9) dband.conflicts.push({ side: fs, group: g.key, leg, ruleSigmas: +raw.toFixed(3), clampedSigmas: +z.toFixed(3), note: leg + " rule " + raw.toFixed(2) + "σ is " + (raw < z ? "inside the " + lo + "σ zone minimum" : "beyond the " + hi + "σ zone maximum") + " → clamped to " + z.toFixed(2) + "σ" });
+      const zone = (dist, leg) => { const raw = dist / sigma, lo = cfg.minShortSigma, hi = lo != null ? Math.min(cfg.maxShortSigma, cfg.hardMaxSigma) : cfg.hardMaxSigma, z = Math.min(hi, Math.max(lo ?? 0, raw));
+        if (Math.abs(z - raw) > 1e-9) dband.conflicts.push({ side: fs, group: g.key, leg, ruleSigmas: +raw.toFixed(3), clampedSigmas: +z.toFixed(3), note: leg + " rule " + raw.toFixed(2) + "σ is " + (raw < z ? "inside the " + lo + "σ zone minimum" : "beyond the " + hi + "σ " + (lo != null ? "zone maximum" : "hard ceiling")) + " → clamped to " + z.toFixed(2) + "σ" });
         return z * sigma; };
       const near = (list, x, ok = () => true) => list.filter((q) => ok(q.strike)).sort((p, q) => Math.abs(p.strike - x) - Math.abs(q.strike - x) || q.openInterest - p.openInterest)[0] || null;
       const dsD = zone(blend(g.debitShortSigma, g.debitShortAtr), "debit short"), csD = zone(blend(g.creditShortSigma, g.creditShortAtr), "credit short"), wD = blend(g.wingSigma, g.wingAtr);
@@ -267,10 +280,11 @@
       const dl = otm[0] || near(D, spot), ds = nearZ(D, spot + d * dsD, (k) => d * (k - dl.strike) > 0, dsD), cs = nearZ(C, spot - d * csD, (k) => d * (spot - k) > 0, csD), cw = cs && near(C, cs.strike - d * wD, (k) => d * (cs.strike - k) > 0);
       return dl && ds && cs && cw ? { dl, ds, cs, cw, D, C, d, dist: { debitShort: dsD, creditShort: csD, wing: wD }, sig: { debitShort: dsD / sigma, creditShort: csD / sigma, wing: wD / sigma } } : null;
     };
-    const geoBand = (rule, leg, list, sgn) => { // the ±shortSteps strikes searched around a rule short, in the sideBand() shape the UI reads
-      const i = list.indexOf(rule[leg]), win = list.slice(Math.max(0, i - cfg.shortSteps), i + cfg.shortSteps + 1), x = win.map((q) => sgn * (q.strike - spot) / sigma);
-      const key = leg === "ds" ? "debitShort" : "creditShort", aSig = rule.sig[key];
-      return { sheetRawSigmas: aSig, sheetSigmas: aSig, clampedToZone: dband.conflicts.some((c) => c.leg === (leg === "ds" ? "debit short" : "credit short") && Math.abs(c.clampedSigmas - aSig) < 1e-6), zoneMid: null, anchorRule: "sheet-rule strike ± " + cfg.shortSteps + " listed strikes",
+    const zoneOn = cfg.minShortSigma != null, swin = (aSig) => [Math.max(zoneOn ? cfg.minShortSigma - ZONE_TOL : 0.15, aSig - cfg.searchBelowSigma), Math.min(cfg.hardMaxSigma, zoneOn ? cfg.maxShortSigma + ZONE_TOL : Infinity, aSig + cfg.searchAboveSigma)];
+    const geoBand = (rule, leg, list, sgn) => { // the Stage-B optimizer window around a baseline short, in the sideBand() shape the UI reads
+      const key = leg === "ds" ? "debitShort" : "creditShort", aSig = rule.sig[key], [w0, w1] = cfg.optimizerSearch ? swin(aSig) : [aSig, aSig];
+      const inW = list.filter((q) => { const y = sgn * (q.strike - spot) / sigma; return y >= w0 - 1e-9 && y <= w1 + 1e-9; }), x = (inW.length ? inW : [rule[leg]]).map((q) => sgn * (q.strike - spot) / sigma);
+      return { sheetRawSigmas: aSig, sheetSigmas: aSig, clampedToZone: dband.conflicts.some((c) => c.leg === (leg === "ds" ? "debit short" : "credit short") && Math.abs(c.clampedSigmas - aSig) < 1e-6), zoneMid: null, anchorRule: cfg.optimizerSearch ? "sheet baseline −" + cfg.searchBelowSigma + "σ / +" + cfg.searchAboveSigma + "σ (optimizer window)" : "sheet baseline only",
         loSigmas: Math.min(...x), hiSigmas: Math.max(...x), lo: Math.min(...x) * sigma, hi: Math.max(...x) * sigma, binding: "sheet geometry", ruleStrike: rule[leg].strike };
     };
     if (dband) for (const fs of dir.sides) for (const v of variantsAll) {
@@ -317,18 +331,24 @@
         return evenPick(dband && anch.length ? anch : C.filter((q) => w(q) >= 0.2 && w(q) <= 1.0), 4); };
       const sets = [];
       if (wa) sets.push(...S.weeklyAtrStrikeSets(fs, wa, { spot, sigma, calls, puts }));
-      else if (geoSel) for (const vb of vbs) { // the rule strikes and their ±1–2 listed-strike variations only
+      else if (geoSel) for (const vb of vbs) {
         const R0 = vb.rule; if (!R0) continue;
-        const around = (list, q, k) => { const i = list.indexOf(q); const out = []; for (let j = -k; j <= k; j++) if (list[i + j]) out.push([list[i + j], Math.abs(j)]); return out; };
-        // sanity: a variation may not take a short more than ZONE_TOL σ outside the zone, nor the debit long > ZONE_TOL σ in the money
-        const zl = cfg.minShortSigma != null ? cfg.minShortSigma - ZONE_TOL : 0.2, zh = cfg.maxShortSigma + ZONE_TOL, okS = (q, sg, rule) => q === rule || (sg >= zl - 1e-9 && sg <= zh + 1e-9);
-        for (const [dl, a] of around(R0.D, R0.dl, cfg.longSteps)) { if (!(dl === R0.dl || sd(dl.strike) >= -ZONE_TOL)) continue;
-         for (const [ds, b] of around(R0.D, R0.ds, cfg.shortSteps)) {
-          if (!(d * (ds.strike - dl.strike) > 0) || !okS(ds, sd(ds.strike), R0.ds)) continue;
-          for (const [cs, c] of around(R0.C, R0.cs, cfg.shortSteps)) { if (!(d * (spot - cs.strike) > 0) || !okS(cs, -sd(cs.strike), R0.cs)) continue;
-            for (const [cw, e] of around(R0.C, R0.cw, cfg.longSteps)) if (d * (cs.strike - cw.strike) > 0) { const st = [dl, ds, cs, cw]; st.vKey = vb.e.variant; st.geo = (b + c + 0.5 * (a + e)) / 3; st.steps = { debitLong: a, debitShort: b, creditShort: c, wing: e }; sets.push(st); } }
-         }
-        }
+        // Stage A: the sheet baseline, exactly the rule strikes
+        const base = [R0.dl, R0.ds, R0.cs, R0.cw]; base.vKey = vb.e.variant; base.isBase = true; base.geo = 0; base.steps = { debitLong: 0, debitShort: 0, creditShort: 0, wing: 0 }; sets.push(base);
+        if (!cfg.optimizerSearch) continue;
+        // Stage B: the optimizer window around it
+        const ix = (list, q) => list.indexOf(q), k0 = Math.abs(ix(R0.C, R0.cw) - ix(R0.C, R0.cs)), wRule = Math.abs(R0.cw.strike - R0.cs.strike) / sigma;
+        const [d0, d1] = swin(R0.sig.debitShort), [c0, c1] = swin(R0.sig.creditShort), inS = (y, a2, b2) => y >= a2 - 1e-9 && y <= b2 + 1e-9;
+        const dsL = evenPick(R0.D.filter((q) => inS(sd(q.strike), d0, d1)), 7), csL = evenPick(R0.C.filter((q) => inS(-sd(q.strike), c0, c1)), 7);
+        const i0 = ix(R0.D, R0.dl), dlL = []; for (let j = -cfg.searchLongSteps; j <= cfg.searchLongSteps; j++) { const q = R0.D[i0 + j]; if (q && (q === R0.dl || sd(q.strike) >= -ZONE_TOL)) dlL.push(q); }
+        for (const dl of dlL) for (const ds of dsL) { if (!(d * (ds.strike - dl.strike) > 0)) continue;
+          for (const cs of csL) { if (!(d * (spot - cs.strike) > 0)) continue; const ic = ix(R0.C, cs);
+            for (let j = -cfg.searchLongSteps; j <= cfg.searchLongSteps; j++) { const k = k0 + j; if (k < 1) continue; const cw = R0.C[ic - d * k]; if (!cw || !(d * (cs.strike - cw.strike) > 0)) continue;
+              if (dl === R0.dl && ds === R0.ds && cs === R0.cs && cw === R0.cw) continue;
+              const st = [dl, ds, cs, cw]; st.vKey = vb.e.variant;
+              st.geo = (Math.abs(sd(ds.strike) - R0.sig.debitShort) + Math.abs(-sd(cs.strike) - R0.sig.creditShort) + 0.5 * (Math.abs(sd(dl.strike) - sd(R0.dl.strike)) + Math.abs(Math.abs(cs.strike - cw.strike) / sigma - wRule))) / 3;
+              st.steps = { debitLong: Math.abs(ix(R0.D, dl) - i0), debitShort: Math.abs(ix(R0.D, ds) - ix(R0.D, R0.ds)), creditShort: Math.abs(ic - ix(R0.C, R0.cs)), wing: Math.abs(ix(R0.C, cw) - ix(R0.C, R0.cw)) };
+              sets.push(st); } } }
       }
       else for (const dl of dLongs) for (const ds of evenPick((dband ? dsPool : D.filter((q) => sd(q.strike) >= 0.4 && sd(q.strike) <= 1.5)).filter((q) => d * (q.strike - dl.strike) > 0), dband ? 7 : 5))
         for (const cs of cShorts) for (const cw of wings(cs)) sets.push([dl, ds, cs, cw]);
@@ -358,7 +378,10 @@
             const n0 = perLot ? L : Math.ceil((T0 + cfg.mmLoss) / e1);
             if (n0 > cfg.maxLots + 1) { misses.overLots++; continue; }
             let pick = null;
-            for (let n = perLot ? L : Math.max(1, n0 - 1); n <= (perLot ? L : Math.min(cfg.maxLots, n0 + 2)); n++) {
+            // (the sheet baseline must always be evaluated: if it cannot pay the target at the requested lot sets, optimize() reruns
+            // the whole search sized to the same total target, so baseline and optimizer picks are compared on an equal footing)
+            const nMax = perLot ? L : Math.min(cfg.maxLots, n0 + 2);
+            for (let n = perLot ? L : Math.max(1, n0 - 1); n <= nMax; n++) {
               const s = sized(n); if (!(Math.abs(s.fq) >= unit) || Math.sign(s.fq) !== (fs === "LONG" ? 1 : -1)) continue;
               if (Math.min(s.netUp, s.netDn) >= T0) { pick = s; break; }
             }
@@ -386,7 +409,7 @@
             const anchor = { group: g.key, source: g.source, rawDebitShortSigma: g.rawDebitShortSigma ?? g.debitShortSigma, rawCreditShortSigma: g.rawCreditShortSigma ?? g.creditShortSigma, debitLongSigma: g.debitLongSigma, debitShortSigma: g.debitShortSigma, creditShortSigma: g.creditShortSigma, wingSigma: g.wingSigma, ceSigmas: fs === "SHORT" ? g.debitShortSigma : g.creditShortSigma, peSigmas: -(fs === "SHORT" ? g.creditShortSigma : g.debitShortSigma) };
             if (geoSel) { factors.shortAnchor = 0; factors.reference = 0; factors.geometry = set.geo; }
             factors.ratio = g.key === "credit05" ? 1 : 0;
-            cands.push({ fs, v, dl, ds, cs, cw, up, dn, ...pick, worstRisk, th, factors, sig, capitalTotal, doubled, doubledIsCredit, rich, anchor, steps: set.steps || null, rule: vb && vb.rule ? vb.e.rule : null });
+            cands.push({ fs, v, dl, ds, cs, cw, up, dn, ...pick, worstRisk, th, factors, sig, capitalTotal, doubled, doubledIsCredit, rich, anchor, steps: set.steps || null, rule: vb && vb.rule ? vb.e.rule : null, isBase: !!set.isBase, sizedUp: perLot && pick.n > L ? pick.n : null });
           }
       }
     }
@@ -414,6 +437,9 @@
     // wider pairs must get a what-if before they can win: the best candidate of every distinct (side, variant, CE, PE) pair is analysed too
     const pairKey = (c) => c.fs + "|" + c.v.key + "|" + c.up + "|" + c.dn, seenPair = new Set([...analysed].map(pairKey));
     for (const c of cands) { if (analysed.size >= 60) break; if (!seenPair.has(pairKey(c))) { seenPair.add(pairKey(c)); analysed.add(c); } }
+    if (geoSel) for (const fs of dir.sides) for (const v of variants) { // two-stage: the baseline always gets the full what-if, and so do the top optimizer picks
+      const inV = short.concat(cands).filter((x) => x.fs === fs && x.v.key === v.key), b0 = cands.find((x) => x.isBase && x.fs === fs && x.v.key === v.key); if (b0) analysed.add(b0);
+      inV.filter((x) => !x.isBase).slice(0, 6).forEach((x) => analysed.add(x)); }
     for (const c of analysed) {
       c.whatIf = whatIf(c, wk);
       c.factors.robustness = 1 - c.whatIf.robustness.hitRate;
@@ -425,7 +451,30 @@
     }
     const ranked = [...analysed].sort((a, b) => (a.whatIf.acceptable === b.whatIf.acceptable ? a.score - b.score : a.whatIf.acceptable ? -1 : 1));
     const pool = ranked;
-    const best = pool[0];
+    // ---- two-stage decision per side × ratio: keep the sheet baseline unless the optimizer pick clearly beats it
+    const decisions = new Map();
+    if (geoSel) for (const fs of dir.sides) for (const v of variants) {
+      const inV = ranked.filter((x) => x.fs === fs && x.v.key === v.key), base = inV.find((x) => x.isBase) || null, opt = inV.find((x) => !x.isBase) || null;
+      if (!base && !opt) continue;
+      const pct = (x) => (x * 100).toFixed(0) + "%", sh = (c) => "CE " + c.up + " / PE " + c.dn;
+      let winner = base, why;
+      if (!opt) why = "Sheet baseline (" + sh(base) + ") kept: the optimizer search found no other strike set that reaches the target.";
+      else if (!base) { winner = opt; why = "Optimizer pick (" + sh(opt) + ") used: the sheet-baseline strikes cannot reach the target on this chain."; }
+      else {
+        const bw = base.whatIf, ow = opt.whatIf, need = base.score - cfg.overrideMargin * Math.abs(base.score);
+        const fails = [];
+        if (!ow.acceptable) fails.push("it fails a what-if gate (" + ow.gates[0] + ")");
+        if (!(opt.score <= need + 1e-9)) fails.push("its score " + opt.score.toFixed(2) + " is not " + pct(cfg.overrideMargin) + " better than " + base.score.toFixed(2));
+        if (ow.probs.expectedValue < bw.probs.expectedValue - 1e-9) fails.push("its EV " + usd(ow.probs.expectedValue) + " is worse than " + usd(bw.probs.expectedValue));
+        if (ow.probs.profit < bw.probs.profit - cfg.overrideMaxPopDrop - 1e-9) fails.push("its P(profit) " + pct(ow.probs.profit) + " is more than " + (cfg.overrideMaxPopDrop * 100).toFixed(0) + " pts below " + pct(bw.probs.profit));
+        if (!bw.acceptable && ow.acceptable) { winner = opt; why = "Optimizer pick (" + sh(opt) + ") used: the sheet baseline (" + sh(base) + ") fails a what-if gate (" + bw.gates[0] + ") and the pick passes every gate and risk cap."; }
+        else if (!fails.length) { winner = opt; why = "Optimizer pick (" + sh(opt) + ") beats the sheet baseline (" + sh(base) + "): score " + opt.score.toFixed(2) + " vs " + base.score.toFixed(2) + ", EV " + usd(ow.probs.expectedValue) + " vs " + usd(bw.probs.expectedValue) + ", P(profit) " + pct(ow.probs.profit) + " vs " + pct(bw.probs.profit) + ", within every risk cap."; }
+        else why = "Sheet baseline (" + sh(base) + ") kept: the best optimizer pick (" + sh(opt) + ") does not clearly beat it — " + fails[0] + ".";
+      }
+      decisions.set(fs + "|" + v.key, { fs, v, base, opt, winner, stage: winner === base ? "baseline" : "optimizer", why });
+    }
+    const winners = [...decisions.values()].map((x) => x.winner).sort((a, b) => (a.whatIf.acceptable === b.whatIf.acceptable ? a.score - b.score : a.whatIf.acceptable ? -1 : 1));
+    const best = geoSel && winners.length ? winners[0] : pool[0];
     // every candidate considered (compact) — saved with the run as training data
     const strikesOf = (c) => c.legs.map((l) => (l.side === "buy" ? "+" : "-") + l.qty + " " + l.strike + (l.type === "call" ? "C" : "P")).join(" ");
     common.considered = cands.slice(0, 60).map((c) => ({ side: c.fs, variant: c.v.key, legs: strikesOf(c), perpQty: c.fq, exits: [Math.round(c.netUp), Math.round(c.netDn)], capital: Math.round(c.capitalTotal),
@@ -437,17 +486,26 @@
       const bestPair = new Map(); for (const c of ranked) { const k = pairKey(c); if (!bestPair.has(k)) bestPair.set(k, c); }
       common.distanceBand = dband;
       common.pairsTested = bestPair.size; common.distancePairs = [...bestPair.values()].slice(0, 12).map((c) => ({ side: c.fs, variant: c.v.key, ...withSheet(c), sheetRef: c.whatIf ? c.factors.reference : null, exitUp: c.netUp, exitDown: c.netDn, exitUpToday: c.ev.at(c.up, 0) - cfg.mmLoss, exitDownToday: c.ev.at(c.dn, 0) - cfg.mmLoss,
-        pop: c.whatIf.probs.profit, ev: c.whatIf.probs.expectedValue, worst2Sigma: c.whatIf.tail.worst2Sigma, score: c.score, acceptable: c.whatIf.acceptable, chosen: c === ranked[0], lots: c.v.key + " × " + c.n }));
+        pop: c.whatIf.probs.profit, ev: c.whatIf.probs.expectedValue, worst2Sigma: c.whatIf.tail.worst2Sigma, score: c.score, acceptable: c.whatIf.acceptable, chosen: c === best, lots: c.v.key + " × " + c.n }));
     }
     const viewR = (f) => viewOf(f, { spot, sigma, atmIV, T, T0, cfg, hedge, dir, best, minCap, W, wa, bAtr });
     if (!best.whatIf.acceptable) {
-      return { ...common, status: "NO_ACCEPTABLE_STRUCTURE", errors: ["No structure meets the target with acceptable risk. Best candidate (" + best.fs + " " + best.v.key + "): " + best.whatIf.gates.join("; ") + "." + (dband ? " Shorts were searched " + (dband.minShortSigma != null ? "in the middle zone " + dband.minShortSigma + "–" + dband.maxShortSigma + "σ (" : "inside the reference-sheet band (" + dband.sheetBandLow + "–" + dband.sheetBandHigh + "× the sheet distance: ") + dband.variants.map((x) => x.side + " " + x.variant + " CE " + x.ce.loSigmas.toFixed(2) + "–" + x.ce.hiSigmas.toFixed(2) + "σ / PE " + x.pe.loSigmas.toFixed(2) + "–" + x.pe.hiSigmas.toFixed(2) + "σ").join(", ") + "); a later expiry, fewer lot sets or a wider zone may find an acceptable structure." : "")], rejected: ranked.slice(0, 4).map(viewR), variants: [], gates: GATES };
+      return { ...common, status: "NO_ACCEPTABLE_STRUCTURE", errors: ["No structure meets the target with acceptable risk. Best candidate (" + best.fs + " " + best.v.key + "): " + best.whatIf.gates.join("; ") + "." + (dband && geoSel ? " Shorts were searched around the sheet baseline (−" + cfg.searchBelowSigma + "σ / +" + cfg.searchAboveSigma + "σ of the sheet distance, ≤ " + cfg.hardMaxSigma + "σ): " + dband.variants.map((x) => x.side + " " + x.variant + " CE " + x.ce.loSigmas.toFixed(2) + "–" + x.ce.hiSigmas.toFixed(2) + "σ / PE " + x.pe.loSigmas.toFixed(2) + "–" + x.pe.hiSigmas.toFixed(2) + "σ").join(", ") + "; a later expiry or fewer lot sets may find an acceptable structure." : dband ? " Shorts were searched " + (dband.minShortSigma != null ? "in the middle zone " + dband.minShortSigma + "–" + dband.maxShortSigma + "σ (" : "inside the reference-sheet band (" + dband.sheetBandLow + "–" + dband.sheetBandHigh + "× the sheet distance: ") + dband.variants.map((x) => x.side + " " + x.variant + " CE " + x.ce.loSigmas.toFixed(2) + "–" + x.ce.hiSigmas.toFixed(2) + "σ / PE " + x.pe.loSigmas.toFixed(2) + "–" + x.pe.hiSigmas.toFixed(2) + "σ").join(", ") + "); a later expiry, fewer lot sets or a wider zone may find an acceptable structure." : "")], rejected: ranked.slice(0, 4).map(viewR), variants: [], gates: GATES };
     }
-    const perVariant = []; for (const fs of dir.sides) for (const v of variants) { const c = pool.find((x) => x.fs === fs && x.v.key === v.key); perVariant.push({ fs, v, c }); }
+    const perVariant = []; for (const fs of dir.sides) for (const v of variants) { const dd = decisions.get(fs + "|" + v.key), c = dd ? dd.winner : pool.find((x) => x.fs === fs && x.v.key === v.key); perVariant.push({ fs, v, c }); }
     const alts = []; for (const c of pool.slice(1).filter((x) => x.whatIf.acceptable)) { if (alts.length >= cfg.topN) break; if (!alts.some((a) => a.ds === c.ds && a.cs === c.cs && a.v === c.v)) alts.push(c); }
     const view = (f) => viewOf(f, { spot, sigma, atmIV, T, T0, cfg, hedge, dir, best, minCap, W, wa, bAtr });
     const vs = perVariant.map(({ fs, v, c }) => c ? summarise(c, view(c), true) : { id: fs + " " + v.key, key: v.key, side: fs, reachable: false, errors: ["No " + v.key + " strike set reaches the target for a " + fs + " hedge"] });
-    for (const x of vs) x.recommended = x.id === best.fs + " " + best.v.key;
+    for (const x of vs) { x.recommended = x.id === best.fs + " " + best.v.key; const dd = decisions.get(x.side + "|" + x.key); if (dd) { x.stage = dd.stage; x.stageWhy = dd.why; } }
+    // both stages, compact (cards + training record)
+    const card = (c) => { if (!c) return null; const b = view(c), w = c.whatIf;
+      return { stage: c.isBase ? "baseline" : "optimizer", side: c.fs, futuresSide: c.fs, variant: c.v.key, lotSets: b.lotSets, callLots: b.callLots, putLots: b.putLots, legs: b.legs.map((l) => ({ side: l.side, type: l.type, strike: l.strike, qty: l.qty, premium: l.premium })),
+        sizedUp: c.sizedUp, futures: { signedQty: b.futures.signedQty }, perpQty: b.futures.signedQty, distances: b.distances, sigmas: c.sig, stepsFromRule: c.steps, exits: b.exits, capital: b.capital.total, maxLoss: b.maxLoss, unlimitedLoss: b.unlimitedLoss, worstLossInRiskWindow: b.worstLossInRiskWindow,
+        theta: b.theta, score: c.score, geometry: c.factors.geometry ?? null, whatIf: w ? { acceptable: w.acceptable, gates: w.gates, pop: w.probs.profit, ev: w.probs.expectedValue, worst2Sigma: w.tail.worst2Sigma, worst3Sigma: w.tail.sigma3 ? Math.min(w.tail.sigma3.up.expiry, w.tail.sigma3.down.expiry) : null, riskLoss: w.account ? w.account.riskLoss : null, robustHit: w.robustness.hitRate, cells: w.robustness.cells, positive: w.robustness.positive } : null }; };
+    const twoStage = geoSel ? { margin: cfg.overrideMargin, maxPopDrop: cfg.overrideMaxPopDrop, optimizerSearch: cfg.optimizerSearch, window: { belowSigma: cfg.searchBelowSigma, aboveSigma: cfg.searchAboveSigma, longSteps: cfg.searchLongSteps, hardMaxSigma: cfg.hardMaxSigma },
+      searched: { baselineSets: cands.filter((x) => x.isBase).length, optimizerSets: cands.filter((x) => !x.isBase).length, analysed: analysed.size },
+      decisions: [...decisions.values()].map((x) => ({ id: x.fs + " " + x.v.key, side: x.fs, variant: x.v.key, stage: x.stage, why: x.why, recommended: x.winner === best, baseline: card(x.base), optimized: card(x.opt) })) } : null;
+    if (twoStage) { const r = twoStage.decisions.find((x) => x.recommended); twoStage.recommended = r || null; }
     const fmtF = (c) => Object.entries(W).map(([k, w]) => k + " " + (w * (k === "capital" ? c.capitalTotal / minCap - 1 : c.factors[k] || 0)).toFixed(2)).join(", ");
     const runner = perVariant.map((p) => p.c).filter((c) => c && c !== best).sort((a, b) => a.score - b.score)[0];
     const wf = (c) => c.whatIf ? "P(profit) " + (c.whatIf.probs.profit * 100).toFixed(0) + "%, EV " + usd(c.whatIf.probs.expectedValue) + ", " + c.whatIf.robustness.positive + "/" + c.whatIf.robustness.cells + " pre-expiry what-if cells profitable (" + c.whatIf.robustness.hit80 + " ≥80% of target), 2σ worst " + usd(c.whatIf.tail.worst2Sigma) + ", capital " + usd(c.capitalTotal) + ", theta " + c.th.status.toLowerCase() : "";
@@ -455,7 +513,8 @@
     const reason = best.fs + " " + (hedge.isStock ? "shares" : "perp") + " · " + best.v.key + " recommended — robustness-ranked score " + best.score.toFixed(2) + " (lower is better): " + wf(best) + ". Factor breakdown: " + fmtF(best) + "." +
       (runner ? " Best other variant " + runner.fs + " " + runner.v.key + " scores " + runner.score.toFixed(2) + ": " + wf(runner) + (runner.whatIf && !runner.whatIf.acceptable ? " — fails: " + runner.whatIf.gates.join("; ") : "") + "." : "") +
       (altBest && altBest !== runner ? " Next candidate overall scores " + altBest.score.toFixed(2) + "." : "") + " Direction: " + dir.reason;
-    return { ...common, status: "OK", best: view(best), alternatives: alts.map(view), variants: vs, recommendation: { mode: wa ? "weekly_atr" : "optimizer", id: best.fs + " " + best.v.key, key: best.v.key, side: best.fs, score: best.score, reason } };
+    const rd = decisions.get(best.fs + "|" + best.v.key);
+    return { ...common, status: "OK", best: view(best), alternatives: alts.map(view), variants: vs, twoStage, recommendation: { mode: wa ? "weekly_atr" : "optimizer", id: best.fs + " " + best.v.key, key: best.v.key, side: best.fs, score: best.score, stage: rd ? rd.stage : null, why: rd ? rd.why : null, reason: (rd ? rd.why + " " : "") + reason } };
   }
   function summarise(c, b) {
     return { key: c.v.key, side: c.fs, id: c.fs + " " + c.v.key, callLotUnits: c.v.call, putLotUnits: c.v.put, status: "OK", reachable: true, callLots: b.callLots, putLots: b.putLots,

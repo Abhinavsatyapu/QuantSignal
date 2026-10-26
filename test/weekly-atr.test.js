@@ -142,10 +142,13 @@ test('server: weekly ATR source falls back from perp candles to stock daily OHLC
   assert.equal(opt.status, 'OK', JSON.stringify(opt.errors));
   const r2 = strategy.saveRun({ out: opt, chain: { contracts: chain(100, 0.6), label: 'fixture', stock: { price: 100, source: 'fixture' } }, perp: perp(100), t: 'TEST', expiry: EXP, method: 'optimizer', cfg: { sheetBandLow: 0.8, sheetBandHigh: 1.3, minShortSigma: 0.7, maxShortSigma: 1.2 }, market: null, source: 'builder' });
   const db2 = db.prepare('SELECT distance_band, inputs FROM strategy_runs WHERE id=?').get(r2.id), band = JSON.parse(db2.distance_band);
-  assert.deepEqual([band.band.mode, band.band.sheetBandLow, band.band.sheetBandHigh, band.band.minShortSigma, band.band.minShortAtr, band.band.maxShortSigma, band.band.weeklyAtr], ['sheet geometry + zone clamp', 0.8, 1.3, 0.7, null, 1.2, 9]);
+  assert.deepEqual([band.band.mode, band.band.sheetBandLow, band.band.sheetBandHigh, band.band.minShortSigma, band.band.minShortAtr, band.band.maxShortSigma, band.band.weeklyAtr], ['sheet baseline + optimizer', 0.8, 1.3, null, null, 1.2, 9]);
   assert.equal(band.anchor.groups.credit2.debitShortSigma, 0.79); assert.equal(band.band.variants.length, 2); assert.ok(band.band.variants.every(v => v.sheet && v.ce && v.pe));
   assert.equal(band.chosen.ce.strike, opt.best.exits[0].price); assert.ok(band.chosen.ce.sheet && band.chosen.ce.deviation); assert.ok(band.pairs.length >= 1 && band.pairs[0].ceSheetSigmas != null);
   assert.equal(JSON.parse(db2.inputs).distanceBand.band.sheetBandHigh, 1.3);
+  // both stages are saved for training: baseline + optimized structures, their what-if summaries and which won
+  const ts = band.twoStage; assert.ok(ts && ts.decisions.length >= 1 && ['baseline', 'optimizer'].includes(ts.recommendedStage) && ts.why);
+  const rec = ts.decisions.find(d => d.recommended); assert.ok(rec && (rec.baseline || rec.optimized)); for (const c of [rec.baseline, rec.optimized].filter(Boolean)) assert.ok(c.legs.length === 4 && c.whatIf && Number.isFinite(c.whatIf.pop) && Number.isFinite(c.whatIf.ev));
 });
 
 test('weekly ATR method: defaults = the sheets\' pooled 0.42 / 0.41 × ATR, distances clamped into the 0.7–1.2σ middle zone (raised / lowered and said so)', () => {

@@ -65,3 +65,12 @@
 .b-pairs td,.b-pairs th{white-space:nowrap}.b-pairs td.dist{color:var(--qs-muted);font-size:12px}
 .b-var dd .muted{margin-left:4px}.b-var dd.sheet{font-size:12px;color:#aeb8c7}
 @media (max-width:1100px){.b-variants{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}.b-var dl{font-size:12.5px}}
+/* two-stage: sheet baseline vs optimized */
+.b-stages { margin: 10px 0 14px; }
+.b-stage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.b-stage.rec { border-color: var(--accent, #3b82f6); }
+.b-why { margin: 8px 0 0; font-size: 13px; color: var(--muted, #9aa4b2); }
+.b-why b { color: var(--text, #e6e9ef); }
+.b-check { display: flex; align-items: center; gap: 8px; grid-column: 1 / -1; }
+@media (max-width: 700px) { .b-stage-grid { grid-template-columns: 1fr; } }
+.b-check input { width: auto; }
