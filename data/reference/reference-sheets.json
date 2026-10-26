@@ -1919,7 +1919,7 @@
   "netDownExpiry": 1190,
   "bookedPnl": 450,
   "marketMakingPnl": 18.5,
-  "apyPct": 937.0,
+  "apyPct": 937,
   "endDate": "2026-09-22",
   "status": "CLOSED",
   "closeDirection": "DOWNSIDE",
@@ -2996,7 +2996,7 @@
   "page": 74,
   "symbol": "AMD",
   "openDate": "2026-09-10",
-  "investment": 20330,
+  "investment": 20830,
   "expiry": "2026-09-18",
   "futureEntry": 506.5,
   "futureQty": -40,
@@ -3030,7 +3030,7 @@
   "endDate": "2026-09-14",
   "status": "CLOSED",
   "closeDirection": "DOWNSIDE",
-  "pdfCorrections": "",
+  "pdfCorrections": "investment 20830 (zoom + APY identity; was read 20330)",
   "siteNotes": ""
  },
  {

@@ -181,7 +181,7 @@ async function buildOptions() {
         iv = contract?.iv > 0 ? contract.iv : NaN,
         T = Math.max(
           0,
-          (Date.parse(expiry + "T20:00:00Z") - Date.now()) / (365 * 86400000),
+          (Finance.closeMs(expiry) - Date.now()) / (365 * 86400000),
         ),
         price = contract ? (side === "buy" ? contract.ask : contract.bid) : NaN;
       return {
@@ -356,7 +356,7 @@ function simulateOptions() {
       expired =
         allSameExpiry &&
         (Number.isFinite(scenario.timeMillis)
-          ? scenario.timeMillis >= Date.parse(legs[0].expiry + "T20:00:00Z")
+          ? scenario.timeMillis >= Finance.closeMs(legs[0].expiry)
           : scenario.date >= legs[0].expiry);
     $("#optionError").textContent = "";
     $("#optionNet").textContent = money(Finance.premiumCash(legs, fee));

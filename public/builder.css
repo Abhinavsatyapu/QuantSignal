@@ -30,3 +30,4 @@
 .b-actions{margin:16px 0}
 .label.ok{background:rgba(31,199,126,.14);color:var(--qs-green)}.label.bad{background:rgba(240,82,95,.14);color:var(--qs-red)}.label.warn{background:rgba(242,179,61,.14);color:var(--qs-amber)}
 .h-input{width:110px}
+.b-ratio{display:flex;gap:6px;align-items:center}.b-ratio input{width:5em}

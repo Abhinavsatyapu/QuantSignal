@@ -44,8 +44,9 @@ function analyse(r) {
     if (legs.every(l => l.greeks)) {
       const optDelta = legs.reduce((n, l) => n + (l.side === 'buy' ? 1 : -1) * l.qty * 100 * l.greeks.delta, 0);
       out.deltaNeutralQty = round(-optDelta, 1); out.deltaNeutralErrPct = round(pct(r.futureQty, -optDelta), 1);
-      // engine rule: equalise the 1-day ("today") estimated net P&L at the two short strikes, options valued by Black-Scholes one day later
-      const Tm = Math.max(T - 1 / 365, 1e-6), val = (Sx, TT) => legs.reduce((n, l) => n + (l.side === 'buy' ? 1 : -1) * l.qty * 100 * (Strategy.bs(Sx, l.strike, TT, l.iv, R, l.type) - l.premium), 0);
+      // engine rule: equalise the "today" estimated net P&L at the two short strikes, options revalued by Black-Scholes for an
+      // immediate move (time to expiry unchanged). A 1-day horizon fitted the sheets worse (median |error| 11.1% vs 7.4% after rounding down to 5).
+      const Tm = T, val = (Sx, TT) => legs.reduce((n, l) => n + (l.side === 'buy' ? 1 : -1) * l.qty * 100 * (Strategy.bs(Sx, l.strike, TT, l.iv, R, l.type) - l.premium), 0);
       const up = S + r.upDistance, dn = S - r.downDistance;
       out.modelOptUpToday = round(val(up, Tm), 0); out.modelOptDownToday = round(val(dn, Tm), 0);
       out.modelQtyToday = round((out.modelOptDownToday - out.modelOptUpToday) / (r.upDistance + r.downDistance), 1);

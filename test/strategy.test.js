@@ -40,11 +40,11 @@ test('evaluate: greeks, capital and tails', () => {
 
 test('buildReference: structure follows the reference rules and reaches the target', () => {
   for (const side of ['SHORT', 'LONG']) {
-    const out = Strategy.buildReference({ ticker: 'TEST', expiry: EXP, nowMs: NOW, contracts: chain(100, 0.6), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { futuresSide: side, targetPnl: 500, capital: 50000 } });
+    const out = Strategy.buildReference({ ticker: 'TEST', expiry: EXP, nowMs: NOW, contracts: chain(100, 0.6), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { futuresSide: side, targetPnl: 500, capital: side === 'LONG' ? 200000 : 50000 } });
     assert.equal(out.status, 'OK', JSON.stringify(out.errors));
-    const b = out.best, debit = side === 'SHORT' ? 'call' : 'put', credit = side === 'SHORT' ? 'put' : 'call';
-    const d = b.legs.filter(l => l.type === debit), c = b.legs.filter(l => l.type === credit);
-    assert.equal(c[0].qty, 2 * d[0].qty, 'credit lots = 2 × debit lots');
+    const b = out.best, debit = side === 'SHORT' ? 'call' : 'put';
+    const d = b.legs.filter(l => l.type === debit), callQ = b.legs.find(l => l.type === 'call').qty, putQ = b.legs.find(l => l.type === 'put').qty;
+    assert.equal(putQ, 2 * callQ, 'owner rule: calls 1 lot : puts 2 lots'); assert.equal(b.lotRule, '1:2');
     const dLong = d.find(l => l.side === 'buy');
     assert.ok(Math.abs(dLong.strike - 100) <= 2.5, 'debit long leg nearest the money');
     assert.equal(Math.sign(b.futures.signedQty), side === 'SHORT' ? -1 : 1);
@@ -60,7 +60,7 @@ test('buildReference: structure follows the reference rules and reaches the targ
 });
 
 test('buildReference: equalisation makes 1-day P&L equal at both short strikes when factor = 1', () => {
-  const out = Strategy.buildReference({ ticker: 'TEST', expiry: EXP, nowMs: NOW, contracts: chain(100, 0.6), stock: { price: 100 }, perp: { ...perp(100), szDecimals: 6, bid: 100, ask: 100 }, cfg: { futuresSide: 'SHORT', targetPnl: 300, capital: 50000, futuresFactor: 1, commission: 0, futureFeePct: 0 } });
+  const out = Strategy.buildReference({ ticker: 'TEST', expiry: EXP, nowMs: NOW, contracts: chain(100, 0.6), stock: { price: 100 }, perp: { ...perp(100), szDecimals: 6, bid: 100, ask: 100 }, cfg: { futuresSide: 'SHORT', targetPnl: 300, capital: 50000, futuresRound: 1e-6, commission: 0, futureFeePct: 0 } });
   assert.equal(out.status, 'OK');
   assert.ok(Math.abs(out.best.expected.upToday - out.best.expected.downToday) < 1, `${out.best.expected.upToday} vs ${out.best.expected.downToday}`);
 });
@@ -91,4 +91,75 @@ test('alpacaOrderPreview builds an mleg payload with gcd quantity and ratio legs
   const p = Strategy.alpacaOrderPreview([{ contract: 'A', side: 'buy', qty: 5, premium: 1.8 }, { contract: 'B', side: 'sell', qty: 5, premium: 0.7 }, { contract: 'C', side: 'sell', qty: 10, premium: 0.95 }, { contract: 'D', side: 'buy', qty: 10, premium: 0.4 }]);
   assert.equal(p.order_class, 'mleg'); assert.equal(p.qty, '5'); assert.deepEqual(p.legs.map(l => l.ratio_qty), ['1', '1', '2', '2']);
   assert.equal(p.limit_price, '0.00'); // (1.8 − 0.7) − 2×(0.95 − 0.4) = 0
+});
+
+const ruleBase = (cfg, extra = {}) => Strategy.buildReference({ ticker: 'TEST', expiry: EXP, nowMs: NOW, contracts: chain(100, 0.6), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { targetPnl: 500, capital: 200000, ...cfg }, ...extra });
+
+test('owner rules: signal sets the perp side (bullish → LONG, bearish → SHORT), options hedge the other way', () => {
+  const bull = ruleBase({ signal: 'BULLISH' }), bear = ruleBase({ signal: 'BEARISH' });
+  assert.equal(bull.status, 'OK'); assert.equal(bear.status, 'OK');
+  assert.equal(bull.best.futuresSide, 'LONG'); assert.ok(bull.best.futures.signedQty > 0); assert.equal(bull.best.signal, 'BULLISH');
+  assert.equal(bear.best.futuresSide, 'SHORT'); assert.ok(bear.best.futures.signedQty < 0);
+  // bullish signal → bearish option hedge: put debit (long put above short put) + call credit (short call below long call)
+  const lp = bull.best.legs.find(l => l.type === 'put' && l.side === 'buy'), sp = bull.best.legs.find(l => l.type === 'put' && l.side === 'sell');
+  assert.ok(lp.strike > sp.strike);
+  assert.equal(ruleBase({ signal: 'SIDEWAYS' }).status, 'INVALID');
+});
+
+test('owner rules: futures qty rounded DOWN to a multiple of 5', () => {
+  for (const signal of ['BULLISH', 'BEARISH']) {
+    const f = ruleBase({ signal }).best.futures;
+    assert.equal(Math.abs(f.signedQty) % 5, 0);
+    assert.ok(Math.abs(f.signedQty) <= Math.abs(f.equalisingQty) && Math.abs(f.equalisingQty) - Math.abs(f.signedQty) < 5);
+    assert.equal(f.roundTo, 5);
+  }
+  const f10 = ruleBase({ signal: 'BEARISH', futuresRound: 10 }).best.futures; assert.equal(Math.abs(f10.signedQty) % 10, 0);
+});
+
+test('owner rules: 1 call lot : 2 put lots by default, overridable', () => {
+  const b = ruleBase({ signal: 'BEARISH' }).best;
+  assert.equal(b.putLots, 2 * b.callLots);
+  for (const l of b.legs) assert.equal(l.qty, l.type === 'call' ? b.callLots : b.putLots);
+  const o = ruleBase({ signal: 'BULLISH', callLotUnits: 2, putLotUnits: 1 }).best;
+  assert.equal(o.callLots, 2 * o.putLots); assert.equal(o.lotRule, '2:1');
+  assert.equal(ruleBase({ signal: 'BULLISH', callLotUnits: 0 }).status, 'INVALID');
+});
+
+test('owner rules: futures margin = FQ × entry / 2 (configurable), 5× leverage shown, total capital adds up', () => {
+  const b = ruleBase({ signal: 'BEARISH' }).best, c = b.capital, n = b.futures.qty * b.futures.entry;
+  assert.ok(Math.abs(c.futuresNotional - n) < 1e-9);
+  assert.ok(Math.abs(c.futuresMargin - n / 2) < 1e-9); assert.equal(c.marginDivisor, 2); assert.equal(c.leverage, 5);
+  assert.ok(Math.abs(c.venueInitialMargin - n / 5) < 1e-9);
+  assert.ok(Math.abs(c.total - (c.futuresMargin + c.optionsCapital + c.fees)) < 1e-6); assert.equal(c.total, b.requiredCapital);
+  const b4 = ruleBase({ signal: 'BEARISH', marginDivisor: 4 }).best;
+  assert.ok(Math.abs(b4.capital.futuresMargin - b4.futures.qty * b4.futures.entry / 4) < 1e-9);
+});
+
+test('owner rules: exits at the CE short and PE short with P&L today and at expiry', () => {
+  const b = ruleBase({ signal: 'BEARISH' }).best, shortCall = b.legs.find(l => l.type === 'call' && l.side === 'sell').strike, shortPut = b.legs.find(l => l.type === 'put' && l.side === 'sell').strike;
+  assert.equal(b.exits.length, 2); assert.equal(b.exits[0].price, shortCall); assert.equal(b.exits[1].price, shortPut);
+  assert.ok(Math.abs(b.exits[0].pnlExpiry - b.expected.upExpiry) < 1e-9 && Math.abs(b.exits[1].pnlExpiry - b.expected.downExpiry) < 1e-9);
+  assert.ok(b.exits.every(x => Number.isFinite(x.pnlToday)));
+});
+
+test('owner rules: theta check classifies credit / near-neutral / debit', () => {
+  const leg = (side, qty, theta) => ({ side, qty, multiplier: 100, greeks: { theta } });
+  assert.equal(Strategy.thetaCheck([leg('sell', 1, -0.2), leg('buy', 1, -0.1)]).status, 'CREDIT');
+  assert.equal(Strategy.thetaCheck([leg('sell', 1, -0.1), leg('buy', 1, -0.12)]).status, 'NEAR-NEUTRAL');
+  const d = Strategy.thetaCheck([leg('sell', 1, -0.05), leg('buy', 1, -0.2)]); assert.equal(d.status, 'DEBIT'); assert.equal(d.ok, false);
+  const b = ruleBase({ signal: 'BEARISH' }).best; assert.ok(['CREDIT', 'NEAR-NEUTRAL', 'DEBIT'].includes(b.theta.status));
+});
+
+test('perp / stock price mismatch blocks a recommendation', () => {
+  const out = ruleBase({ signal: 'BEARISH' }, { perp: perp(130) });
+  assert.equal(out.status, 'PRICE_MISMATCH'); assert.match(out.errors[0], /differs/);
+});
+
+test('expiry close is 16:00 America/New_York, DST-aware', () => {
+  require('../public/finance.js');
+  for (const fn of [Strategy.expiryCloseMs, globalThis.Finance.closeMs]) {
+    assert.equal(new Date(fn('2026-10-30')).toISOString(), '2026-10-30T20:00:00.000Z'); // EDT
+    assert.equal(new Date(fn('2026-11-06')).toISOString(), '2026-11-06T21:00:00.000Z'); // EST
+    assert.equal(new Date(fn('2027-03-19')).toISOString(), '2027-03-19T20:00:00.000Z'); // EDT again
+  }
 });

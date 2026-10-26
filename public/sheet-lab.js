@@ -175,6 +175,7 @@ function render(r) {
     ["Worst of these four cases", r.minimumObservedNet],
     ["Best of these four cases", r.maximumObservedNet],
     ["Futures margin estimate", r.estimatedInitialMargin],
+    ["Futures margin (FQ × entry / 2)", r.ownerMargin ? r.ownerMargin.futuresMargin : null],
     ["Basket allowance per case", r.basketCost],
   ]
     .map(
@@ -277,6 +278,7 @@ function render(r) {
             pnl(b.secondNet) +
             ". Difference after quantity rounding " +
             money(b.difference) +
+            (b.rule ? ". Owner rule (rounded down to " + b.rule.roundTo + "): " + b.side + " " + units(Math.abs(b.rule.signedQty)) + " → upside " + pnl(b.rule.firstNet) + " · downside " + pnl(b.rule.secondNet) : "") +
             '.</p><button type="button" class="secondary" data-balance="' +
             key +
             '">Use this quantity in inputs</button><details><summary>How this quantity is derived</summary><p>' +
@@ -474,6 +476,14 @@ function auditRender() {
         "; one-day equalization benchmark " +
         units(r.balances.dayQty) +
         ". The original sizing formula and Greeks are unavailable.</p>"
+      : "") +
+    (r.ruleChecks
+      ? '<p class="note">Owner rules: equalization rounded down to 5 = ' +
+        units(r.ruleChecks.floor5DayQty) +
+        (r.ruleChecks.floor5Matches ? " (matches the sheet)" : " (sheet " + units(r.balances.recordedQty) + ")") +
+        " · lots calls:puts " + esc(r.ruleChecks.lots || "—") +
+        (r.ruleChecks.followsLotRule ? " (follows 1:2)" : " (not the 1:2 rule)") +
+        " · futures margin FQ × entry / 2 = " + money(r.ruleChecks.ownerMargin) + ".</p>"
       : "") +
     '<ul class="note">' +
     r.issues.map((t) => "<li>" + esc(t) + "</li>").join("") +

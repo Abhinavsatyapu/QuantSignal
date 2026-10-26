@@ -245,13 +245,28 @@
   // ---------------------------------------------------------------- reference-sheet methodology (docs/four-leg-methodology.md)
   // Calibrated from the 78 reference sheets (σ = spot × ATM IV × √(days/365)): debit spread long leg = first OTM strike
   // (≈0.1σ OTM), debit short ≈0.9σ, credit short ≈0.63σ on the other side, credit wing ≈0.47σ beyond it, credit lots =
-  // 2 × debit lots, perp sized to EQUALISE the 1-day P&L at the two short strikes (a chord delta) and rounded toward zero
-  // (sheet median ≈5% under the exact equalising value).
-  const REFERENCE_DEFAULTS = { debitLongSigma: 0.1, debitShortSigma: 0.9, creditShortSigma: 0.63, wingSigma: 0.47, lotRatio: 2, futuresFactor: 0.95, mmLoss: 50, maxLots: 30, maxLossPct: 50, riskSigma: 2, commission: 0.65, futureFeePct: 0.045, leverage: 5, maxSpreadPct: 25, r: 0.04 };
+  // Owner's rules (26 Oct 2026): perp side follows the SIGNAL (bullish → LONG, bearish → SHORT); calls 1 lot : puts 2 lots
+  // (theta near-neutral or credit); perp sized to EQUALISE today's P&L at the two short strikes (the exit / target levels,
+  // "CE short" and "PE short") and rounded DOWN to a multiple of 5; futures margin = FQ × entry / 2, 5× leverage.
+  const REFERENCE_DEFAULTS = { debitLongSigma: 0.1, debitShortSigma: 0.9, creditShortSigma: 0.63, wingSigma: 0.47, callLotUnits: 1, putLotUnits: 2, futuresRound: 5, futuresFactor: 1, marginDivisor: 2, leverage: 5, thetaTolerancePct: 15, mmLoss: 50, maxLots: 30, maxLossPct: 50, riskSigma: 2, commission: 0.65, futureFeePct: 0.045, maxSpreadPct: 25, maxPriceGapPct: 5, r: 0.04 };
+  const SIGNAL_SIDE = { BULLISH: "LONG", BEARISH: "SHORT" };
+  // Net options theta ($/day). CREDIT ≥ 0; NEAR-NEUTRAL when the debit is within tolPct of the gross |theta|; otherwise DEBIT.
+  function thetaCheck(legs, tolPct = 15) {
+    let theta = 0, gross = 0;
+    for (const l of legs) { const t = sgn(l.side) * l.qty * (l.multiplier || 100) * ((l.greeks && l.greeks.theta) || 0); theta += t; gross += Math.abs(t); }
+    const status = theta >= 0 ? "CREDIT" : -theta <= gross * tolPct / 100 ? "NEAR-NEUTRAL" : "DEBIT";
+    return { theta, gross, status, ok: status !== "DEBIT", tolerancePct: tolPct, note: status === "DEBIT" ? "Theta is a net debit beyond " + tolPct + "% of gross theta: the 1:2 rule's aim (theta near-neutral or credit) is not met; consider the alternative or another expiry." : status === "CREDIT" ? "Theta credit: time decay works for the book." : "Theta near-neutral (debit within " + tolPct + "% of gross)." };
+  }
   function buildReference(input) {
     const cfg = { ...REFERENCE_DEFAULTS, ...(input.calibration || {}), ...input.cfg }, errs = [];
     const need = (ok, msg) => { if (!ok) errs.push(msg); };
-    need(["LONG", "SHORT", "AUTO"].includes(cfg.futuresSide), "Choose the perp side: LONG, SHORT or AUTO");
+    if (cfg.signal && cfg.signal !== "AUTO") { need(!!SIGNAL_SIDE[cfg.signal], "Signal must be BULLISH, BEARISH or AUTO"); cfg.futuresSide = SIGNAL_SIDE[cfg.signal] || cfg.futuresSide; }
+    if (!cfg.futuresSide) cfg.futuresSide = "AUTO";
+    need(["LONG", "SHORT", "AUTO"].includes(cfg.futuresSide), "Choose the signal (BULLISH / BEARISH) or perp side LONG, SHORT or AUTO");
+    need([cfg.callLotUnits, cfg.putLotUnits].every((x) => Number.isInteger(x) && x >= 1 && x <= 10), "Lot ratio (calls : puts) must use whole numbers 1–10");
+    need(fin(cfg.futuresRound) && cfg.futuresRound > 0, "Futures rounding multiple must be > 0");
+    need(fin(cfg.futuresFactor) && cfg.futuresFactor > 0 && cfg.futuresFactor <= 1.5, "Futures factor must be 0–1.5");
+    need(fin(cfg.marginDivisor) && cfg.marginDivisor >= 1 && cfg.marginDivisor <= 50, "Futures margin divisor must be 1–50");
     need(fin(cfg.targetPnl) && cfg.targetPnl > 0, "Target P&L must be a positive dollar amount");
     need(fin(cfg.capital) && cfg.capital > 0, "Capital must be a positive dollar amount");
     need(fin(cfg.maxLossPct) && cfg.maxLossPct > 0 && cfg.maxLossPct <= 100, "Max loss must be 0–100% of capital");
@@ -277,7 +292,9 @@
     if (calls.length < 2 || puts.length < 2) return { status: "NO_LIQUIDITY", errors: ["Not enough liquid strikes (" + calls.length + " calls, " + puts.length + " puts within the " + cfg.maxSpreadPct + "% spread limit)"], liquidity };
     const atm = quotes.slice().sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot)).slice(0, 4), atmIV = atm.reduce((n, q) => n + q.iv, 0) / atm.length;
     const sigma = spot * atmIV * Math.sqrt(T), step = perp ? 10 ** -perp.szDecimals : 1;
-    const toward0 = (x) => Math.sign(x) * Math.floor(Math.abs(x) / step + 1e-9) * step;
+    const unit = Math.max(step, cfg.futuresRound), toward0 = (x) => Math.sign(x) * Math.floor(Math.abs(x) / unit + 1e-9) * unit; // rounded DOWN to a multiple of 5
+    const priceGapPct = input.stock && input.stock.price > 0 && perp.mid > 0 ? Math.abs(perp.mid - input.stock.price) / input.stock.price * 100 : null;
+    if (priceGapPct != null && priceGapPct > cfg.maxPriceGapPct) return { status: "PRICE_MISMATCH", errors: ["Hyperliquid " + perp.symbol + " mid " + perp.mid + " differs from the options provider's " + input.ticker + " price " + input.stock.price + " by " + priceGapPct.toFixed(1) + "% (limit " + cfg.maxPriceGapPct + "%). The perp may not track this stock (or a quote is stale), so no recommendation is made."], perp: { symbol: perp.symbol, mid: perp.mid }, spot: input.stock.price };
     const nearest = (list, x, pred = () => true) => list.filter(pred).sort((a, b) => Math.abs(a.strike - x) - Math.abs(b.strike - x))[0];
     const sides = cfg.futuresSide === "AUTO" ? ["SHORT", "LONG"] : [cfg.futuresSide];
     const dsig = [...new Set([cfg.debitShortSigma, 0.75, 0.9, 1.05].map(r6))], csig = [...new Set([cfg.creditShortSigma, 0.55, 0.65, 0.8].map(r6))], wings = [...new Set([cfg.wingSigma, 0.35, 0.47, 0.6].map(r6))];
@@ -299,14 +316,15 @@
       const up = fs === "SHORT" ? dShort.strike : cShort.strike, dn = fs === "SHORT" ? cShort.strike : dShort.strike; // scenario prices = the two short strikes
       let prevAchieved = null;
       for (let n = 1; n <= cfg.maxLots; n++) {
-        const legs = [mk(dLong, "buy", n), mk(dShort, "sell", n), mk(cShort, "sell", n * cfg.lotRatio), mk(cWing, "buy", n * cfg.lotRatio)].sort((x, y) => (x.type === y.type ? x.strike - y.strike : x.type === "call" ? -1 : 1));
+        const callN = n * cfg.callLotUnits, putN = n * cfg.putLotUnits, dN = fs === "SHORT" ? callN : putN, cN = fs === "SHORT" ? putN : callN;
+        const legs = [mk(dLong, "buy", dN), mk(dShort, "sell", dN), mk(cShort, "sell", cN), mk(cWing, "buy", cN)].sort((x, y) => (x.type === y.type ? x.strike - y.strike : x.type === "call" ? -1 : 1));
         const probe = evaluate({ legs, future: { qty: 0, entry: 0, basis }, commission: 0, r: cfg.r, nowMs: now, expiryMs });
-        const day = Math.min(1, probe.T * 365);
-        const qRaw = (probe.at(dn, day) - probe.at(up, day)) / (up - dn); // equalise 1-day P&L at the two short strikes
+        const day = 0; // "today" = an immediate move (fits the sheets better than a 1-day horizon: 7.4% vs 11.1% median error)
+        const qRaw = (probe.at(dn, day) - probe.at(up, day)) / (up - dn); // equalise today's P&L at the two short strikes
         const fq = perp ? r6(toward0(qRaw * cfg.futuresFactor)) : 0;
         if (perp && (fs === "LONG" ? !(fq > 0) : !(fq < 0))) { misses.push({ n, reason: "equalising perp quantity has the wrong sign" }); break; }
         const fEntry = perp ? (fq > 0 ? perp.ask : fq < 0 ? perp.bid : perp.mid) : 0;
-        const ev = evaluate({ legs, future: { qty: fq, entry: fEntry, basis }, commission: cfg.commission, futureFeePct: cfg.futureFeePct, leverage: cfg.leverage, r: cfg.r, nowMs: now, expiryMs });
+        const ev = evaluate({ legs, future: { qty: fq, entry: fEntry, basis }, commission: cfg.commission, futureFeePct: cfg.futureFeePct, leverage: cfg.marginDivisor, r: cfg.r, nowMs: now, expiryMs });
         const netUp = ev.expiry(up) - cfg.mmLoss, netDn = ev.expiry(dn) - cfg.mmLoss;
         const worstRisk = -Math.min(...[riskLo, riskHi, spot, ...ev.kinks.filter((x) => x > riskLo && x < riskHi)].map(ev.expiry)) + cfg.mmLoss;
         if (ev.requiredCapital > cfg.capital || worstRisk > lossBudget) { misses.push({ n, fs, a, ac, w, overCapital: ev.requiredCapital > cfg.capital, overRisk: worstRisk > lossBudget, achieved: prevAchieved, requiredCapital: ev.requiredCapital, worstRisk }); break; }
@@ -315,12 +333,13 @@
         const prob = region.reduce((m, [x, y]) => m + probIn(spot, x, y >= hi - 1e-9 ? 1e12 : y, atmIV, T, cfg.r), 0);
         const friction = legs.reduce((m, l) => m + (l.ask - l.bid) * l.qty * 100, 0) + 2 * ev.optionFees + 2 * ev.futuresEntryFee;
         const deviation = Math.abs(a - cfg.debitShortSigma) + Math.abs(ac - cfg.creditShortSigma) + Math.abs(w - cfg.wingSigma);
-        found.push({ fs, a, ac, w, n, legs, ev, fq, qRaw, fEntry, up, dn, netUp, netDn, region, prob, friction, worstRisk, day, dLong, dShort, cShort, cWing,
-          score: -prob + 0.1 * deviation + 0.25 * friction / cfg.targetPnl + 0.05 * ev.requiredCapital / cfg.capital });
+        const th = thetaCheck(legs, cfg.thetaTolerancePct);
+        found.push({ fs, a, ac, w, n, legs, ev, fq, qRaw, fEntry, up, dn, netUp, netDn, region, prob, friction, worstRisk, day, dLong, dShort, cShort, cWing, th, callN, putN,
+          score: -prob + 0.1 * deviation + 0.25 * friction / cfg.targetPnl + 0.05 * ev.requiredCapital / cfg.capital + (th.status === "DEBIT" ? 0.5 : 0) });
         break;
       }
     }
-    const common = { method: "reference", ticker: input.ticker, expiry: input.expiry, expiryCloseUtc: new Date(expiryMs).toISOString(), days: T * 365, spot, spotSource: input.stock && input.stock.price > 0 ? input.stock.source : "Hyperliquid perp mid (proxy: no stock quote)", basis, atmIV, expectedMove: sigma, liquidity, cfg, calibration: input.calibration || null,
+    const common = { method: "reference", priceGapPct, ticker: input.ticker, expiry: input.expiry, expiryCloseUtc: new Date(expiryMs).toISOString(), days: T * 365, spot, spotSource: input.stock && input.stock.price > 0 ? input.stock.source : "Hyperliquid perp mid (proxy: no stock quote)", basis, atmIV, expectedMove: sigma, liquidity, cfg, calibration: input.calibration || null,
       perp: perp ? { symbol: perp.symbol, bid: perp.bid, ask: perp.ask, mid: perp.mid, szDecimals: perp.szDecimals, maxLeverage: perp.maxLeverage, time: perp.time } : null };
     if (!found.length) {
       const ok = misses.filter((m) => fin(m.achieved)).sort((x, y) => y.achieved - x.achieved)[0];
@@ -332,22 +351,27 @@
     const view = (f) => {
       const ev = f.ev, gl = Math.max(0, spot - 2.5 * sigma), gh = spot + 2.5 * sigma;
       const xs = [...new Set([...Array.from({ length: 121 }, (_, i) => gl + (gh - gl) * i / 120), ...ev.kinks.filter((x) => x > gl && x < gh), spot, f.up, f.dn])].sort((a, b) => a - b);
-      const sc = [["1-day · up to short strike", f.up, f.day], ["1-day · down to short strike", f.dn, f.day], ["Expiry · up at " + f.up, f.up, null], ["Expiry · down at " + f.dn, f.dn, null]]
+      const sc = [["Today · up to CE short", f.up, f.day], ["Today · down to PE short", f.dn, f.day], ["Expiry · up at " + f.up, f.up, null], ["Expiry · down at " + f.dn, f.dn, null]]
         .map(([name, S, d]) => ({ name, stock: S, perp: ev.perpAt(S), pnl: (d == null ? ev.expiry(S) : ev.at(S, d)) - cfg.mmLoss }));
       const thin = f.legs.filter((l) => !fin(l.side === "buy" ? l.askSize : l.bidSize) || (l.side === "buy" ? l.askSize : l.bidSize) < l.qty).map((l) => l.contract);
       const debitType = f.fs === "SHORT" ? "call" : "put", creditType = f.fs === "SHORT" ? "put" : "call";
       const why = [
-        "Perp " + f.fs + " → options are " + (f.fs === "SHORT" ? "bullish (call debit spread + put credit spread)" : "bearish (put debit spread + call credit spread)") + ", the pattern of all 77 consistent reference sheets.",
+        (cfg.signal && SIGNAL_SIDE[cfg.signal] ? cfg.signal + " signal → perp " + f.fs + " (the perp follows the signal). " : "Signal AUTO → perp " + f.fs + " chosen by score. ") + "The options hedge the other way: " + (f.fs === "SHORT" ? "bullish (call debit spread + put credit spread)" : "bearish (put debit spread + call credit spread)") + ", the pattern of 77 of 78 reference sheets.",
         "Debit " + debitType + " spread: long " + f.dLong.strike + " is the first out-of-the-money strike (" + ((f.dLong.strike - spot) / sigma).toFixed(2) + "σ; reference ≈0.1σ, spot " + spot.toFixed(2) + "); short " + f.dShort.strike + " at " + ((f.dShort.strike - spot) / sigma).toFixed(2) + "σ (reference median 0.9σ; σ = $" + sigma.toFixed(2) + " from ATM IV " + (atmIV * 100).toFixed(1) + "% over " + (T * 365).toFixed(1) + " days).",
         "Credit " + creditType + " spread: short " + f.cShort.strike + " at " + ((f.cShort.strike - spot) / sigma).toFixed(2) + "σ (reference median 0.63σ), wing " + f.cWing.strike + " " + (Math.abs(f.cWing.strike - f.cShort.strike) / sigma).toFixed(2) + "σ beyond it (reference median 0.47σ).",
-        "Lots: " + f.n + " debit / " + f.n * cfg.lotRatio + " credit (credit = " + cfg.lotRatio + "× debit, as in 70 of 78 sheets). " + f.n + " is the smallest size whose equalised expiry P&L reaches the $" + cfg.targetPnl.toLocaleString("en-US") + " target.",
-        perp ? "Perp " + perp.symbol + ": " + Math.abs(f.fq) + " units = " + cfg.futuresFactor + " × the quantity that equalises the 1-day P&L at " + f.dn + " and " + f.up + " (" + Math.abs(f.qRaw).toFixed(2) + "), rounded toward zero to the venue lot size." : "No Hyperliquid perp for this ticker: options-only structure; the sheet methodology needs the perp leg, so treat this as incomplete.",
+        "Lots: calls " + f.callN + " : puts " + f.putN + " (rule " + cfg.callLotUnits + ":" + cfg.putLotUnits + ", to keep theta near-neutral or a credit). Net options theta " + f.th.theta.toFixed(2) + " $/day (" + f.th.status + "). This is the smallest size whose equalised expiry P&L reaches the $" + cfg.targetPnl.toLocaleString("en-US") + " target.",
+        "Perp " + perp.symbol + ": " + Math.abs(f.fq) + " units = the quantity that equalises today's P&L at the PE short " + f.dn + " and CE short " + f.up + " (" + Math.abs(f.qRaw).toFixed(2) + (cfg.futuresFactor !== 1 ? " × " + cfg.futuresFactor : "") + "), rounded down to a multiple of " + unit + ".",
+        "Exit / profit targets: close near the CE short " + f.up + " (upside) or the PE short " + f.dn + " (downside).",
         "Chosen among " + found.length + " qualifying strike sets by risk-neutral probability of finishing in the target zone, closeness to the calibrated distances, bid/ask friction and capital use.",
       ];
       return {
-        futuresSide: f.fs, debitShortSigma: f.a, creditShortSigma: f.ac, wingSigma: f.w, debitLots: f.n, creditLots: f.n * cfg.lotRatio, scenarioPrices: { up: f.up, down: f.dn },
+        signal: cfg.signal || "AUTO", futuresSide: f.fs, debitShortSigma: f.a, creditShortSigma: f.ac, wingSigma: f.w, callLots: f.callN, putLots: f.putN, lotRule: cfg.callLotUnits + ":" + cfg.putLotUnits, scenarioPrices: { up: f.up, down: f.dn },
+        exits: [{ label: "CE short (upside exit / target)", price: f.up, perp: ev.perpAt(f.up), pnlToday: ev.at(f.up, 0) - cfg.mmLoss, pnlExpiry: f.netUp }, { label: "PE short (downside exit / target)", price: f.dn, perp: ev.perpAt(f.dn), pnlToday: ev.at(f.dn, 0) - cfg.mmLoss, pnlExpiry: f.netDn }],
+        theta: f.th,
+        capital: { futuresNotional: Math.abs(f.fq) * f.fEntry, futuresMargin: ev.futuresMargin, marginDivisor: cfg.marginDivisor, leverage: cfg.leverage, venueInitialMargin: Math.abs(f.fq) * f.fEntry / cfg.leverage, optionsCapital: ev.optionsCapital, fees: ev.optionFees + ev.futuresEntryFee, total: ev.requiredCapital,
+          formula: "Total = futures margin (FQ × entry / " + cfg.marginDivisor + ") + options capital (max loss of each defined-risk spread) + entry fees. Venue initial margin at " + cfg.leverage + "× = FQ × entry / " + cfg.leverage + "." },
         legs: f.legs.map((l) => ({ ...l, positionDelta: sgn(l.side) * l.qty * 100 * l.greeks.delta, cashFlow: -sgn(l.side) * l.qty * 100 * l.premium })),
-        futures: perp ? { symbol: perp.symbol, side: f.fq > 0 ? "LONG" : "SHORT", qty: Math.abs(f.fq), signedQty: f.fq, entry: f.fEntry, notional: Math.abs(f.fq) * f.fEntry, equalisingQty: r6(f.qRaw), deltaNeutralQty: r6(-ev.greeks.optionDelta), margin: ev.futuresMargin, leverage: cfg.leverage, minNotionalOk: Math.abs(f.fq) * f.fEntry >= 10 } : null,
+        futures: perp ? { symbol: perp.symbol, side: f.fq > 0 ? "LONG" : "SHORT", qty: Math.abs(f.fq), signedQty: f.fq, entry: f.fEntry, notional: Math.abs(f.fq) * f.fEntry, equalisingQty: r6(f.qRaw), roundTo: unit, deltaNeutralQty: r6(-ev.greeks.optionDelta), margin: ev.futuresMargin, marginDivisor: cfg.marginDivisor, leverage: cfg.leverage, venueInitialMargin: Math.abs(f.fq) * f.fEntry / cfg.leverage, minNotionalOk: Math.abs(f.fq) * f.fEntry >= 10 } : null,
         netCreditDebit: ev.netCreditDebit, maxProfit: ev.maxProfit, maxLoss: ev.maxLoss, unlimitedProfit: ev.unlimitedProfit, unlimitedLoss: ev.unlimitedLoss, breakevens: ev.breakevens,
         worstLossInRiskWindow: f.worstRisk, riskWindow: [riskLo, riskHi], greeks: ev.greeks, optionsCapital: ev.optionsCapital, futuresMargin: ev.futuresMargin, requiredCapital: ev.requiredCapital, fees: { options: ev.optionFees, futuresEntry: ev.futuresEntryFee }, mmLoss: cfg.mmLoss,
         expected: { upExpiry: f.netUp, downExpiry: f.netDn, upToday: ev.at(f.up, f.day) - cfg.mmLoss, downToday: ev.at(f.dn, f.day) - cfg.mmLoss, unchangedExpiry: ev.expiry(spot) - cfg.mmLoss },
@@ -365,5 +389,5 @@
     return { order_class: "mleg", qty: String(g), type: "limit", limit_price: (Math.round(net * 100) / 100).toFixed(2), time_in_force: "day",
       legs: legs.map((l) => ({ symbol: l.contract, ratio_qty: String(l.qty / g), side: l.side, position_intent: l.side === "buy" ? "buy_to_open" : "sell_to_open" })) };
   }
-  root.Strategy = { build, buildReference, REFERENCE_DEFAULTS, evaluate, classify, pairs, regionAtLeast, probIn, bs, bsGreeks, impliedVol, expiryCloseMs, alpacaOrderPreview, cdf };
+  root.Strategy = { build, buildReference, REFERENCE_DEFAULTS, thetaCheck, SIGNAL_SIDE, evaluate, classify, pairs, regionAtLeast, probIn, bs, bsGreeks, impliedVol, expiryCloseMs, alpacaOrderPreview, cdf };
 })(typeof globalThis !== "undefined" ? globalThis : window);

@@ -20,14 +20,17 @@
 <label>Target P&amp;L at the scenario prices ($)<input id="bTarget" type="number" min="1" step="50" value="1000"></label>
 <label>Capital available ($)<input id="bCapital" type="number" min="100" step="500" value="20000"></label>
 <label>Max loss within ±2σ (% of capital)<input id="bMaxLoss" type="number" min="1" max="100" step="1" value="50"></label>
-<label>Perp side<select id="bSide"><option value="AUTO">Auto (compare both)</option><option value="SHORT">SHORT perp · bullish option spreads</option><option value="LONG">LONG perp · bearish option spreads</option></select></label>
+<label>Signal (sets the perp side)<select id="bSignal"><option value="BULLISH">Bullish → LONG perp (bearish option hedge)</option><option value="BEARISH">Bearish → SHORT perp (bullish option hedge)</option><option value="AUTO">Auto (compare both)</option></select></label>
+<label>Lot ratio · calls : puts<span class="b-ratio"><input id="bCallUnits" type="number" min="1" max="10" step="1" value="1" aria-label="Call lots"> : <input id="bPutUnits" type="number" min="1" max="10" step="1" value="2" aria-label="Put lots"></span><small>Default 1 : 2 keeps theta near-neutral or a credit.</small></label>
+<label>Futures margin divisor<input id="bMarginDiv" type="number" min="1" max="50" step="0.5" value="2"><small>Futures margin = FQ × entry ÷ this (default 2).</small></label>
 </div>
 <details class="b-adv"><summary>Advanced</summary><div class="b-grid">
 <label>Method<select id="bMethod"><option value="reference">Reference sheets (default)</option><option value="delta">Live Hedge delta method (original 1:2 code)</option></select></label>
 <label>Basket / MM allowance ($)<input id="bMm" type="number" min="0" step="5" value="50"></label>
 <label>Max bid/ask spread (% of mid)<input id="bSpread" type="number" min="1" max="100" step="1" value="25"></label>
 <label>Max debit-spread lots<input id="bLots" type="number" min="1" max="200" step="1" value="30"></label>
-<label>Perp leverage (×)<input id="bLev" type="number" min="1" max="50" step="1" value="5"></label>
+<label>Perp leverage (×)<input id="bLev" type="number" min="1" max="50" step="1" value="5"><small>Venue initial margin = notional ÷ leverage (shown for reference).</small></label>
+<label>Futures qty rounded down to a multiple of<input id="bRound" type="number" min="1" step="1" value="5"></label>
 <label>Option commission ($/contract)<input id="bComm" type="number" min="0" step="0.05" value="0.65"></label>
 <label>Perp fee (% per side)<input id="bFee" type="number" min="0" step="0.005" value="0.045"></label>
 <label>Debit short strike (σ) · blank = calibrated<input id="bDebitSigma" type="number" min="0.2" max="3" step="0.05" placeholder="calibrated"></label><label>Credit short strike (σ) · blank = calibrated<input id="bCreditSigma" type="number" min="0.2" max="3" step="0.05" placeholder="calibrated"></label>
@@ -46,6 +49,8 @@
 <div id="bMetrics" class="b-metrics"></div>
 <h3>Legs</h3><div class="market-scroll"><table class="b-table" id="bLegs"></table></div>
 <p id="bThin" class="market-note negative"></p>
+<h3>Capital</h3><div id="bCapitalBox" class="b-metrics small"></div><p id="bCapitalNote" class="market-note"></p>
+<h3>Exit / target levels</h3><div class="market-scroll"><table class="b-table" id="bExits"></table></div><p id="bTheta" class="market-note"></p>
 <h3>How the target is reached</h3><div id="bTargetBox" class="b-target"></div>
 <div class="b-chart-wrap"><canvas id="bChart" width="1200" height="420" aria-label="Payoff chart"></canvas><div class="b-legend"><span class="lg exp">At expiry</span><span class="lg tod">Today (Black-Scholes, current IV)</span><span class="lg tgt">Target</span><span class="lg spot">Spot</span></div></div>
 <h3>Sheet scenarios</h3><div class="market-scroll"><table class="b-table" id="bScen"></table></div>

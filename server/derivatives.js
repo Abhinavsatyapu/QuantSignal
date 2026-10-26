@@ -219,7 +219,9 @@ function sheetScenarios(b) {
     }
     if (!sols.length) return { blocked: 'The two cases use the same perp price (or cannot be equalized): no balancing quantity exists.' };
     const rawQty = sols[0], q = Math.round(rawQty / step) * step, firstNet = netFor(u, q), secondNet = netFor(d, q);
+    const unit = Math.max(step, 5), ruleQty = Math.sign(rawQty) * Math.floor(Math.abs(rawQty) / unit + 1e-9) * unit; // owner's rule: rounded DOWN to a multiple of 5
     return { rawQty, signedQty: q, side: q < 0 ? 'SHORT' : 'LONG', firstNet, secondNet, minimumNet: Math.min(firstNet, secondNet), difference: firstNet - secondNet,
+      rule: { signedQty: ruleQty, roundTo: unit, firstNet: netFor(u, ruleQty), secondNet: netFor(d, ruleQty), note: 'Owner rule: futures quantity rounded down (toward zero) to a multiple of 5.' },
       formula: 'Solve options_up − costs_up + q×m×(F_up−entry) − |q|×m×(entry+F_up)×fee = the corresponding downside expression. This balances two supplied cases, not all possible outcomes.' };
   };
   const by = k => sc.find(r => r.key === k);
@@ -236,7 +238,7 @@ function sheetScenarios(b) {
   const nets = rows.map(r => r.net);
   return {
     symbol, calculatedAt: Date.now(), input: { symbol, side: b.side, entry, qty, multiplier: m, leverage, step, feePct, baskets, basketLoss, minimumNet, optionPnlAfterFees: afterFees, scenarios: sc, optionDelta: od, targetDelta: td },
-    signedQty, basketCost, rows, minimumObservedNet: Math.min(...nets), maximumObservedNet: Math.max(...nets), futuresNotional: qty * m * entry, estimatedInitialMargin: qty * m * entry / leverage,
+    signedQty, basketCost, rows, minimumObservedNet: Math.min(...nets), maximumObservedNet: Math.max(...nets), futuresNotional: qty * m * entry, estimatedInitialMargin: qty * m * entry / leverage, ownerMargin: { futuresMargin: qty * m * entry / 2, divisor: 2, leverage: 5, note: 'Owner rule: futures margin = FQ × entry / 2 with 5× leverage.' },
     balances: { day: balance(by('dayUp'), by('dayDown')), expiry: balance(by('expiryUp'), by('expiryDown')) },
     feasible: { possible, direction: b.side, minimumQty: possible ? lo : null, maximumQty: possible && Number.isFinite(hi) ? hi : null, unboundedUpper: possible && !Number.isFinite(hi), minimumNet, constraints },
     delta,
@@ -277,9 +279,14 @@ function sheetAudit() {
     }
     if (r.notes) issues.push(r.notes);
     const dayQty = r.up + r.down > 0 ? (o[2] - o[0]) / (r.up + r.down) : null;
+    // Owner's rules (26 Oct 2026) checked against this page.
+    const floor5 = dayQty == null ? null : Math.sign(dayQty) * Math.floor(Math.abs(dayQty) / 5 + 1e-9) * 5, callU = Math.abs(r.units[0]), putU = Math.abs(r.units[2]);
+    const ruleChecks = { floor5DayQty: floor5, floor5Matches: floor5 === q, floor5ErrorPct: floor5 ? round((Math.abs(q) - Math.abs(floor5)) / Math.abs(floor5) * 100, 2) : null, multipleOf5: q % 5 === 0,
+      lots: callU && putU ? (callU === putU * 2 ? '2:1' : putU === callU * 2 ? '1:2' : callU / 100 + ':' + putU / 100) : null, followsLotRule: putU === callU * 2,
+      perpSide: q > 0 ? 'LONG' : q < 0 ? 'SHORT' : 'NONE', ownerMargin: Math.abs(q) * r.futureEntry / 2 };
     return { page: r.page, symbol: r.symbol, confidence: r.confidence, sourceInputs: { futureEntry: r.futureEntry, futureQty: q, up: r.up, down: r.down, mmLoss: r.mmLoss, strikes: r.strikes, units: r.units, premiums: r.premiums },
       sourceScenarioOptions: o, printedNet: r.printedNet, closedSummary: r.closedSummary || null, legs, issues, nets, netDifferences, expiry,
-      balances: dayQty == null ? null : { dayQty, recordedQty: q, quantityDifference: q - dayQty }, status: issues.length ? 'REVIEW' : 'REPRODUCES',
+      balances: dayQty == null ? null : { dayQty, recordedQty: q, quantityDifference: q - dayQty }, ruleChecks, status: issues.length ? 'REVIEW' : 'REPRODUCES',
       formula: 'Net = supplied options P&L + signed future units × scenario move − basket loss. No fee/funding data is provided here.' };
   });
   auditCache = { source: '78-page scanned PDF transcription; not original workbook formulas', sizingNote: 'Scenario equalization is a reconstruction benchmark. The PDF does not contain Greeks or a visible sizing formula; original quantities cannot be proven delta-derived.', rows };
@@ -357,9 +364,9 @@ async function ratioSetup(b, stockSymbols) {
   const now = Date.now(), analysis = Technicals.analyze(candles, now, { minStopPct: cfg.minStopPct });
   const reference = { perpBid: book.bid, perpAsk: book.ask, perpMid: book.mid, bookTime: book.time, stock: chainData.stock?.price ?? null, stockTime: chainData.stock?.time ?? null, basis: chainData.stock ? book.mid - chainData.stock.price : null, provider: chainData.label };
   if (analysis.direction === 'WAIT') return { status: 'WAIT', symbol, reason: analysis.reason, analysis, reference };
-  // Reference sheets: the CREDIT spread carries 2× the lots of the DEBIT spread (70 of 78 sheets). LONG perp → call credit
-  // spread + put debit spread; SHORT perp → call debit + put credit. (The original code always used puts = 2× calls.)
-  if (cfg.strategy === 'directional') { if (analysis.direction === 'LONG') { callLots = debitLots * 2; putLots = debitLots; } else { callLots = debitLots; putLots = debitLots * 2; } cfg.callLots = callLots; cfg.putLots = putLots; }
+  // Owner's rule (26 Oct 2026): calls 1 lot : puts 2 lots for every direction, to keep theta near-neutral or a credit.
+  // (The reference sheets use 1:2 in 50/78 pages; most LONG-perp sheets used 2 calls : 1 put instead; see docs/four-leg-methodology.md.)
+  cfg.callLots = callLots; cfg.putLots = putLots;
   const [c] = LiveHedge.optimize({ symbol, chain: chainData, analysis, meta, price: book.mid, now, cfg, interval, duration: INTERVALS[interval] });
   const long = c.signedFutureQty > 0, slip = cfg.slippagePct / 100, limit = long ? book.ask * (1 + slip) : book.bid * (1 - slip);
   const depth = (long ? book.asks.filter(l => l.px <= limit) : book.bids.filter(l => l.px >= limit)).reduce((n, l) => n + l.sz, 0);

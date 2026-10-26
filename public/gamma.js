@@ -153,7 +153,7 @@ function gammaDraftRender() {
   $("#gammaDraft").innerHTML = gammaDraft
     .map(
       (l, i) =>
-        `<tr><td>${l.side === "buy" ? "LONG" : "SHORT"} ${l.type.toUpperCase()}</td><td><input data-g="${i}" data-f="strike" type="number" value="${l.strike}" step="any"><small>${l.expiry}</small></td><td><input data-g="${i}" data-f="qty" type="number" value="${l.qty}" min="1" step="1"></td><td><input data-g="${i}" data-f="premium" type="number" value="${Number.isFinite(l.premium) ? l.premium : ""}" min="0" step="any"></td><td>${quotePrice(l.quote?.bid)} / ${quotePrice(l.quote?.ask)}</td><td>${l.quote?.greeks?.delta?.toFixed(3) || "—"} / ${l.quote?.greeks?.gamma?.toFixed(4) || "—"} / ${l.iv > 0 ? (l.iv * 100).toFixed(1) + "%" : "—"}</td><td>${escapeHtml(l.source)}<small>${l.quote?.quoteTime ? new Date(l.quote.quoteTime).toLocaleString() : "unavailable"}</small></td></tr>`,
+        `<tr><td>${l.side === "buy" ? "LONG" : "SHORT"} ${l.type.toUpperCase()}</td><td><input data-g="${i}" data-f="strike" type="number" value="${l.strike}" step="any"><small>${l.expiry}</small></td><td><input data-g="${i}" data-f="qty" type="number" value="${l.qty}" min="1" step="1"></td><td><input data-g="${i}" data-f="premium" type="number" value="${Number.isFinite(l.premium) ? l.premium : ""}" min="0" step="any"></td><td>${quotePrice(l.quote?.bid)} / ${quotePrice(l.quote?.ask)}</td><td>${l.quote?.greeks?.delta?.toFixed(3) || "—"} / ${l.quote?.greeks?.gamma?.toFixed(4) || "—"} / ${l.iv > 0 ? (l.iv * 100).toFixed(1) + "%" : "—"}${l.ivNote ? "<small>" + escapeHtml(l.ivNote) + "</small>" : ""}</td><td>${escapeHtml(l.source)}<small>${l.quote?.quoteTime ? new Date(l.quote.quoteTime).toLocaleString() : "unavailable"}</small></td></tr>`,
     )
     .join("");
   $("#gammaDraft")
@@ -167,13 +167,29 @@ function gammaDraftRender() {
           if (el.dataset.f === "strike") {
             l.contract = occForLeg(l);
             l.quote = null;
-            l.iv = NaN;
+          }
+          // A manual strike/premium edit has no provider IV: solve it from the entered premium, otherwise keep the
+          // previous leg IV as a labelled approximation (previously IV became NaN and the simulation broke).
+          if (!l.quote && (el.dataset.f === "strike" || el.dataset.f === "premium")) {
+            const solved = gammaSolveIV(l);
+            if (solved > 0) { l.iv = solved; l.ivNote = "IV solved from the entered premium"; }
+            else if (l.iv > 0) l.ivNote = "IV carried over from the previous strike (approximation)";
           }
           gammaDraftRender();
           gammaSimulation();
         }),
     );
   gammaSimulation();
+}
+function gammaSolveIV(l) {
+  const T = (Finance.closeMs(l.expiry) - Date.now()) / (365 * 864e5), S = l.spot, K = l.strike, P = l.premium;
+  if (!(T > 0 && S > 0 && K > 0 && P > 0)) return null;
+  const intrinsic = Math.max(l.type === "call" ? S - K : K - S, 0);
+  if (P <= intrinsic) return null;
+  let lo = 1e-4, hi = 6;
+  if (Finance.bs(S, K, T, hi, 0.04, 0, l.type) < P) return null;
+  for (let i = 0; i < 80; i++) { const m = (lo + hi) / 2; if (Finance.bs(S, K, T, m, 0.04, 0, l.type) > P) hi = m; else lo = m; }
+  return (lo + hi) / 2;
 }
 function gammaSimulation() {
   try {

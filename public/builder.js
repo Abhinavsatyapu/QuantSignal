@@ -57,7 +57,7 @@
 
   function cfg() {
     const v = (id) => $(id).value;
-    return { futuresSide: v("bSide"), direction: v("bDir"), targetPnl: Number(v("bTarget")), capital: Number(v("bCapital")), maxLossPct: Number(v("bMaxLoss")), mmLoss: Number(v("bMm")), maxSpreadPct: Number(v("bSpread")), maxLots: Number(v("bLots")), leverage: Number(v("bLev")), commission: Number(v("bComm")), futureFeePct: Number(v("bFee")), debitShortSigma: v("bDebitSigma"), creditShortSigma: v("bCreditSigma"), wingSigma: v("bWingSigma"), useCalibration: $("bCal").checked };
+    return { signal: v("bSignal"), callLotUnits: Number(v("bCallUnits")), putLotUnits: Number(v("bPutUnits")), marginDivisor: Number(v("bMarginDiv")), futuresRound: Number(v("bRound")), direction: v("bDir"), targetPnl: Number(v("bTarget")), capital: Number(v("bCapital")), maxLossPct: Number(v("bMaxLoss")), mmLoss: Number(v("bMm")), maxSpreadPct: Number(v("bSpread")), maxLots: Number(v("bLots")), leverage: Number(v("bLev")), commission: Number(v("bComm")), futureFeePct: Number(v("bFee")), debitShortSigma: v("bDebitSigma"), creditShortSigma: v("bCreditSigma"), wingSigma: v("bWingSigma"), useCalibration: $("bCal").checked };
   }
   function validate(c) {
     const e = [];
@@ -98,15 +98,20 @@
       ["Max profit (expiry)", b.unlimitedProfit ? "Unlimited" : usd(b.maxProfit)],
       ["Max loss (expiry)", b.unlimitedLoss ? "Unlimited" : usd(b.maxLoss)],
       ["Worst loss within ±2σ", usd(-b.worstLossInRiskWindow)],
-      ["Required capital", usd(b.requiredCapital)],
-      ["Options capital (spread max loss)", usd(b.optionsCapital)],
-      ["Perp margin @" + (f ? f.leverage : "-") + "×", usd(b.futuresMargin)],
+      ["Total capital", usd(b.requiredCapital)],
+      ["Net options theta", b.theta ? usd(b.theta.theta, 2) + "/day · " + b.theta.status : usd(b.greeks.theta, 2) + "/day"],
       ["Breakevens (expiry, before MM)", b.breakevens.map((x) => nf(x)).join(" · ") || "none"],
       ["Fees (entry)", usd(b.fees.options + b.fees.futuresEntry, 2)],
     ].map(([k, v]) => `<div class="m"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("");
     $("bLegs").innerHTML = "<thead><tr><th>Side</th><th>Qty</th><th>Type</th><th>Strike</th><th>Contract</th><th>Fill (bid/ask)</th><th>Bid</th><th>Ask</th><th>Spread</th><th>IV</th><th>Delta</th><th>Pos. Δ</th><th>Cash flow</th><th>OI</th></tr></thead><tbody>" +
       b.legs.map((l) => `<tr><td class="${l.side}">${l.side.toUpperCase()}</td><td>${l.qty}</td><td>${l.type.toUpperCase()}</td><td>${nf(l.strike)}</td><td>${esc(l.contract)}</td><td>${nf(l.premium)}</td><td>${nf(l.bid)}</td><td>${nf(l.ask)}</td><td>${nf(l.spreadPct, 1)}%</td><td title="${esc(l.ivSource)}">${nf(l.iv * 100, 1)}%</td><td title="${esc(l.greeksSource)}">${nf(l.greeks.delta, 3)}</td><td>${nf(l.positionDelta, 1)}</td><td class="${cls(l.cashFlow)}">${usd(l.cashFlow)}</td><td>${l.openInterest ?? "—"}</td></tr>`).join("") +
       (f ? `<tr class="fut"><td class="${f.side === "LONG" ? "buy" : "sell"}">${f.side === "LONG" ? "BUY" : "SELL"}</td><td>${nf(f.qty, 3)}</td><td>PERP</td><td>—</td><td>${esc(f.symbol)}</td><td>${nf(f.entry)}</td><td colspan="4">equalising qty ${nf(f.equalisingQty, 2)} · delta-neutral ${nf(f.deltaNeutralQty, 2)}</td><td>1.000</td><td>${nf(f.signedQty, 1)}</td><td>notional ${usd(f.notional)}</td><td>${f.minNotionalOk ? "" : "below $10 min"}</td></tr>` : "") + "</tbody>";
+    const cap = b.capital;
+    $("bCapitalBox").innerHTML = cap ? [["Futures notional (FQ × entry)", usd(cap.futuresNotional)], ["Futures margin (÷" + cap.marginDivisor + ")", usd(cap.futuresMargin)], ["Leverage", cap.leverage + "×"], ["Venue initial margin @" + cap.leverage + "×", usd(cap.venueInitialMargin)], ["Options capital (spread max loss)", usd(cap.optionsCapital)], ["Entry fees", usd(cap.fees, 2)], ["Total capital", usd(cap.total)]].map(([k, v]) => `<div class="m"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("") : "";
+    $("bCapitalNote").textContent = cap ? cap.formula + " The reference sheets' INVESTMENT figure is not reproduced exactly by this rule (see the methodology doc)." : "";
+    $("bExits").innerHTML = b.exits ? "<thead><tr><th>Exit level</th><th>Stock</th><th>Perp</th><th>P&amp;L if hit today</th><th>P&amp;L at expiry</th></tr></thead><tbody>" + b.exits.map((x) => `<tr><td>${esc(x.label)}</td><td>${nf(x.price)}</td><td>${nf(x.perp)}</td><td class="${cls(x.pnlToday)}">${usd(x.pnlToday)}</td><td class="${cls(x.pnlExpiry)}">${usd(x.pnlExpiry)}</td></tr>`).join("") + "</tbody>" : "";
+    $("bTheta").className = "market-note" + (b.theta && !b.theta.ok ? " negative" : "");
+    $("bTheta").textContent = b.theta ? `Lots calls ${b.callLots} : puts ${b.putLots} (rule ${b.lotRule}). Net options theta ${usd(b.theta.theta, 2)}/day of ${usd(b.theta.gross, 2)} gross → ${b.theta.status}. ${b.theta.note}` : "";
     $("bThin").textContent = b.thinSize && b.thinSize.length ? "Displayed size is smaller than the order on: " + b.thinSize.join(", ") + " — expect partial fills or a worse price." : "";
     const t = b.target, reg = t.regions.map(([a, z]) => (z == null ? "above " + nf(a) : nf(a) + "–" + nf(z))).join(", ");
     $("bTargetBox").innerHTML = b.expected
@@ -118,7 +123,7 @@
     const g = b.greeks;
     $("bGreeks").innerHTML = [["Net delta (shares)", nf(g.delta, 1)], ["Options delta", nf(g.optionDelta, 1)], ["Perp delta", nf(g.futuresDelta, 1)], ["Gamma (Δ per $1)", nf(g.gamma, 2)], ["Theta ($/day)", usd(g.theta, 2)], ["Vega ($ per IV pt)", usd(g.vega, 2)]].map(([k, v]) => `<div class="m"><span>${k}</span><b>${v}</b></div>`).join("");
     $("bAlts").innerHTML = "<thead><tr><th>Perp</th><th>Legs</th><th>Lots</th><th>Perp qty</th><th>Up</th><th>Down</th><th>Capital</th><th>Prob.</th></tr></thead><tbody>" +
-      [b, ...(d.alternatives || [])].map((a, i) => `<tr><td>${a.futuresSide || "—"}${i ? "" : " (chosen)"}</td><td>${a.legs.map((l) => (l.side === "buy" ? "+" : "−") + l.qty + " " + nf(l.strike, 1) + l.type[0].toUpperCase()).join(" ")}</td><td>${a.debitLots ?? a.callLots}/${a.creditLots ?? a.putLots}</td><td>${a.futures ? nf(a.futures.signedQty, 2) : "—"}</td><td>${usd(a.expected ? a.expected.upExpiry : null)}</td><td>${usd(a.expected ? a.expected.downExpiry : null)}</td><td>${usd(a.requiredCapital)}</td><td>${nf(a.target.probability * 100, 1)}%</td></tr>`).join("") + "</tbody>";
+      [b, ...(d.alternatives || [])].map((a, i) => `<tr><td>${a.futuresSide || "—"}${i ? "" : " (chosen)"}</td><td>${a.legs.map((l) => (l.side === "buy" ? "+" : "−") + l.qty + " " + nf(l.strike, 1) + l.type[0].toUpperCase()).join(" ")}</td><td>${a.callLots ?? "—"}C/${a.putLots ?? "—"}P</td><td>${a.futures ? nf(a.futures.signedQty, 2) : "—"}</td><td>${usd(a.expected ? a.expected.upExpiry : null)}</td><td>${usd(a.expected ? a.expected.downExpiry : null)}</td><td>${usd(a.requiredCapital)}</td><td>${nf(a.target.probability * 100, 1)}%</td></tr>`).join("") + "</tbody>";
     $("bOrder").textContent = d.execution ? d.execution.reason + "\n\n" + JSON.stringify({ alpaca_options_order: d.execution.alpacaOrderPreview, hyperliquid_perp: f ? { coin: f.symbol, side: f.side === "LONG" ? "buy" : "sell", size: f.qty, limit_px: f.entry } : null }, null, 2) : "";
     $("bExecute").title = d.execution ? d.execution.reason : "";
     $("bAssumptions").textContent = "Assumptions: perp − stock basis held constant to expiry; perp funding, early assignment, liquidation and the stock/perp session gap are not modelled; long legs pay the ask, short legs receive the bid; capital = spread max losses + perp margin + entry fees.";

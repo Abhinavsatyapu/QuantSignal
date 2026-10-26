@@ -186,7 +186,7 @@
         "Futures entry fails retest, structure, 2R target, margin or risk gate",
       );
     for (const expiry of expiryGroups) {
-      const days = (Date.parse(expiry + "T20:00:00Z") - now) / 86400000;
+      const days = (Finance.closeMs(expiry) - now) / 86400000;
       if (!(days > 0)) continue;
       const group = quotes.filter((q) => q.expiry === expiry),
         atm = group
