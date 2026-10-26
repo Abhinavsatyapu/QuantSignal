@@ -14,7 +14,7 @@
   const S = root.Strategy;
   const fin = (x) => typeof x === "number" && Number.isFinite(x);
   const DAY = 864e5;
-  const WEEKLY_ATR_DEFAULTS = { atrPeriod: 14, upperMult: 0.7, lowerMult: 0.7, zoneMinSigma: 0.7, zoneMaxSigma: 1.2, scaleToExpiry: false, atrSource: "auto", debitLongSigma: 0.1, wingSigma: 0.47 };
+  const WEEKLY_ATR_DEFAULTS = { atrPeriod: 14, upperMult: 0.42, lowerMult: 0.41, zoneMinSigma: 0.7, zoneMaxSigma: 1.2, scaleToExpiry: false, atrSource: "auto", debitLongSigma: 0.1, wingSigma: 0.47 };
   // Monday (YYYY-MM-DD) of the week containing an ISO date
   function weekStartOf(date) {
     const d = new Date(String(date).slice(0, 10) + "T00:00:00Z"), dow = (d.getUTCDay() + 6) % 7;
@@ -95,7 +95,7 @@
     if (pe.moved) warnings.push("PE short " + peSnap + " (nearest listed to spot − " + w.lowerMult + "×ATR) fails the liquidity filters; using the nearest liquid put " + pe.q.strike + ".");
     const dist = (k) => ({ dollars: k - spot, pct: (k / spot - 1) * 100, atrs: (k - spot) / eff, sigmas: sigma > 0 ? (k - spot) / sigma : null });
     const info = { atr: w.atr, n: w.n, source: w.source || null, sourceKind: w.sourceKind || null, barsUsed: w.barsUsed ?? null, firstWeek: w.firstWeek || null, lastWeek: w.lastWeek || null, recentBars: w.recentBars || null,
-      upperMult: w.upperMult, lowerMult: w.lowerMult, scaleToExpiry: !!w.scaleToExpiry, tradingDays, scale, effectiveAtr: eff, spot,
+      upperMult: w.upperMult, lowerMult: w.lowerMult, multSource: w.multSource || null, scaleToExpiry: !!w.scaleToExpiry, tradingDays, scale, effectiveAtr: eff, spot,
       zoneMinSigma: fin(w.zoneMinSigma) ? w.zoneMinSigma : null, zoneMaxSigma: fin(w.zoneMaxSigma) ? w.zoneMaxSigma : null, ceRawTarget, peRawTarget, ceClamped: Math.abs(ceD - ceRaw) > 1e-9, peClamped: Math.abs(peD - peRaw) > 1e-9,
       ceTarget, peTarget, ceSnapped: ceSnap, peSnapped: peSnap, ceShort: ce.q.strike, peShort: pe.q.strike, ceMoved: ce.moved, peMoved: pe.moved,
       ceDistance: dist(ce.q.strike), peDistance: dist(pe.q.strike), debitLongSigma: fin(w.debitLongSigma) ? w.debitLongSigma : WEEKLY_ATR_DEFAULTS.debitLongSigma, wingSigma: fin(w.wingSigma) ? w.wingSigma : WEEKLY_ATR_DEFAULTS.wingSigma };

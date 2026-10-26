@@ -113,7 +113,7 @@ test('cholesky reproduces the correlation matrix', () => {
 const ANCHOR = { source: 'fixture sheets', groups: {
   credit2: { n: 8, source: 'TEST sheets, credit 2× debit lots (8 rows)', debitLongSigma: 0.09, debitShortSigma: 0.79, creditShortSigma: 0.61, wingSigma: 0.33, debitShortPct: 6.7, creditShortPct: 5.4, debitShortAtr: 0.53, creditShortAtr: 0.42 },
   credit05: { n: 7, source: 'pooled sheets, credit ½× debit lots (7 rows)', debitLongSigma: 0.17, debitShortSigma: 0.99, creditShortSigma: 0.76, wingSigma: 0.51 } } };
-const SHEET = { minShortSigma: null, maxShortSigma: 2.5 }; // middle zone off → the 0.8–1.3× sheet band alone
+const SHEET = { selection: 'band', minShortSigma: null, maxShortSigma: 2.5 }; // legacy band search, middle zone off → the 0.8–1.3× sheet band alone
 const sheetRun = (cfg = {}, extra = {}) => run({ ...SHEET, ...cfg }, { bandAtr: { atr: 9, source: 'fixture' }, sheetAnchor: ANCHOR, ...extra });
 const inB = (x, B) => x >= B.loSigmas - 1e-9 && x <= B.hiSigmas + 1e-9;
 test('sheet band: each short searched within 0.8–1.3× its sheet distance (per ratio and side); rules, both ratios and sheet deviation reported', () => {
@@ -160,8 +160,8 @@ test('sheet band: no liquid strike inside a band → nearest liquid strike used,
   assert.ok(o.distanceBand.variants.some(v => v.fallback));
 });
 
-test('middle zone (default 0.7–1.2σ): both shorts searched in the zone, sheet anchor clamped into it, chosen shorts inside', () => {
-  const o = run({}, { bandAtr: { atr: 9, source: 'fixture' }, sheetAnchor: ANCHOR }), b = o.distanceBand;
+test('legacy band selection, middle zone (0.7–1.2σ): both shorts searched in the zone, sheet anchor clamped into it, chosen shorts inside', () => {
+  const o = run({ selection: 'band' }, { bandAtr: { atr: 9, source: 'fixture' }, sheetAnchor: ANCHOR }), b = o.distanceBand;
   assert.equal(o.status, 'OK', JSON.stringify(o.errors)); assert.equal(b.mode, 'middle zone + sheet anchor'); assert.deepEqual([b.minShortSigma, b.maxShortSigma], [0.7, 1.2]);
   for (const v of b.variants) for (const k of ['ce', 'pe']) {
     assert.ok(Math.abs(v[k].loSigmas - 0.7) < 1e-9 && Math.abs(v[k].hiSigmas - 1.2) < 1e-9, v.variant + k);
@@ -169,7 +169,7 @@ test('middle zone (default 0.7–1.2σ): both shorts searched in the zone, sheet
   }
   const v2 = b.variants.find(v => v.variant === '2C:1P'); // LONG 2C:1P: CE = credit short 0.61σ, PE = debit short 0.79σ → both anchored at the zone midpoint 0.95σ
   assert.equal(v2.rawSheet.creditShortSigma, 0.61); assert.ok(v2.ce.clampedToZone && Math.abs(v2.ce.sheetSigmas - 0.95) < 1e-9 && Math.abs(v2.pe.sheetSigmas - 0.95) < 1e-9);
-  const wideSheet = run({}, { sheetAnchor: { groups: { credit2: { ...ANCHOR.groups.credit2, debitShortSigma: 1.1, creditShortSigma: 1.6 } } } }).distanceBand.variants.find(v => v.variant === '2C:1P');
+  const wideSheet = run({ selection: 'band' }, { sheetAnchor: { groups: { credit2: { ...ANCHOR.groups.credit2, debitShortSigma: 1.1, creditShortSigma: 1.6 } } } }).distanceBand.variants.find(v => v.variant === '2C:1P');
   assert.ok(Math.abs(wideSheet.pe.sheetSigmas - 1.1) < 1e-9 && Math.abs(wideSheet.ce.sheetSigmas - 1.2) < 1e-9); // wider sheets kept, clamped to the 1.2σ ceiling
   for (const v of o.variants.filter(x => x.reachable)) { const e = b.variants.find(x => x.variant === v.key); if (e.fallback) continue;
     assert.ok(v.distances.ce.sigmas >= 0.7 - 1e-9 && v.distances.ce.sigmas <= 1.2 + 1e-9, v.id + ' CE ' + v.distances.ce.sigmas); assert.ok(-v.distances.pe.sigmas >= 0.7 - 1e-9 && -v.distances.pe.sigmas <= 1.2 + 1e-9, v.id + ' PE'); }

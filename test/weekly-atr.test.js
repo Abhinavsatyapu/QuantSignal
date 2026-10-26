@@ -142,14 +142,14 @@ test('server: weekly ATR source falls back from perp candles to stock daily OHLC
   assert.equal(opt.status, 'OK', JSON.stringify(opt.errors));
   const r2 = strategy.saveRun({ out: opt, chain: { contracts: chain(100, 0.6), label: 'fixture', stock: { price: 100, source: 'fixture' } }, perp: perp(100), t: 'TEST', expiry: EXP, method: 'optimizer', cfg: { sheetBandLow: 0.8, sheetBandHigh: 1.3, minShortSigma: 0.7, maxShortSigma: 1.2 }, market: null, source: 'builder' });
   const db2 = db.prepare('SELECT distance_band, inputs FROM strategy_runs WHERE id=?').get(r2.id), band = JSON.parse(db2.distance_band);
-  assert.deepEqual([band.band.mode, band.band.sheetBandLow, band.band.sheetBandHigh, band.band.minShortSigma, band.band.minShortAtr, band.band.maxShortSigma, band.band.weeklyAtr], ['middle zone + sheet anchor', 0.8, 1.3, 0.7, null, 1.2, 9]);
+  assert.deepEqual([band.band.mode, band.band.sheetBandLow, band.band.sheetBandHigh, band.band.minShortSigma, band.band.minShortAtr, band.band.maxShortSigma, band.band.weeklyAtr], ['sheet geometry + zone clamp', 0.8, 1.3, 0.7, null, 1.2, 9]);
   assert.equal(band.anchor.groups.credit2.debitShortSigma, 0.79); assert.equal(band.band.variants.length, 2); assert.ok(band.band.variants.every(v => v.sheet && v.ce && v.pe));
   assert.equal(band.chosen.ce.strike, opt.best.exits[0].price); assert.ok(band.chosen.ce.sheet && band.chosen.ce.deviation); assert.ok(band.pairs.length >= 1 && band.pairs[0].ceSheetSigmas != null);
   assert.equal(JSON.parse(db2.inputs).distanceBand.band.sheetBandHigh, 1.3);
 });
 
-test('weekly ATR method: defaults 0.7 × ATR, distances clamped into the 0.7–1.2σ middle zone (raised / lowered and said so)', () => {
-  assert.deepEqual([S.WEEKLY_ATR_DEFAULTS.upperMult, S.WEEKLY_ATR_DEFAULTS.lowerMult, S.WEEKLY_ATR_DEFAULTS.zoneMinSigma, S.WEEKLY_ATR_DEFAULTS.zoneMaxSigma], [0.7, 0.7, 0.7, 1.2]);
+test('weekly ATR method: defaults = the sheets\' pooled 0.42 / 0.41 × ATR, distances clamped into the 0.7–1.2σ middle zone (raised / lowered and said so)', () => {
+  assert.deepEqual([S.WEEKLY_ATR_DEFAULTS.upperMult, S.WEEKLY_ATR_DEFAULTS.lowerMult, S.WEEKLY_ATR_DEFAULTS.zoneMinSigma, S.WEEKLY_ATR_DEFAULTS.zoneMaxSigma], [0.42, 0.41, 0.7, 1.2]);
   const o = run({}, { upperMult: 0.7, lowerMult: 1.5, zoneMinSigma: 0.7, zoneMaxSigma: 1.2 }), w = o.weeklyAtr, sigma = o.expectedMove;
   // 0.7 × 6.3 = 4.41 < 0.7σ → raised to 0.7σ; 1.5 × 6.3 = 9.45 > 1.2σ → lowered to 1.2σ
   assert.ok(w.ceClamped && w.peClamped); assert.ok(Math.abs(w.ceTarget - (100 + 0.7 * sigma)) < 1e-9 && Math.abs(w.peTarget - (100 - 1.2 * sigma)) < 1e-9);

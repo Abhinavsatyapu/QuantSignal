@@ -3,6 +3,8 @@
 // One engine (public/strategy-engine.js) is shared with the browser; every recommendation is stored in SQLite so later
 // runs can be compared with realised outcomes, and per-ticker parameters are calibrated from the reference sheets + history.
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 require('../public/strategy-engine.js');
 require('../public/strategy-optimizer.js');
 require('../public/strategy-weekly-atr.js');
@@ -64,15 +66,27 @@ function calibration(ticker) {
 // short, debit long and credit wing) for each lot-ratio group, plus the same shorts as % of spot. "credit2" = the credit spread
 // carries 2× the debit lots (the sheets' usual structure), "credit05" = the other ratio. Ticker rows are used when there are
 // ≥ 3 of them for that group, else the pooled rows of that group, else the pooled credit2 calibration.
-function sheetAnchor(ticker) {
-  const { rows, res } = reference(), cal = calibration(ticker);
+// Per-sheet weekly-ATR multiples, frozen by scripts/strike-audit.js (no network at request time)
+let sheetAtrFile = null;
+function sheetAtr() {
+  if (sheetAtrFile) return sheetAtrFile;
+  try { sheetAtrFile = JSON.parse(fs.readFileSync(path.join(__dirname, '../data/reference/sheet-atr.json'), 'utf8')).pages || {}; } catch { sheetAtrFile = {}; }
+  return sheetAtrFile;
+}
+function atrMedians(pages) {
+  const A = sheetAtr(), rows = pages.map(p => A[p]).filter(Boolean), m = (k) => { const v = median(rows.map(x => x[k]).filter(Number.isFinite)); return Number.isFinite(v) ? Math.round(v * 1000) / 1000 : null; };
+  return rows.length ? { debitShortAtr: m('debitShortAtr'), creditShortAtr: m('creditShortAtr'), wingAtr: m('wingAtr'), ceShortAtr: m('ceShortAtr'), peShortAtr: m('peShortAtr'), atrRows: rows.length } : {};
+}
+function sheetAnchor(ticker, opts = {}) {
+  const { rows, res } = reference(), cal = calibration(ticker), exS = new Set([opts.excludePage, ...(opts.excludePages || [])].filter(x => x != null)), ex = { has: (p) => exS.has(p) };
   const clamp = (x, lo, hi, d) => (Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) : d), r2 = (x) => (Number.isFinite(x) ? Math.round(x * 100) / 100 : null);
-  const pick = (t, ratio) => res.map((r, i) => ({ r, d: rows[i] })).filter(({ r, d }) => (!t || d.symbol === t) && r.pattern && r.pattern !== 'mixed' && r.creditToDebitLots === ratio && r.sigmaGeometry);
+  const pick = (t, ratio) => res.map((r, i) => ({ r, d: rows[i] })).filter(({ r, d }) => !ex.has(d.page) && (!t || d.symbol === t) && r.pattern && r.pattern !== 'mixed' && r.creditToDebitLots === ratio && r.sigmaGeometry);
   const pctOf = (r) => { const callIsCredit = /call credit/i.test(r.pattern); return { debit: Math.abs(callIsCredit ? r.shortPutPct : r.shortCallPct), credit: Math.abs(callIsCredit ? r.shortCallPct : r.shortPutPct) }; };
   const make = (list, label) => ({ n: list.length, source: label, rows: list.map(({ d }) => d.page),
     debitLongSigma: r2(clamp(median(list.map(x => x.r.sigmaGeometry.debitLongOtm)), 0, 0.5, 0.1)), debitShortSigma: r2(clamp(median(list.map(x => x.r.sigmaGeometry.debitShort)), 0.3, 1.8, 0.9)),
     creditShortSigma: r2(clamp(median(list.map(x => x.r.sigmaGeometry.creditShort)), 0.25, 1.6, 0.63)), wingSigma: r2(clamp(median(list.map(x => x.r.sigmaGeometry.creditWing)), 0.15, 1.2, 0.47)),
-    debitShortPct: r2(median(list.map(x => pctOf(x.r).debit))), creditShortPct: r2(median(list.map(x => pctOf(x.r).credit))) });
+    debitShortPct: r2(median(list.map(x => pctOf(x.r).debit))), creditShortPct: r2(median(list.map(x => pctOf(x.r).credit))),
+    ...atrMedians(list.map(({ d }) => d.page)) });
   const group = (ratio, name) => {
     const own = ticker ? pick(ticker, ratio) : [], all = pick(null, ratio);
     if (own.length >= 3) return { ...make(own, `${ticker} reference sheets, ${name} (${own.length} rows)`), scope: 'ticker', _rows: own };
@@ -80,34 +94,16 @@ function sheetAnchor(ticker) {
     return null;
   };
   const credit2 = group(2, 'credit 2× debit lots'), credit05 = group(0.5, 'credit ½× debit lots');
-  return { ticker, source: credit2 ? credit2.source : cal.source, groups: { credit2, credit05 }, calibration: { source: cal.source, debitLongSigma: cal.debitLongSigma, debitShortSigma: cal.debitShortSigma, creditShortSigma: cal.creditShortSigma, wingSigma: cal.wingSigma } };
+  // CE / PE short as × weekly ATR over all of this ticker's sheets (≥3 rows) or all sheets → Weekly ATR method defaults
+  const tk = ticker ? rows.filter(d => d.symbol === ticker && !ex.has(d.page)).map(d => d.page) : [], allPages = rows.filter(d => !ex.has(d.page)).map(d => d.page), tkA = atrMedians(tk);
+  const atrMultiples = tkA.atrRows >= 3 ? { ce: tkA.ceShortAtr, pe: tkA.peShortAtr, n: tkA.atrRows, scope: 'ticker', source: `${ticker} reference sheets (${tkA.atrRows} rows)` } : (() => { const a = atrMedians(allPages); return { ce: a.ceShortAtr, pe: a.peShortAtr, n: a.atrRows, scope: 'pooled', source: `all reference sheets (${a.atrRows} rows)` }; })();
+  return { ticker, source: credit2 ? credit2.source : cal.source, groups: { credit2, credit05 }, atrMultiples, calibration: { source: cal.source, debitLongSigma: cal.debitLongSigma, debitShortSigma: cal.debitShortSigma, creditShortSigma: cal.creditShortSigma, wingSigma: cal.wingSigma } };
 }
-// Typical sheet short distance as a multiple of the weekly ATR at the time each sheet trade was opened (Wilder 14 on Nasdaq
-// daily OHLC → weekly bars completed before the open week). Ticker-scope groups only; best effort (null + note on failure).
-const sheetAtrCache = new Map();
 async function sheetAnchorWithAtr(ticker) {
-  const a = sheetAnchor(ticker), key = ticker, hit = sheetAtrCache.get(key);
-  const strip = (g) => { if (g) delete g._rows; return g; };
-  const groups = Object.values(a.groups).filter(g => g && g.scope === 'ticker');
-  if (!groups.length) { Object.values(a.groups).forEach(strip); a.atrNote = 'no ticker-specific sheet rows: × weekly ATR of the sheets not derived'; return a; }
-  try {
-    let daily = hit && Date.now() - hit.at < 6 * 36e5 ? hit.v : null;
-    if (!daily) {
-      const first = Math.min(...groups.flatMap(g => g._rows.map(x => Date.parse(x.d.openDate))));
-      daily = await withRetry(() => nasdaqDailyOHLC(ticker, Math.ceil((Date.now() - first) / 864e5) + 7 * 18)); sheetAtrCache.set(key, { at: Date.now(), v: daily });
-    }
-    for (const g of groups) {
-      const dm = [], cm = [];
-      for (const { r, d } of g._rows) {
-        const w = Strategy.wilderAtr(Strategy.weeklyBarsFromDaily(daily, { beforeWeek: Strategy.weekStartOf(d.openDate) }), 14); if (!w || !(w.atr > 0)) continue;
-        const callIsCredit = /call credit/i.test(r.pattern), S = r.S;
-        dm.push(Math.abs(callIsCredit ? r.shortPutPct : r.shortCallPct) / 100 * S / w.atr); cm.push(Math.abs(callIsCredit ? r.shortCallPct : r.shortPutPct) / 100 * S / w.atr);
-      }
-      g.debitShortAtr = dm.length ? Math.round(median(dm) * 100) / 100 : null; g.creditShortAtr = cm.length ? Math.round(median(cm) * 100) / 100 : null; g.atrRows = dm.length;
-    }
-    a.atrNote = 'sheet × weekly ATR = |short − spot| at the sheet open ÷ Wilder 14-week ATR (Nasdaq ' + ticker + ' daily OHLC, weeks completed before the open)';
-  } catch (e) { a.atrNote = 'sheet × weekly ATR unavailable (' + e.message + ')'; }
-  Object.values(a.groups).forEach(strip);
+  // the sheet × weekly ATR medians come from data/reference/sheet-atr.json (frozen Nasdaq history), already on every group
+  const a = sheetAnchor(ticker);
+  Object.values(a.groups).forEach(g => { if (g) delete g._rows; });
+  a.atrNote = Object.keys(sheetAtr()).length ? 'sheet × weekly ATR = |short − spot| at the sheet open ÷ Wilder 14-week ATR (Nasdaq daily OHLC, weeks completed before the open; data/reference/sheet-atr.json)' : 'sheet × weekly ATR unavailable (data/reference/sheet-atr.json missing)';
   return a;
 }
 
@@ -397,7 +393,7 @@ const T_RE = /^[A-Z][A-Z0-9.]{0,9}$/;
 const tick = s => { const t = String(s || '').trim().toUpperCase(); if (!T_RE.test(t)) throw httpErr(400, 'Enter a valid US ticker, e.g. NVDA'); return t; };
 const num = (v, d) => (v === '' || v == null ? d : Number(v));
 
-const weeklyAtrRecord = (w) => (w ? { method: 'weekly_atr', atr: w.atr, effectiveAtr: w.effectiveAtr, n: w.n, upperMult: w.upperMult, lowerMult: w.lowerMult, zoneMinSigma: w.zoneMinSigma, zoneMaxSigma: w.zoneMaxSigma, ceRawTarget: w.ceRawTarget, peRawTarget: w.peRawTarget, ceClamped: w.ceClamped, peClamped: w.peClamped, scaleToExpiry: w.scaleToExpiry, scale: w.scale, tradingDays: w.tradingDays, source: w.source, sourceKind: w.sourceKind,
+const weeklyAtrRecord = (w) => (w ? { method: 'weekly_atr', atr: w.atr, effectiveAtr: w.effectiveAtr, n: w.n, upperMult: w.upperMult, lowerMult: w.lowerMult, multSource: w.multSource, zoneMinSigma: w.zoneMinSigma, zoneMaxSigma: w.zoneMaxSigma, ceRawTarget: w.ceRawTarget, peRawTarget: w.peRawTarget, ceClamped: w.ceClamped, peClamped: w.peClamped, scaleToExpiry: w.scaleToExpiry, scale: w.scale, tradingDays: w.tradingDays, source: w.source, sourceKind: w.sourceKind,
   spot: w.spot, ceTarget: w.ceTarget, peTarget: w.peTarget, ceShort: w.ceShort, peShort: w.peShort, ceDistance: w.ceDistance, peDistance: w.peDistance, firstWeek: w.firstWeek, lastWeek: w.lastWeek } : null);
 // optimizer short-distance band + the chosen distances (training data)
 const distanceRecord = (out) => { const b = out.distanceBand, best = out.best;
@@ -476,7 +472,9 @@ function router({ stockSymbols }) {
     const c = b.cfg || {};
     let atrOpts = null;
     if (method === 'weekly_atr') {
-      atrOpts = { n: num(c.atrPeriod, 14), upperMult: num(c.upperMult, 0.7), lowerMult: num(c.lowerMult, 0.7), zoneMinSigma: c.zoneMinSigma === undefined ? 0.7 : num(c.zoneMinSigma, null), zoneMaxSigma: c.zoneMaxSigma === undefined ? 1.2 : num(c.zoneMaxSigma, null), scaleToExpiry: c.scaleToExpiry === true || c.scaleToExpiry === 'true', source: ['perp', 'stock'].includes(c.atrSource) ? c.atrSource : 'auto' };
+      const sheetMult = (x) => x === undefined || x === null || x === '' || x === 'sheet'; // blank = the sheets' own × ATR for this ticker (pooled fallback)
+      const am = sheetMult(c.upperMult) || sheetMult(c.lowerMult) ? sheetAnchor(ticker).atrMultiples : null, r2m = (x, d) => (Number.isFinite(x) ? Math.round(x * 100) / 100 : d);
+      atrOpts = { n: num(c.atrPeriod, 14), upperMult: sheetMult(c.upperMult) ? r2m(am && am.ce, 0.42) : num(c.upperMult, 0.42), lowerMult: sheetMult(c.lowerMult) ? r2m(am && am.pe, 0.41) : num(c.lowerMult, 0.41), multSource: sheetMult(c.upperMult) || sheetMult(c.lowerMult) ? (am ? am.source : 'pooled sheet medians') : 'user', zoneMinSigma: c.zoneMinSigma === undefined ? 0.7 : num(c.zoneMinSigma, null), zoneMaxSigma: c.zoneMaxSigma === undefined ? 1.2 : num(c.zoneMaxSigma, null), scaleToExpiry: c.scaleToExpiry === true || c.scaleToExpiry === 'true', source: ['perp', 'stock'].includes(c.atrSource) ? c.atrSource : 'auto' };
       const bad = Strategy.validateWeeklyAtr({ atr: 1, ...atrOpts }); if (bad.length) throw httpErr(400, bad.join('; '));
     }
     const [market, events, wAtr] = method === 'delta' ? [null, null, null] : await Promise.all([marketFor(perp), opt ? eventsFor(t).catch(e => ({ notes: [e.message] })) : null, method === 'weekly_atr' ? weeklyAtrFor(t, perp, atrOpts) : method === 'optimizer' ? weeklyAtrFor(t, perp, { n: 14 }).catch(e => ({ error: e.message })) : null]);
@@ -497,7 +495,7 @@ function router({ stockSymbols }) {
     const input = { ticker: t, expiry, contracts: chain.contracts, stock: chain.stock, perp, cfg, market: market && !market.error ? market : null, referenceLots: referenceLots(), events, weights: W ? W.weights : undefined };
     if (opt && market && market.error) input.market = market; // decideDirection explains the failure
     if (method === 'optimizer') { input.bandAtr = wAtr && !wAtr.error ? { atr: wAtr.atr, source: wAtr.source } : { error: (wAtr && wAtr.error) || 'not fetched' }; input.sheetAnchor = anchor; }
-    if (method === 'weekly_atr' && wAtr) input.weeklyAtr = { ...wAtr, upperMult: atrOpts.upperMult, lowerMult: atrOpts.lowerMult, zoneMinSigma: atrOpts.zoneMinSigma, zoneMaxSigma: atrOpts.zoneMaxSigma, scaleToExpiry: atrOpts.scaleToExpiry, tradingDays: Strategy.tradingDaysTo(expiry), debitLongSigma: c.useCalibration === false ? 0.1 : cal.debitLongSigma, wingSigma: c.useCalibration === false ? 0.47 : cal.wingSigma };
+    if (method === 'weekly_atr' && wAtr) input.weeklyAtr = { ...wAtr, upperMult: atrOpts.upperMult, lowerMult: atrOpts.lowerMult, multSource: atrOpts.multSource, zoneMinSigma: atrOpts.zoneMinSigma, zoneMaxSigma: atrOpts.zoneMaxSigma, scaleToExpiry: atrOpts.scaleToExpiry, tradingDays: Strategy.tradingDaysTo(expiry), debitLongSigma: c.useCalibration === false ? 0.1 : cal.debitLongSigma, wingSigma: c.useCalibration === false ? 0.47 : cal.wingSigma };
     const out = opt ? Strategy.optimize(input) : method === 'reference' ? Strategy.buildReference(input) : Strategy.build(input);
     if (notices.length) out.warnings = [...notices, ...(out.warnings || [])];
     if (W) out.weightsInfo = { id: W.id, source: W.source, closedRuns: W.closed_runs };
