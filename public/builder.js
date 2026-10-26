@@ -50,7 +50,7 @@
       $("bExpiryNote").textContent = `${d.expiries.length} expiries from ${d.label}${d.snapshotTime ? " · chain snapshot " + ist(d.snapshotTime) : ""}${d.stock ? " · stock " + nf(d.stock.price) + " (" + d.stock.source + ")" : ""}. Reference sheets used 2–8 calendar-day expiries.`;
       const c = d.calibration;
       $("bCalNote").textContent = `Calibration: ${c.source} → debit long ${c.debitLongSigma}σ OTM, debit short ${c.debitShortSigma}σ, credit short ${c.creditShortSigma}σ, credit wing ${c.wingSigma}σ, perp factor ${c.futuresFactor}` + (c.history.closedRuns ? ` · ${c.history.closedRuns} recorded outcomes, median realised/expected ${nf(c.history.medianRealisedToExpected, 2)}` : " · no recorded outcomes yet");
-      $("bBuild").disabled = !d.perp.available && $("bMethod").value !== "optimizer";
+      $("bBuild").disabled = !d.perp.available && !isOpt($("bMethod").value);
       if (!d.perp.available) $("bPerp").innerHTML += " The optimizer will hedge with the stock instead (warned in the result).";
       api("/strategy/weights").then((w) => ($("bWeights").textContent = "Scoring weights (stored, #" + w.current.id + ", " + w.current.source + "): " + Object.entries(w.current.weights).map(([k, x]) => k + " " + x).join(", ") + ". Tuning starts after " + w.minClosedForTuning + " closed runs with realised P&L.")).catch(() => {});
       Deriv.set({ ticker: t, expiry: sel.value });
@@ -62,7 +62,10 @@
   $("bLoad").onclick = loadExpiries;
   $("bTicker").addEventListener("keydown", (e) => { if (e.key === "Enter") loadExpiries(); });
   $("bExpiry").onchange = () => Deriv.set({ expiry: $("bExpiry").value });
-  $("bMethod").onchange = () => { if (expiriesData) $("bBuild").disabled = !expiriesData.perp.available && $("bMethod").value !== "optimizer"; };
+  const isOpt = (m) => m === "optimizer" || m === "weekly_atr"; // weekly ATR runs on the optimizer's machinery (stock hedge fallback, what-if, scaling)
+  const methodLabel = { optimizer: "Optimizer", reference: "Reference σ", delta: "Delta (1:2)", weekly_atr: "Weekly ATR" };
+  const syncMethod = () => { $("bAtrFields").hidden = $("bMethod").value !== "weekly_atr"; if (expiriesData) $("bBuild").disabled = !expiriesData.perp.available && !isOpt($("bMethod").value); };
+  $("bMethod").onchange = syncMethod; syncMethod();
 
   function cfg() {
     const v = (id) => $(id).value, n = (id) => (v(id) === "" ? null : Number(v(id)));
@@ -70,14 +73,15 @@
     return { targetMode: v("bTargetMode"), targetPerLotSet: n("bTargetPer"), lotSets: n("bLotSets"), direction: sig === "AUTO" ? "AUTO" : sig, signal: sig === "BOTH" ? "AUTO" : sig, callLotUnits: n("bCallUnits"), putLotUnits: n("bPutUnits"), slippage: n("bSlip"), minOpenInterest: n("bMinOI"),
       marginDivisor: n("bMarginDiv"), futuresRound: n("bRound"), targetPnl: Number(v("bTarget")), capital: n("bCapital"), maxLossPct: n("bMaxLoss"), mmLoss: n("bMm"), maxSpreadPct: n("bSpread"), maxLots: n("bLots"),
       leverage: n("bLev"), commission: n("bComm"), futureFeePct: n("bFee"), debitShortSigma: v("bDebitSigma"), creditShortSigma: v("bCreditSigma"), wingSigma: v("bWingSigma"), useCalibration: $("bCal").checked,
-      deltaDirection: v("bDir") };
+      deltaDirection: v("bDir"), upperMult: n("bAtrUp"), lowerMult: n("bAtrDn"), atrPeriod: n("bAtrN"), atrSource: v("bAtrSrc"), scaleToExpiry: $("bAtrScale").checked };
   }
   function validate(c) {
     const e = [], m = $("bMethod").value;
     if (c.targetMode === "fixed" ? !(c.targetPnl > 0) : !(c.targetPerLotSet > 0)) e.push("Target P&L must be positive.");
     if (c.targetMode !== "fixed" && !(Number.isInteger(c.lotSets) && c.lotSets >= 1)) e.push("Lot sets must be a whole number ≥ 1.");
     if ((c.callLotUnits == null) !== (c.putLotUnits == null)) e.push("Enter both lot-ratio numbers or neither.");
-    if (m !== "optimizer" && !(c.capital > 0)) e.push("The reference / delta methods need a capital amount (Advanced).");
+    if (m === "weekly_atr") { if (!(c.upperMult > 0 && c.upperMult <= 5) || !(c.lowerMult > 0 && c.lowerMult <= 5)) e.push("Upper and lower distances must be > 0 and ≤ 5 × weekly ATR."); if (!(Number.isInteger(c.atrPeriod) && c.atrPeriod >= 2 && c.atrPeriod <= 52)) e.push("ATR period N must be a whole number 2–52."); }
+    if (!isOpt(m) && !(c.capital > 0)) e.push("The reference / delta methods need a capital amount (Advanced).");
     if (c.slippage != null && !(c.slippage >= 0 && c.slippage <= 1)) e.push("Haircut must be 0–1.");
     return e;
   }
@@ -85,7 +89,7 @@
     const c = cfg(), bad = validate(c);
     if (bad.length) { $("bStatus").textContent = bad.join(" "); return; }
     $("bBuild").disabled = true; $("bStatus").textContent = "Fetching the " + $("bExpiry").value + " chain, Hyperliquid book, indicators and events; searching strike sets and running the what-if analysis…";
-    const m = $("bMethod").value; if (m === "delta") c.direction = c.deltaDirection; if (m !== "optimizer") { c.maxLossPct = c.maxLossPct ?? 50; }
+    const m = $("bMethod").value; if (m === "delta") c.direction = c.deltaDirection; if (!isOpt(m)) { c.maxLossPct = c.maxLossPct ?? 50; }
     try { last = await api("/strategy/build", { ticker: $("bTicker").value, expiry: $("bExpiry").value, method: m, cfg: c }); render(last); $("bStatus").textContent = last.id ? "Saved as run #" + last.id + " (inputs, structure, alternatives, what-if summary and chain summary)." : ""; loadHistory(); }
     catch (e) { $("bStatus").textContent = e.message; }
     finally { $("bBuild").disabled = false; }
@@ -106,9 +110,10 @@
     $("bDirection").hidden = !d.direction; if (d.direction) $("bDirection").innerHTML = "<b>Direction:</b> " + esc(d.direction.reason);
     if (!b && d.rejected && d.rejected.length) $("bErrors").innerHTML += "<br><br>Candidates rejected by the what-if gates:<br>" + d.rejected.map((r) => esc(r.futuresSide + " " + r.variant + " " + r.legs.map((l) => (l.side === "buy" ? "+" : "−") + l.qty + " " + l.strike + l.type[0].toUpperCase()).join(" ") + " → " + r.whatIf.gates.join("; "))).join("<br>");
     renderVariants(d);
+    renderAtr(d);
     if (d.data && d.data.quoteTime && Deriv.quoteTime) Deriv.quoteTime(d.data.quoteTime);
     $("bBody").hidden = !b;
-    $("bScale").hidden = !b || d.method !== "optimizer";
+    $("bScale").hidden = !b || !isOpt(d.method);
     if (!b) return;
     const f = b.futures;
     $("bMetrics").innerHTML = [
@@ -150,7 +155,7 @@
     $("bAssumptions").textContent = "Assumptions: perp − stock basis held constant to expiry; perp funding, early assignment, liquidation and the stock/perp session gap are not modelled; long legs pay the ask, short legs receive the bid; capital = spread max losses + perp margin + entry fees.";
     draw(d, b);
     renderWhatIf(d, b);
-    if (d.method === "optimizer") { $("bScaleLots").value = b.lotSets; renderScale(b.lotSets); }
+    if (isOpt(d.method)) { $("bScaleLots").value = b.lotSets; renderScale(b.lotSets); }
   }
   // ---- instant lot scaling (client-side: same quotes, Strategy.rescale = legs × k, perp re-equalised then floored to 5, full what-if)
   function renderScale(L) {
@@ -200,6 +205,16 @@
     const ev = w.events;
     $("bWiEvents").innerHTML = ev.note && !ev.source ? `<p>${esc(ev.note)}</p>` : `<p>Earnings: <b class="${ev.earningsBeforeExpiry ? "neg" : ""}">${esc(ev.earningsDate || "unknown")}</b>${ev.earningsBeforeExpiry ? " — BEFORE expiry: expect an IV crush (see the −40% column) and a gap; consider an expiry before the report." : ""}</p><p>Last/next ex-dividend: <b class="${ev.exDividendBeforeExpiry ? "neg" : ""}">${esc(ev.exDividendDate || "unknown")}</b>${ev.exDividendBeforeExpiry ? " — before expiry: early assignment risk on short calls." : ""}</p><p class="market-note">${esc(ev.source || "")}${(ev.notes || []).length ? " · " + esc(ev.notes.join("; ")) : ""}</p>`;
     $("bWiRobust").textContent = w.robustness.note + " Worst cell: " + (w.robustness.worstCell ? w.robustness.worstCell.exit + " exit, " + w.robustness.worstCell.date + ", IV " + w.robustness.worstCell.shock + "% → " + usd(w.robustness.worstCell.pnl) : "—") + ".";
+  }
+  function renderAtr(d) {
+    const w = d.weeklyAtr; $("bAtrBox").hidden = !w; if (!w) return;
+    const sg = (v) => (v >= 0 ? "+" : "−"), dist = (x) => sg(x.dollars) + usd(Math.abs(x.dollars), 2) + " · " + sg(x.pct) + nf(Math.abs(x.pct), 2) + "%" + (x.sigmas != null ? " · " + sg(x.sigmas) + nf(Math.abs(x.sigmas), 2) + "σ" : "");
+    $("bAtrMetrics").innerHTML = [["Weekly ATR (N=" + w.n + ", Wilder)", usd(w.atr, 2)], ["ATR used" + (w.scaleToExpiry ? " (× √(" + w.tradingDays + "/5) = " + nf(w.scale, 3) + ")" : " (unscaled)"), usd(w.effectiveAtr, 2)], ["Spot", nf(w.spot)],
+      ["CE short (spot + " + nf(w.upperMult, 2) + "×ATR → " + nf(w.ceTarget) + ")", nf(w.ceShort)], ["CE distance", dist(w.ceDistance)], ["PE short (spot − " + nf(w.lowerMult, 2) + "×ATR → " + nf(w.peTarget) + ")", nf(w.peShort)], ["PE distance", dist(w.peDistance)], ["Trading days to expiry", String(w.tradingDays)]]
+      .map(([k, v]) => `<div class="m"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("");
+    $("bAtrNote").textContent = "Source: " + (w.source || "—") + (w.firstWeek ? " · weeks " + w.firstWeek + " → " + w.lastWeek + " (" + w.barsUsed + " completed bars; the forming week is excluded)" : "") + (w.ceMoved || w.peMoved ? " · a snapped strike failed the liquidity filters and was moved (see warnings)" : "") + ". Holidays are not removed from the trading-day count.";
+    const bars = w.recentBars || [];
+    $("bAtrBars").innerHTML = "<thead><tr><th>Week of</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Days</th></tr></thead><tbody>" + bars.slice().reverse().map((x) => `<tr><td>${esc(x.week)}</td><td class="num">${nf(x.o)}</td><td class="num">${nf(x.h)}</td><td class="num">${nf(x.l)}</td><td class="num">${nf(x.c)}</td><td class="num">${x.days}</td></tr>`).join("") + "</tbody>";
   }
   function renderVariants(d) {
     const vs = d.variants || [];
@@ -256,10 +271,12 @@
     try {
       const { runs } = await api("/strategy/history?limit=100" + t); histRuns = runs;
       const legStr = (r) => (r.legs && r.legs.legs ? r.legs.legs.map((l) => (l.side === "buy" ? "+" : "−") + l.qty + " " + l.strike + l.type[0].toUpperCase()).join(" ") : "—");
+      const methodTag = (r) => { const w = r.weekly_atr, lab = methodLabel[r.method] || r.method || "—";
+        return w ? `<span class="method-tag atr" data-tip="${esc("ATR " + usd(w.atr, 2) + " (N=" + w.n + (w.scaleToExpiry ? ", scaled ×" + nf(w.scale, 2) : "") + ") · upper " + w.upperMult + "× → CE " + w.ceShort + " · lower " + w.lowerMult + "× → PE " + w.peShort + " · " + (w.sourceKind || ""))}" tabindex="0">${esc(lab)} ${nf(w.upperMult, 2)}×/${nf(w.lowerMult, 2)}×</span>` : `<span class="method-tag">${esc(lab)}</span>`; };
       const state = (r) => (r.realised_pnl != null ? `<span class="${cls(r.realised_pnl)}">closed ${usd(r.realised_pnl)}</span>` : r.taken === 1 ? "taken · open" : r.taken === 0 ? "not taken" : "—");
       const auto = (r) => (r.auto_outcome && Number.isFinite(r.auto_outcome.pnl) ? `<span class="${cls(r.auto_outcome.pnl)}" data-tip="${esc((r.auto_outcome.exit ? r.auto_outcome.exit + " exit touched " : "no exit touched; expiry close ") + "at " + nf(r.auto_outcome.price) + " · projected " + usd(r.auto_outcome.projected) + " · " + r.auto_outcome.source)}" tabindex="0">${usd(r.auto_outcome.pnl)}</span>` : r.auto_outcome && r.auto_outcome.error ? "n/a" : "after expiry");
-      $("hTable").innerHTML = "<thead><tr><th>#</th><th>Saved</th><th>Source</th><th>Ticker</th><th>Expiry</th><th>Status</th><th>Legs</th><th>Perp</th><th>Lot sets</th><th>Variant</th><th>Target</th><th>Exp. up / down</th><th>Capital</th><th>Model</th><th>Trade</th><th>Auto outcome</th><th></th></tr></thead><tbody>" +
-        (runs.length ? runs.map((r) => `<tr><td>${r.id}</td><td>${ist(new Date(r.ts).toISOString())}</td><td>${esc(r.source || "builder")}${r.plan_id ? " #" + r.plan_id : ""}</td><td>${esc(r.ticker)}</td><td>${esc(r.expiry)}</td><td>${esc(r.status)}</td><td class="mono">${legStr(r)}</td><td class="num">${r.futures_qty != null ? nf(r.futures_qty, 0) : "—"}</td><td class="num">${r.lot_sets ?? "—"}</td><td>${esc(r.chosen_variant || r.recommended_variant || "—")}</td><td class="num">${usd(r.target_pnl)}</td><td class="num">${usd(r.expected_up)} / ${usd(r.expected_down)}</td><td class="num">${usd(r.required_capital)}</td><td>${r.model_version ? "v" + r.model_version : "—"}</td><td>${state(r)}</td><td>${auto(r)}</td><td class="h-actions">${r.status === "OK" && r.realised_pnl == null ? `<button class="ghost" data-act="trade" data-id="${r.id}">Taken / fills…</button><button class="ghost" data-act="skip" data-id="${r.id}">Not taken</button>` : ""}</td></tr>`).join("") : `<tr><td colspan="17"><div class="empty-state">No runs yet — every analysis you run is saved here.</div></td></tr>`) + "</tbody>";
+      $("hTable").innerHTML = "<thead><tr><th>#</th><th>Saved</th><th>Source</th><th>Ticker</th><th>Expiry</th><th>Method</th><th>Status</th><th>Legs</th><th>Perp</th><th>Lot sets</th><th>Variant</th><th>Target</th><th>Exp. up / down</th><th>Capital</th><th>Model</th><th>Trade</th><th>Auto outcome</th><th></th></tr></thead><tbody>" +
+        (runs.length ? runs.map((r) => `<tr><td>${r.id}</td><td>${ist(new Date(r.ts).toISOString())}</td><td>${esc(r.source || "builder")}${r.plan_id ? " #" + r.plan_id : ""}</td><td>${esc(r.ticker)}</td><td>${esc(r.expiry)}</td><td>${methodTag(r)}</td><td>${esc(r.status)}</td><td class="mono">${legStr(r)}</td><td class="num">${r.futures_qty != null ? nf(r.futures_qty, 0) : "—"}</td><td class="num">${r.lot_sets ?? "—"}</td><td>${esc(r.chosen_variant || r.recommended_variant || "—")}</td><td class="num">${usd(r.target_pnl)}</td><td class="num">${usd(r.expected_up)} / ${usd(r.expected_down)}</td><td class="num">${usd(r.required_capital)}</td><td>${r.model_version ? "v" + r.model_version : "—"}</td><td>${state(r)}</td><td>${auto(r)}</td><td class="h-actions">${r.status === "OK" && r.realised_pnl == null ? `<button class="ghost" data-act="trade" data-id="${r.id}">Taken / fills…</button><button class="ghost" data-act="skip" data-id="${r.id}">Not taken</button>` : ""}</td></tr>`).join("") : `<tr><td colspan="18"><div class="empty-state">No runs yet — every analysis you run is saved here.</div></td></tr>`) + "</tbody>";
     } catch (e) { $("hTable").innerHTML = `<tr><td><div class="error-state">${esc(e.message)}</div></td></tr>`; }
     api("/strategy/model").then((m) => { const c = m.calibration, v = m.version;
       $("hModel").innerHTML = `<b>Model v${v.id}</b> · ${esc(new Date(v.at).toLocaleString())} · ${esc(v.source)} · ${m.history.length} version(s) kept · outcomes: ${m.counts.actual || 0} actual, ${m.counts.auto || 0} auto; ${m.counts.taken || 0} taken of ${m.counts.runs} runs` +

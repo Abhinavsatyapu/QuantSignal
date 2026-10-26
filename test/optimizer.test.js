@@ -4,7 +4,8 @@ const assert = require('node:assert/strict');
 require('../public/strategy-engine.js');
 require('../public/strategy-optimizer.js');
 const S = globalThis.Strategy;
-const NOW = Date.now(), EXP = (() => { const d = new Date(NOW + 4 * 864e5); return d.toISOString().slice(0, 10); })();
+// fixed time-to-expiry (4.7 days) so the fixtures do not depend on the wall-clock hour (the date-only expiry used to make T vary by up to a day)
+const EXP = new Date(Date.now() + 5 * 864e5).toISOString().slice(0, 10), NOW = S.expiryCloseMs(EXP) - 4.7 * 864e5;
 function chain(spot, iv, { oi = 500 } = {}) {
   const T = (S.expiryCloseMs(EXP) - NOW) / (365 * 864e5), out = [];
   for (let i = -20; i <= 20; i++) { const K = Math.round((spot + i * 2.5) / 2.5) * 2.5; for (const type of ['call', 'put']) {
@@ -14,7 +15,7 @@ function chain(spot, iv, { oi = 500 } = {}) {
   return out;
 }
 const perp = (x) => ({ available: true, symbol: 'xyz:TEST', bid: x - 0.01, ask: x + 0.01, mid: x, szDecimals: 2, maxLeverage: 10, funding: 0.00001 });
-const run = (cfg = {}, extra = {}) => S.optimize({ ticker: 'TEST', expiry: EXP, contracts: chain(100, 0.6), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { targetMode: 'fixed', targetPnl: 400, ...cfg }, market: { direction: 'LONG', score: 7, maxScore: 8, trend: 'UP', momentum: 'UP', rsi: 60 }, ...extra });
+const run = (cfg = {}, extra = {}) => S.optimize({ nowMs: NOW, ticker: 'TEST', expiry: EXP, contracts: chain(100, 0.6), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { targetMode: 'fixed', targetPnl: 400, ...cfg }, market: { direction: 'LONG', score: 7, maxScore: 8, trend: 'UP', momentum: 'UP', rsi: 60 }, ...extra });
 
 test('decideDirection: signal, lean and override', () => {
   assert.deepEqual(S.decideDirection({ direction: 'LONG', score: 7, maxScore: 8, trend: 'UP', momentum: 'UP', rsi: 60 }).sides, ['LONG']);
@@ -46,7 +47,7 @@ test('optimize: per-lot-set target scales with the lots (lot sets fixed, target 
 });
 
 test('optimize: refuses an illiquid chain and falls back to a stock hedge without a perp', () => {
-  const thin = S.optimize({ ticker: 'TEST', expiry: EXP, contracts: chain(100, 0.6, { oi: 1 }), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { targetMode: 'fixed', targetPnl: 400 } });
+  const thin = S.optimize({ nowMs: NOW, ticker: 'TEST', expiry: EXP, contracts: chain(100, 0.6, { oi: 1 }), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { targetMode: 'fixed', targetPnl: 400 } });
   assert.notEqual(thin.status, 'OK');
   const st = run({}, { perp: { available: false, reason: 'no perp' } });
   assert.equal(st.hedgeType, 'STOCK'); assert.ok(st.warnings.some(w => /stock/i.test(w)));
@@ -69,7 +70,7 @@ test('what-if: expiry column equals a hand payoff, IV shock 0 equals the base, f
 });
 
 test('what-if: finish-above probability matches the closed-form lognormal; EV of a pure long hedge is the forward drift', () => {
-  const o = run(), b = o.best, w = b.whatIf, T = Math.max(1e-6, (Date.parse(o.expiryCloseUtc) - Date.now()) / (365 * 864e5)), sig = o.atmIV, r = o.cfg.r;
+  const o = run(), b = o.best, w = b.whatIf, T = Math.max(1e-6, (Date.parse(o.expiryCloseUtc) - NOW) / (365 * 864e5)), sig = o.atmIV, r = o.cfg.r;
   const N = (x) => 0.5 * (1 + erf(x / Math.SQRT2)), erf = (x) => { const t = 1 / (1 + 0.3275911 * Math.abs(x)), y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x); return x >= 0 ? y : -y; };
   const d2 = (Math.log(o.spot / b.exits[0].price) + (r - sig * sig / 2) * T) / (sig * Math.sqrt(T));
   assert.ok(Math.abs(w.probs.finishAboveCE - N(d2)) < 0.01, w.probs.finishAboveCE + ' vs ' + N(d2));

@@ -5,6 +5,7 @@
 const express = require('express');
 require('../public/strategy-engine.js');
 require('../public/strategy-optimizer.js');
+require('../public/strategy-weekly-atr.js');
 const { Strategy } = globalThis;
 const deriv = require('./derivatives');
 const alpaca = require('./alpaca');
@@ -60,7 +61,7 @@ function calibration(ticker) {
 }
 
 // ---- columns added later (idempotent)
-for (const col of ['recommended_variant TEXT', 'chosen_variant TEXT', 'variants TEXT', 'lot_sets INTEGER', 'source TEXT', 'plan_id INTEGER', 'market TEXT', 'considered TEXT', 'multiplier REAL', 'taken INTEGER', 'entry_fills TEXT', 'exit_fills TEXT', 'closed_at INTEGER', 'auto_outcome TEXT', 'auto_checked_at INTEGER', 'model_version INTEGER']) { try { db.exec('ALTER TABLE strategy_runs ADD COLUMN ' + col); } catch (e) { if (!/duplicate column/i.test(e.message)) throw e; } }
+for (const col of ['recommended_variant TEXT', 'chosen_variant TEXT', 'variants TEXT', 'lot_sets INTEGER', 'source TEXT', 'plan_id INTEGER', 'market TEXT', 'considered TEXT', 'multiplier REAL', 'taken INTEGER', 'entry_fills TEXT', 'exit_fills TEXT', 'closed_at INTEGER', 'auto_outcome TEXT', 'auto_checked_at INTEGER', 'model_version INTEGER', 'weekly_atr TEXT']) { try { db.exec('ALTER TABLE strategy_runs ADD COLUMN ' + col); } catch (e) { if (!/duplicate column/i.test(e.message)) throw e; } }
 // What the reference sheets did per perp side (1C:2P vs 2C:1P), used as one input to the variant recommendation.
 let refLots = null;
 function referenceLots() {
@@ -110,7 +111,7 @@ async function withRetry(fn, tries = 3) { let e; for (let i = 0; i < tries; i++)
 function friendlyFetchError(e) { const m = String(e && e.message || e); return /fetch failed|ECONN|ETIMEDOUT|abort|timeout|5\d\d|429/i.test(m) ? 'Options data source unavailable after 3 attempts (' + m.slice(0, 80) + '). Try again in a minute.' : m; }
 // ---- export / import (JSON backup of History, weights and settings) + durable mirror
 const persist = require('./persist');
-const RUN_COLS = ['ts', 'ticker', 'expiry', 'method', 'status', 'provider', 'quote_time', 'spot', 'atm_iv', 'perp_symbol', 'futures_qty', 'target_pnl', 'expected_up', 'expected_down', 'required_capital', 'inputs', 'chain_summary', 'legs', 'result', 'realised_pnl', 'realised_at', 'outcome_notes', 'recommended_variant', 'chosen_variant', 'variants', 'lot_sets', 'source', 'plan_id', 'market', 'considered', 'multiplier', 'taken', 'entry_fills', 'exit_fills', 'closed_at', 'auto_outcome', 'auto_checked_at', 'model_version'];
+const RUN_COLS = ['ts', 'ticker', 'expiry', 'method', 'status', 'provider', 'quote_time', 'spot', 'atm_iv', 'perp_symbol', 'futures_qty', 'target_pnl', 'expected_up', 'expected_down', 'required_capital', 'inputs', 'chain_summary', 'legs', 'result', 'realised_pnl', 'realised_at', 'outcome_notes', 'recommended_variant', 'chosen_variant', 'variants', 'lot_sets', 'source', 'plan_id', 'market', 'considered', 'multiplier', 'taken', 'entry_fills', 'exit_fills', 'closed_at', 'auto_outcome', 'auto_checked_at', 'model_version', 'weekly_atr'];
 function exportAll() {
   const acct = db.prepare('SELECT settings, updated_at FROM account_settings WHERE id=1').get();
   return { format: 'quantsignal-strategy-export', version: 1, exportedAt: new Date().toISOString(), account: acct ? JSON.parse(acct.settings) : null,
@@ -195,6 +196,43 @@ async function nasdaqDaily(t) {
     nasdaqCache.set(t, { at: Date.now(), v }); return v;
   } catch (e) { return null; }
 }
+// ---- weekly ATR price history: the perp's Hyperliquid candles (the source the indicators use) first, then the stock's
+// Nasdaq daily OHLC. Neither offers weekly bars here, so weekly bars are built from daily OHLC; the forming week is dropped.
+const atrCache = new Map();
+const ETF = ['SPY', 'QQQ', 'IWM', 'DIA'];
+async function nasdaqDailyOHLC(t, days) {
+  const from = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
+  const r = await fetch(`https://api.nasdaq.com/api/quote/${t}/historical?assetclass=${ETF.includes(t) ? 'etf' : 'stocks'}&fromdate=${from}&limit=400`, { headers: { 'User-Agent': 'Mozilla/5.0 QuantSignal', Accept: 'application/json' }, signal: AbortSignal.timeout(8000) });
+  if (!r.ok) throw Error('Nasdaq HTTP ' + r.status);
+  const j = await r.json(), n = (x) => Number(String(x).replace(/[$,]/g, ''));
+  return (j?.data?.tradesTable?.rows || []).map((x) => { const m = String(x.date).match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? { date: m[3] + '-' + m[1] + '-' + m[2], o: n(x.open), h: n(x.high), l: n(x.low), c: n(x.close) } : null; }).filter(Boolean);
+}
+async function weeklyAtrFor(t, perp, { n = 14, source = 'auto' } = {}) {
+  const key = [t, perp && perp.symbol, n, source].join('|'), hit = atrCache.get(key);
+  if (hit && Date.now() - hit.at < 36e5) return hit.v;
+  const days = 7 * (n + 16), notes = [], recent = (bars) => bars.slice(-n).map(b => ({ week: b.week, o: b.o, h: b.h, l: b.l, c: b.c, days: b.days }));
+  let v = null;
+  if (source !== 'stock' && perp && perp.available && !perp.isStock) {
+    try {
+      const c = await withRetry(() => hl.candles('mainnet', perp.symbol, '1d', days));
+      const bars = Strategy.weeklyBarsFromDaily(c.map(k => ({ date: new Date(k.t).toISOString().slice(0, 10), o: k.o, h: k.h, l: k.l, c: k.c })), { beforeWeek: Strategy.weekStartOf(new Date().toISOString().slice(0, 10)) });
+      const a = Strategy.wilderAtr(bars, n);
+      if (a) v = { ...a, sourceKind: 'perp', source: 'Hyperliquid ' + perp.symbol + ' daily candles → weekly bars (Mon–Sun UTC; the perp trades 24/7)', recentBars: recent(bars) };
+      else notes.push('Hyperliquid ' + perp.symbol + ' has only ' + bars.length + ' completed weeks (need ' + (n + 1) + ')');
+    } catch (e) { notes.push('Hyperliquid candles unavailable (' + e.message + ')'); }
+  } else if (source !== 'stock') notes.push('no Hyperliquid perp for ' + t);
+  if (!v && source !== 'perp') {
+    try {
+      const bars = Strategy.weeklyBarsFromDaily(await withRetry(() => nasdaqDailyOHLC(t, days)), { beforeWeek: weekStartNY(Date.now()) });
+      const a = Strategy.wilderAtr(bars, n);
+      if (a) v = { ...a, sourceKind: 'stock', source: 'Nasdaq ' + t + ' daily OHLC → weekly bars (Mon–Fri)' + (notes.length ? ' · fallback: ' + notes.join('; ') : ''), recentBars: recent(bars) };
+      else notes.push('Nasdaq has only ' + bars.length + ' completed weeks for ' + t + ' (need ' + (n + 1) + ')');
+    } catch (e) { notes.push('Nasdaq daily history unavailable (' + e.message + ')'); }
+  }
+  if (!v) throw httpErr(502, 'Weekly ATR unavailable for ' + t + ': ' + notes.join('; ') + '.');
+  atrCache.set(key, { at: Date.now(), v });
+  return v;
+}
 function corrOf(a, b) {
   if (!a || !b) return null;
   const mp = new Map(); a.times.forEach((t, i) => mp.set(t, a.closes[i]));
@@ -215,7 +253,7 @@ function outcomeOf(r) {
   return null;
 }
 function calibrationStats() {
-  const rows = db.prepare("SELECT id, ticker, result, legs, entry_fills, realised_pnl, auto_outcome, market FROM strategy_runs WHERE status='OK' AND method='optimizer'").all();
+  const rows = db.prepare("SELECT id, ticker, result, legs, entry_fills, realised_pnl, auto_outcome, market FROM strategy_runs WHERE status='OK' AND method IN ('optimizer','weekly_atr')").all();
   const proj = [], hits = { ce: 0, pe: 0, none: 0, n: 0 }, slip = {}, byTicker = {};
   for (const r of rows) {
     const o = outcomeOf(r), x = JSON.parse(r.result || '{}'), bst = x.best; if (!bst) continue;
@@ -236,7 +274,7 @@ function calibrationStats() {
     byTicker: Object.fromEntries(Object.entries(byTicker).map(([k, v]) => [k, { n: v.n, meanError: v.sumErr / v.n }])) };
 }
 function retuneWeights(reason = 'outcome recorded') {
-  const rows = db.prepare("SELECT result, realised_pnl, auto_outcome, target_pnl FROM strategy_runs WHERE method='optimizer' AND status='OK' AND (realised_pnl IS NOT NULL OR auto_outcome IS NOT NULL)").all()
+  const rows = db.prepare("SELECT result, realised_pnl, auto_outcome, target_pnl FROM strategy_runs WHERE method IN ('optimizer','weekly_atr') AND status='OK' AND (realised_pnl IS NOT NULL OR auto_outcome IS NOT NULL)").all()
     .map(r => { const x = JSON.parse(r.result || '{}'), o = outcomeOf(r); return { f: x.best && x.best.factors, exp: x.best ? Math.min(x.best.expected.upExpiry, x.best.expected.downExpiry) : null, real: o && o.pnl, w: o ? o.w : 0, tgt: r.target_pnl }; })
     .filter(r => r.f && Number.isFinite(r.exp) && Number.isFinite(r.real) && r.tgt > 0);
   const cal = calibrationStats(), cur = currentWeights();
@@ -307,6 +345,8 @@ const T_RE = /^[A-Z][A-Z0-9.]{0,9}$/;
 const tick = s => { const t = String(s || '').trim().toUpperCase(); if (!T_RE.test(t)) throw httpErr(400, 'Enter a valid US ticker, e.g. NVDA'); return t; };
 const num = (v, d) => (v === '' || v == null ? d : Number(v));
 
+const weeklyAtrRecord = (w) => (w ? { method: 'weekly_atr', atr: w.atr, effectiveAtr: w.effectiveAtr, n: w.n, upperMult: w.upperMult, lowerMult: w.lowerMult, scaleToExpiry: w.scaleToExpiry, scale: w.scale, tradingDays: w.tradingDays, source: w.source, sourceKind: w.sourceKind,
+  spot: w.spot, ceTarget: w.ceTarget, peTarget: w.peTarget, ceShort: w.ceShort, peShort: w.peShort, ceDistance: w.ceDistance, peDistance: w.peDistance, firstWeek: w.firstWeek, lastWeek: w.lastWeek } : null);
 function saveRun({ out, chain, perp, t, expiry, method, cfg, market, source, planId, multiplier }) {
     const quoteTimes = chain.contracts.map(q => Date.parse(q.quoteTime)).filter(Number.isFinite);
     const quoteTime = quoteTimes.length ? new Date(Math.max(...quoteTimes)).toISOString() : chain.stock?.time || null;
@@ -314,7 +354,7 @@ function saveRun({ out, chain, perp, t, expiry, method, cfg, market, source, pla
     const best = out.best, now = Date.now();
     const row = { ts: now, ticker: t, expiry, method, status: out.status, provider: chain.label, quote_time: quoteTime, spot: out.spot ?? null, atm_iv: out.atmIV ?? null, perp_symbol: perp.symbol || null,
       futures_qty: best?.futures?.signedQty ?? null, target_pnl: (out.cfg && out.cfg.targetPnl) ?? cfg.targetPnl ?? null, expected_up: best?.expected?.upExpiry ?? best?.target?.pnlAtTargetPrice ?? null, expected_down: best?.expected?.downExpiry ?? null, required_capital: best?.requiredCapital ?? null,
-      inputs: JSON.stringify({ ticker: t, expiry, method, cfg }), chain_summary: JSON.stringify({ ...data, liquidity: out.liquidity, atmIV: out.atmIV, expectedMove: out.expectedMove, spot: out.spot, basis: out.basis }),
+      inputs: JSON.stringify({ ticker: t, expiry, method, cfg, ...(out.weeklyAtr ? { weeklyAtr: weeklyAtrRecord(out.weeklyAtr) } : {}) }), chain_summary: JSON.stringify({ ...data, liquidity: out.liquidity, atmIV: out.atmIV, expectedMove: out.expectedMove, spot: out.spot, basis: out.basis }),
       legs: JSON.stringify(best ? { legs: best.legs.map(({ greeks, ...l }) => ({ ...l, delta: greeks?.delta })), futures: best.futures } : null),
       result: JSON.stringify({ ...out, considered: undefined, best: best ? { ...best, curve: undefined, whatIf: whatIfSummary(best.whatIf) } : undefined, rejected: undefined, variants: undefined,
         alternatives: (out.alternatives || []).map(a => ({ variant: a.variant, side: a.futuresSide, legs: a.legs.map(l => (l.side === 'buy' ? '+' : '-') + l.qty + ' ' + l.strike + l.type[0].toUpperCase()).join(' '), perpQty: a.futures.signedQty, capital: a.capital.total, exits: a.exits.map(x => x.pnlExpiry), score: a.score, whatIf: whatIfSummary(a.whatIf) })) }),
@@ -328,6 +368,7 @@ function saveRun({ out, chain, perp, t, expiry, method, cfg, market, source, pla
       db.prepare('UPDATE strategy_runs SET recommended_variant=?, variants=?, lot_sets=?, source=?, plan_id=?, market=?, considered=?, multiplier=?, model_version=? WHERE id=?').run(recV, varJson, lotSets, source || 'builder', planId || null,
         JSON.stringify({ indicators: market || null, spot: out.spot ?? null, atmIV: out.atmIV ?? null, expectedMove: out.expectedMove ?? null, basis: out.basis ?? null, ivSkew: out.ivSkew || null, quoteTime, source: chain.label, delayed: !!chain.delayed, perp: perp ? { symbol: perp.symbol, bid: perp.bid, ask: perp.ask, funding: perp.funding ?? null } : null, legs: legIV, direction: out.direction || null, events: best && best.whatIf ? best.whatIf.events : null }),
         out.considered ? JSON.stringify(out.considered) : null, multiplier || 1, out.weightsInfo ? out.weightsInfo.id : null, id);
+      if (out.weeklyAtr) db.prepare('UPDATE strategy_runs SET weekly_atr=? WHERE id=?').run(JSON.stringify(weeklyAtrRecord(out.weeklyAtr)), id);
       changed('strategy_runs', id);
     }
     return { id, data };
@@ -361,7 +402,8 @@ function router({ stockSymbols }) {
   r.post('/strategy/build', wrap(async (req, res) => {
     const b = req.body || {}, t = tick(b.ticker), notices = [];
     let expiry = String(b.expiry || '');
-    const method = b.method === 'delta' ? 'delta' : b.method === 'reference' ? 'reference' : 'optimizer';
+    const method = b.method === 'delta' ? 'delta' : b.method === 'reference' ? 'reference' : b.method === 'weekly_atr' ? 'weekly_atr' : 'optimizer';
+    const opt = method === 'optimizer' || method === 'weekly_atr'; // weekly ATR = the optimizer's machinery with the two short strikes fixed
     // expiry: must be a listed, unexpired expiry; otherwise use the nearest valid one (≥ 1 day) and say so
     const ex = await withRetry(() => deriv.getExpiries(t)).catch(e => { throw httpErr(502, friendlyFetchError(e)); }), today = new Date().toISOString().slice(0, 10), listed = (ex.expiries || []).filter(e => e.date >= today).map(e => e.date);
     if (!listed.length) throw httpErr(404, 'No unexpired listed options for ' + t + ' (is it optionable?)');
@@ -372,14 +414,21 @@ function router({ stockSymbols }) {
       expiry = pick;
     }
     const [chain, perp] = await Promise.all([withRetry(() => deriv.getChain({ symbol: t, near: expiry, far: expiry })).catch(e => { throw httpErr(502, friendlyFetchError(e)); }), perpFor(t, stockSymbols)]);
-    const [market, events] = method === 'delta' ? [null, null] : await Promise.all([marketFor(perp), method === 'optimizer' ? eventsFor(t).catch(e => ({ notes: [e.message] })) : null]);
-    const cal = calibration(t), c = b.cfg || {};
-    const W = method === 'optimizer' ? currentWeights() : null;
-    const cfg = method === 'optimizer'
+    const c = b.cfg || {};
+    let atrOpts = null;
+    if (method === 'weekly_atr') {
+      atrOpts = { n: num(c.atrPeriod, 14), upperMult: num(c.upperMult, 1), lowerMult: num(c.lowerMult, 1), scaleToExpiry: c.scaleToExpiry === true || c.scaleToExpiry === 'true', source: ['perp', 'stock'].includes(c.atrSource) ? c.atrSource : 'auto' };
+      const bad = Strategy.validateWeeklyAtr({ atr: 1, ...atrOpts }); if (bad.length) throw httpErr(400, bad.join('; '));
+    }
+    const [market, events, wAtr] = method === 'delta' ? [null, null, null] : await Promise.all([marketFor(perp), opt ? eventsFor(t).catch(e => ({ notes: [e.message] })) : null, method === 'weekly_atr' ? weeklyAtrFor(t, perp, atrOpts) : null]);
+    const cal = calibration(t);
+    const W = opt ? currentWeights() : null;
+    const cfg = opt
       ? { targetMode: c.targetMode === 'fixed' ? 'fixed' : 'perLotSet', targetPerLotSet: num(c.targetPerLotSet, tickerTarget(getAccount(), t)), lotSets: num(c.lotSets, getAccount().defaultLotSets),
           targetPnl: c.targetMode === 'fixed' ? num(c.targetPnl ?? b.targetPnl) : null, direction: ['BULLISH', 'BEARISH', 'BOTH'].includes(c.direction) ? c.direction : ['BULLISH', 'BEARISH'].includes(c.signal) ? c.signal : 'AUTO',
           callLotUnits: num(c.callLotUnits, null), putLotUnits: num(c.putLotUnits, null), slippage: num(c.slippage, 0.5), capital: num(c.capital, null), maxLossPct: num(c.maxLossPct, null), minOpenInterest: num(c.minOpenInterest, 10),
-          maxSpreadPct: num(c.maxSpreadPct, 25), maxLots: num(c.maxLots, 60), mmLoss: num(c.mmLoss, 50), marginDivisor: num(c.marginDivisor, 2), leverage: num(c.leverage, 5), futuresRound: num(c.futuresRound, 5), commission: num(c.commission, 0.65), futureFeePct: num(c.futureFeePct, 0.045), maxPriceGapPct: num(c.maxPriceGapPct, 5), account: accountLimitsForBuild() }
+          maxSpreadPct: num(c.maxSpreadPct, 25), maxLots: num(c.maxLots, 60), mmLoss: num(c.mmLoss, 50), marginDivisor: num(c.marginDivisor, 2), leverage: num(c.leverage, 5), futuresRound: num(c.futuresRound, 5), commission: num(c.commission, 0.65), futureFeePct: num(c.futureFeePct, 0.045), maxPriceGapPct: num(c.maxPriceGapPct, 5), account: accountLimitsForBuild(),
+          ...(atrOpts ? { atrPeriod: atrOpts.n, upperMult: atrOpts.upperMult, lowerMult: atrOpts.lowerMult, scaleToExpiry: atrOpts.scaleToExpiry, atrSource: atrOpts.source } : {}) }
       : method === 'reference'
       ? { signal: ['BULLISH', 'BEARISH', 'AUTO'].includes(c.signal) ? c.signal : (['LONG', 'SHORT'].includes(c.futuresSide) ? (c.futuresSide === 'LONG' ? 'BULLISH' : 'BEARISH') : 'AUTO'),
           callLotUnits: num(c.callLotUnits, null), putLotUnits: num(c.putLotUnits, null), futuresSide: ['LONG', 'SHORT'].includes(c.futuresSide) ? c.futuresSide : undefined, futuresRound: num(c.futuresRound, 5), futuresFactor: num(c.futuresFactor, 1), marginDivisor: num(c.marginDivisor, 2), maxPriceGapPct: num(c.maxPriceGapPct, 5), targetPnl: num(c.targetPnl), capital: num(c.capital), maxLossPct: num(c.maxLossPct, 50), mmLoss: num(c.mmLoss, 50), maxSpreadPct: num(c.maxSpreadPct, 25), maxLots: num(c.maxLots, 30), leverage: num(c.leverage, 5), commission: num(c.commission, 0.65), futureFeePct: num(c.futureFeePct, 0.045),
@@ -387,8 +436,9 @@ function router({ stockSymbols }) {
           ...Object.fromEntries(['debitShortSigma', 'creditShortSigma', 'wingSigma'].filter(k => c[k] !== '' && c[k] != null && Number.isFinite(Number(c[k]))).map(k => [k, Number(c[k])])) }
       : { direction: ['LONG', 'SHORT', 'NEUTRAL'].includes(c.direction) ? c.direction : 'LONG', targetPnl: num(c.targetPnl), capital: num(c.capital), maxLossPct: num(c.maxLossPct, 50), ratio: num(c.ratio, 2), directionalPct: num(c.directionalPct, 25), maxSpreadPct: num(c.maxSpreadPct, 25), maxScale: num(c.maxLots, 25), leverage: num(c.leverage, 5), commission: num(c.commission, 0.65), futureFeePct: num(c.futureFeePct, 0.045) };
     const input = { ticker: t, expiry, contracts: chain.contracts, stock: chain.stock, perp, cfg, market: market && !market.error ? market : null, referenceLots: referenceLots(), events, weights: W ? W.weights : undefined };
-    if (method === 'optimizer' && market && market.error) input.market = market; // decideDirection explains the failure
-    const out = method === 'optimizer' ? Strategy.optimize(input) : method === 'reference' ? Strategy.buildReference(input) : Strategy.build(input);
+    if (opt && market && market.error) input.market = market; // decideDirection explains the failure
+    if (wAtr) input.weeklyAtr = { ...wAtr, upperMult: atrOpts.upperMult, lowerMult: atrOpts.lowerMult, scaleToExpiry: atrOpts.scaleToExpiry, tradingDays: Strategy.tradingDaysTo(expiry), debitLongSigma: c.useCalibration === false ? 0.1 : cal.debitLongSigma, wingSigma: c.useCalibration === false ? 0.47 : cal.wingSigma };
+    const out = opt ? Strategy.optimize(input) : method === 'reference' ? Strategy.buildReference(input) : Strategy.build(input);
     if (notices.length) out.warnings = [...notices, ...(out.warnings || [])];
     if (W) out.weightsInfo = { id: W.id, source: W.source, closedRuns: W.closed_runs };
     const best = out.best, { id, data } = saveRun({ out, chain, perp, t, expiry, method, cfg, market, source: 'builder' });
@@ -398,12 +448,12 @@ function router({ stockSymbols }) {
   }));
   r.get('/strategy/history', wrap(async (req, res) => {
     const t = req.query.ticker ? tick(req.query.ticker) : null, lim = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
-    const rows = db.prepare(`SELECT id,ts,ticker,expiry,method,status,provider,quote_time,spot,atm_iv,perp_symbol,futures_qty,target_pnl,expected_up,expected_down,required_capital,legs,realised_pnl,realised_at,outcome_notes,recommended_variant,chosen_variant,lot_sets,source,plan_id,multiplier,model_version,taken,entry_fills,exit_fills,closed_at,auto_outcome FROM strategy_runs ${t ? 'WHERE ticker=?' : ''} ORDER BY id DESC LIMIT ${lim}`).all(...(t ? [t] : []));
-    res.json({ runs: rows.map(x => ({ ...x, legs: x.legs ? JSON.parse(x.legs) : null, entry_fills: x.entry_fills ? JSON.parse(x.entry_fills) : null, exit_fills: x.exit_fills ? JSON.parse(x.exit_fills) : null, auto_outcome: x.auto_outcome ? JSON.parse(x.auto_outcome) : null })) });
+    const rows = db.prepare(`SELECT id,ts,ticker,expiry,method,status,provider,quote_time,spot,atm_iv,perp_symbol,futures_qty,target_pnl,expected_up,expected_down,required_capital,legs,realised_pnl,realised_at,outcome_notes,recommended_variant,chosen_variant,lot_sets,source,plan_id,multiplier,model_version,taken,entry_fills,exit_fills,closed_at,auto_outcome,weekly_atr FROM strategy_runs ${t ? 'WHERE ticker=?' : ''} ORDER BY id DESC LIMIT ${lim}`).all(...(t ? [t] : []));
+    res.json({ runs: rows.map(x => ({ ...x, legs: x.legs ? JSON.parse(x.legs) : null, entry_fills: x.entry_fills ? JSON.parse(x.entry_fills) : null, exit_fills: x.exit_fills ? JSON.parse(x.exit_fills) : null, auto_outcome: x.auto_outcome ? JSON.parse(x.auto_outcome) : null, weekly_atr: x.weekly_atr ? JSON.parse(x.weekly_atr) : null })) });
   }));
   r.get('/strategy/history/:id', wrap(async (req, res) => {
     const x = db.prepare('SELECT * FROM strategy_runs WHERE id=?').get(Number(req.params.id)); if (!x) throw httpErr(404, 'Not found');
-    for (const k of ['inputs', 'chain_summary', 'legs', 'result', 'variants']) x[k] = x[k] ? JSON.parse(x[k]) : null;
+    for (const k of ['inputs', 'chain_summary', 'legs', 'result', 'variants', 'weekly_atr']) x[k] = x[k] ? JSON.parse(x[k]) : null;
     res.json(x);
   }));
   r.post('/strategy/history/:id/outcome', wrap(async (req, res) => {
@@ -544,13 +594,14 @@ function router({ stockSymbols }) {
     const rows = db.prepare('SELECT * FROM strategy_runs ORDER BY id').all(), cols = ['id', 'ts', 'source', 'plan_id', 'ticker', 'expiry', 'method', 'status', 'provider', 'quote_time', 'spot', 'atm_iv', 'perp_symbol', 'futures_qty', 'lot_sets', 'multiplier', 'target_pnl', 'expected_up', 'expected_down', 'required_capital', 'recommended_variant', 'chosen_variant', 'model_version', 'taken', 'realised_pnl', 'realised_at', 'closed_at'];
     const esc = (v) => (v == null ? '' : /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v));
     const extra = (r) => { let a = {}, x = {}; try { a = r.auto_outcome ? JSON.parse(r.auto_outcome) : {}; } catch {} try { x = JSON.parse(r.result || '{}'); } catch {} const bst = x.best || {}, w = bst.whatIf || {};
-      return [bst.variant, bst.futuresSide, (bst.legs || []).map(l => (l.side === 'buy' ? '+' : '-') + l.qty + ' ' + l.strike + (l.type === 'call' ? 'C' : 'P')).join(' '), w.probs && w.probs.profit, w.probs && w.probs.expectedValue, w.account && w.account.riskLoss, a.exit, a.pnl, a.error, (x.recommendation || {}).reason]; };
+      let wa = null; try { wa = r.weekly_atr ? JSON.parse(r.weekly_atr) : null; } catch {}
+      return [wa ? wa.atr : null, wa ? wa.n : null, wa ? wa.upperMult : null, wa ? wa.lowerMult : null, wa ? wa.ceShort : null, wa ? wa.peShort : null, bst.variant, bst.futuresSide, (bst.legs || []).map(l => (l.side === 'buy' ? '+' : '-') + l.qty + ' ' + l.strike + (l.type === 'call' ? 'C' : 'P')).join(' '), w.probs && w.probs.profit, w.probs && w.probs.expectedValue, w.account && w.account.riskLoss, a.exit, a.pnl, a.error, (x.recommendation || {}).reason]; };
     res.setHeader('Content-Type', 'text/csv; charset=utf-8'); res.setHeader('Content-Disposition', 'attachment; filename="quantsignal-runs-' + new Date().toISOString().slice(0, 10) + '.csv"');
-    res.send([[...cols, 'variant', 'side', 'legs', 'prob_profit', 'expected_value', 'risk_loss', 'auto_exit', 'auto_pnl', 'auto_error_vs_projection', 'reason'].join(','), ...rows.map(r => [...cols.map(c => r[c]), ...extra(r)].map(esc).join(','))].join('\n'));
+    res.send([[...cols, 'weekly_atr', 'atr_n', 'atr_upper_mult', 'atr_lower_mult', 'atr_ce_short', 'atr_pe_short', 'variant', 'side', 'legs', 'prob_profit', 'expected_value', 'risk_loss', 'auto_exit', 'auto_pnl', 'auto_error_vs_projection', 'reason'].join(','), ...rows.map(r => [...cols.map(c => r[c]), ...extra(r)].map(esc).join(','))].join('\n'));
   });
   r.get('/strategy/weights', wrap(async (req, res) => res.json({ current: currentWeights(), history: db.prepare('SELECT id,ts,source,closed_runs FROM strategy_weights ORDER BY id DESC LIMIT 20').all(), minClosedForTuning: MIN_CLOSED_FOR_TUNING })));
   r.get('/strategy/calibration', wrap(async (req, res) => res.json(calibration(req.query.ticker ? tick(req.query.ticker) : null))));
   r.get('/strategy/reference', wrap(async (req, res) => { const { rows, res: an, summary } = reference(); res.json({ summary, rows: rows.map((x, i) => ({ ...x, analysis: an[i] })) }); }));
   return r;
 }
-module.exports = { initPersistence, exportAll, importAll, getAccount, router, calibration, reference, perpFor };
+module.exports = { initPersistence, exportAll, importAll, getAccount, router, calibration, reference, perpFor, saveRun, weeklyAtrFor };

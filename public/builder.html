@@ -25,7 +25,14 @@
 <details class="b-adv"><summary>Advanced overrides</summary><div class="b-grid">
 <label><span data-tip="Per lot set (default): target scales with the lots. Fixed total: the optimizer sizes the lots to reach the total below." tabindex="0">Target mode</span><select id="bTargetMode"><option value="perLotSet">Per lot set (scales with lots)</option><option value="fixed">Fixed total</option></select></label>
 <label>Fixed total target ($, fixed mode only)<input id="bTarget" type="number" min="1" step="50" value="400"></label>
-<label>Method<select id="bMethod"><option value="optimizer">Optimizer + what-if (default)</option><option value="reference">Reference-sheet rules (fixed σ distances)</option><option value="delta">Live Hedge delta method (original 1:2 code)</option></select></label>
+<label>Method<select id="bMethod"><option value="optimizer">Optimizer + what-if (default)</option><option value="reference">Reference-sheet rules (fixed σ distances)</option><option value="delta">Live Hedge delta method (original 1:2 code)</option><option value="weekly_atr">Weekly ATR distances</option></select></label>
+<fieldset id="bAtrFields" class="b-atr-fields" hidden><legend>Weekly ATR distances</legend><div class="b-grid">
+<label><span data-tip="CE short = nearest listed strike to spot + this multiple of the weekly ATR." tabindex="0">Upper distance (× weekly ATR)</span><input id="bAtrUp" type="number" min="0.1" max="5" step="0.05" value="1"></label>
+<label><span data-tip="PE short = nearest listed strike to spot − this multiple of the weekly ATR." tabindex="0">Lower distance (× weekly ATR)</span><input id="bAtrDn" type="number" min="0.1" max="5" step="0.05" value="1"></label>
+<label><span data-tip="Wilder ATR over this many completed weekly bars (true range of each weekly bar)." tabindex="0">ATR period N (weekly bars)</span><input id="bAtrN" type="number" min="2" max="52" step="1" value="14"></label>
+<label><span data-tip="Auto: the perp's Hyperliquid candles (the source the indicators use), else the stock's Nasdaq daily OHLC. Weekly bars are built from daily OHLC; the forming week is excluded." tabindex="0">Price history</span><select id="bAtrSrc"><option value="auto">Auto (perp candles → stock daily)</option><option value="perp">Hyperliquid perp daily candles</option><option value="stock">Nasdaq stock daily OHLC</option></select></label>
+<label class="check-label"><input id="bAtrScale" type="checkbox"> <span data-tip="Off (default): plain weekly ATR. On: ATR × √(trading days to expiry ÷ 5)." tabindex="0">Scale ATR to expiry (√(trading days ÷ 5))</span></label>
+</div><p class="market-note">The CE and PE short strikes are the exit / profit targets. Everything else (perp side from the signal, both lot ratios, perp qty floored to 5, margin, theta, long legs as in the reference method, liquidity filters, risk caps and the what-if) runs as for the optimizer.</p></fieldset>
 <label>Direction<select id="bSignal"><option value="AUTO">Auto from indicators (default)</option><option value="BULLISH">Bullish → LONG perp</option><option value="BEARISH">Bearish → SHORT perp</option><option value="BOTH">Compare both sides</option></select></label>
 <label>Fixed lot ratio · calls : puts (blank = compare both)<span class="b-ratio"><input id="bCallUnits" type="number" min="1" max="10" step="1" placeholder="auto" aria-label="Call lots"> : <input id="bPutUnits" type="number" min="1" max="10" step="1" placeholder="auto" aria-label="Put lots"></span></label>
 <label>Bid/ask haircut (0 = mid, 1 = full spread)<input id="bSlip" type="number" min="0" max="1" step="0.05" value="0.5"></label>
@@ -53,6 +60,7 @@
 <p id="bDataLine" class="b-provider"></p>
 <div id="bErrors" class="b-errors" hidden></div>
 <div id="bWarnings" class="b-warn" hidden></div><p id="bDirection" class="b-rec" hidden></p>
+<div id="bAtrBox" class="b-atr" hidden><h3>Weekly ATR distances</h3><div id="bAtrMetrics" class="b-metrics small"></div><p id="bAtrNote" class="market-note"></p><details><summary>Weekly bars used</summary><div class="market-scroll"><table class="b-table" id="bAtrBars"></table></div></details></div>
 <div id="bVariantsWrap" hidden><h3>Lot-ratio variants · 1 call : 2 puts vs 2 calls : 1 put</h3><p id="bRecReason" class="b-rec"></p><div id="bVariants" class="b-variants"></div><p id="bMarket" class="market-note"></p></div>
 <div id="bBody">
 <div id="bMetrics" class="b-metrics"></div>
@@ -96,5 +104,5 @@
 <div class="market-scroll"><table class="b-table" id="hTable"></table></div></section>
 </main>
 <script src="/deriv-shared.js"></script><script src="/strategy-engine.js"></script>
-<script src="/strategy-optimizer.js"></script><script src="/builder.js"></script><script src="/deriv-nav.js"></script>
+<script src="/strategy-optimizer.js"></script><script src="/strategy-weekly-atr.js"></script><script src="/builder.js"></script><script src="/deriv-nav.js"></script>
 </body></html>

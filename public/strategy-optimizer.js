@@ -179,6 +179,13 @@
     const band = (list, lo, hi) => { const g = list.filter((q) => q.strike >= lo && q.strike <= hi); return g.length ? g.reduce((n, q) => n + q.iv, 0) / g.length : null; };
     const putIV = band(puts, spot - sigma, spot - 0.25 * sigma), callIV = band(calls, spot + 0.25 * sigma, spot + sigma), skewPts = putIV != null && callIV != null ? (putIV - callIV) * 100 : null;
     const dir = decideDirection(input.market, cfg.direction);
+    // Weekly ATR distances method: the CE / PE short strikes are fixed from the weekly ATR (see strategy-weekly-atr.js)
+    let wa = null;
+    if (input.weeklyAtr) {
+      wa = S.resolveWeeklyAtrShorts(input.weeklyAtr, { spot, sigma, group, calls, puts, tradingDays: input.weeklyAtr.tradingDays ?? S.tradingDaysTo(input.expiry, now) });
+      if (wa.errors) return { status: wa.errors.some((e) => /liquid/i.test(e)) ? "NO_LIQUIDITY" : "INVALID", method: "weekly_atr", errors: wa.errors, liquidity, spot };
+      warnings.push(...wa.warnings);
+    }
     const step = 10 ** -(hedge.szDecimals || 0), unit = Math.max(step, cfg.futuresRound), floorQ = (x) => Math.sign(x) * Math.floor(Math.abs(x) / unit + 1e-9) * unit;
     const price = (q, side) => (side === "buy" ? q.mid + cfg.slippage * (q.ask - q.mid) : q.mid - cfg.slippage * (q.mid - q.bid));
     const mk = (q, side, qty) => ({ type: q.type, side, strike: q.strike, qty, premium: r6(price(q, side)), iv: q.iv, greeks: q.greeks, multiplier: 100, contract: q.symbol, expiry: q.expiry, bid: q.bid, ask: q.ask, mid: q.mid, spreadPct: q.spreadPct, bidSize: q.bidSize, askSize: q.askSize, openInterest: q.openInterest, volume: q.volume, quoteTime: q.quoteTime, ivSource: q.ivSource, greeksSource: q.greeksSource, provider: q.provider });
@@ -190,8 +197,11 @@
       const sd = (K) => d * (K - spot) / sigma; // signed σ distance on the debit side
       const dLongs = evenPick(D.filter((q) => sd(q.strike) >= -0.15 && sd(q.strike) <= 0.4).sort((a, b) => Math.abs(sd(a.strike) - 0.1) - Math.abs(sd(b.strike) - 0.1)).slice(0, 3), 3);
       const cShorts = evenPick(C.filter((q) => -sd(q.strike) >= 0.3 && -sd(q.strike) <= 1.3), 5);
-      for (const dl of dLongs) for (const ds of evenPick(D.filter((q) => d * (q.strike - dl.strike) > 0 && sd(q.strike) >= 0.4 && sd(q.strike) <= 1.5), 5))
-        for (const cs of cShorts) for (const cw of evenPick(C.filter((q) => d * (cs.strike - q.strike) / sigma >= 0.2 && d * (cs.strike - q.strike) / sigma <= 1.0), 4))
+      const sets = [];
+      if (wa) sets.push(...S.weeklyAtrStrikeSets(fs, wa, { spot, sigma, calls, puts }));
+      else for (const dl of dLongs) for (const ds of evenPick(D.filter((q) => d * (q.strike - dl.strike) > 0 && sd(q.strike) >= 0.4 && sd(q.strike) <= 1.5), 5))
+        for (const cs of cShorts) for (const cw of evenPick(C.filter((q) => d * (cs.strike - q.strike) / sigma >= 0.2 && d * (cs.strike - q.strike) / sigma <= 1.0), 4)) sets.push([dl, ds, cs, cw]);
+      for (const [dl, ds, cs, cw] of sets)
           for (const v of variants) {
             const dU = fs === "SHORT" ? v.call : v.put, cU = fs === "SHORT" ? v.put : v.call;
             const up = fs === "SHORT" ? ds.strike : cs.strike, dn = fs === "SHORT" ? cs.strike : ds.strike;
@@ -240,11 +250,11 @@
             cands.push({ fs, v, dl, ds, cs, cw, up, dn, ...pick, worstRisk, th, factors, sig, capitalTotal, doubled, doubledIsCredit, rich });
           }
     }
-    const common = { method: "optimizer", ticker: input.ticker, expiry: input.expiry, expiryCloseUtc: new Date(expiryMs).toISOString(), days, spot, spotSource: input.stock && input.stock.price > 0 ? input.stock.source : "hedge mid", basis, atmIV, expectedMove: sigma, ivSkew: { putIV, callIV, diffPts: skewPts },
+    const common = { method: wa ? "weekly_atr" : "optimizer", weeklyAtr: wa ? wa.info : undefined, ticker: input.ticker, expiry: input.expiry, expiryCloseUtc: new Date(expiryMs).toISOString(), days, spot, spotSource: input.stock && input.stock.price > 0 ? input.stock.source : "hedge mid", basis, atmIV, expectedMove: sigma, ivSkew: { putIV, callIV, diffPts: skewPts },
       liquidity, cfg, weights: W, direction: dir, warnings, priceGapPct, hedgeType: hedge.isStock ? "STOCK" : "PERP",
       perp: { symbol: hedge.symbol, bid: hedge.bid, ask: hedge.ask, mid: hedge.mid, szDecimals: hedge.szDecimals, maxLeverage: hedge.maxLeverage, time: hedge.time, isStock: !!hedge.isStock }, searched: { candidates: cands.length, misses } };
     if (!cands.length) {
-      const why = misses.wrongSign && !misses.notReachable && !misses.overLots ? "the equalising hedge has the wrong sign for every strike set" : "no strike set reaches $" + T0.toLocaleString("en-US") + " at both exits within " + cfg.maxLots + " lots" + (best1 > -Infinity ? " (best ≈ " + usd(best1) + ")" : "") + (misses.overCapital ? "; " + misses.overCapital + " exceeded your capital limit" : "") + (misses.overRisk ? "; " + misses.overRisk + " exceeded your max-loss limit" : "");
+      const why = wa && !cands.length && !misses.wrongSign && !misses.notReachable && !misses.overLots && !misses.overCapital && !misses.overRisk ? "no strike set could be formed around the weekly-ATR shorts (CE " + wa.info.ceShort + " / PE " + wa.info.peShort + ")" : misses.wrongSign && !misses.notReachable && !misses.overLots ? "the equalising hedge has the wrong sign for every strike set" : "no strike set reaches $" + T0.toLocaleString("en-US") + " at both exits within " + cfg.maxLots + " lots" + (best1 > -Infinity ? " (best ≈ " + usd(best1) + ")" : "") + (misses.overCapital ? "; " + misses.overCapital + " exceeded your capital limit" : "") + (misses.overRisk ? "; " + misses.overRisk + " exceeded your max-loss limit" : "");
       return { ...common, status: "TARGET_NOT_REACHABLE", errors: ["Target not reachable: " + why + ". Lower the target or pick a later expiry."], bestAchievable: best1 > -Infinity ? best1 : null, variants: [] };
     }
     // ---- score: normalise capital, then shortlist and add probability
@@ -276,13 +286,13 @@
       sig: { dl: +c.sig.debitLong.toFixed(2), ds: +c.sig.debitShort.toFixed(2), cs: +c.sig.creditShort.toFixed(2), w: +c.sig.wing.toFixed(2) }, factors: Object.fromEntries(Object.entries(c.factors).map(([k2, v2]) => [k2, typeof v2 === "number" ? +v2.toFixed(4) : v2])),
       baseScore: c.baseScore != null ? +c.baseScore.toFixed(4) : null, score: c.score != null ? +c.score.toFixed(4) : null, analysed: !!c.whatIf, acceptable: c.whatIf ? c.whatIf.acceptable : null, gates: c.whatIf ? c.whatIf.gates : null, pProfit: c.whatIf ? +c.whatIf.probs.profit.toFixed(4) : null }));
     common.searched.considered = cands.length;
-    const viewR = (f) => viewOf(f, { spot, sigma, atmIV, T, T0, cfg, hedge, dir, best, minCap, W });
+    const viewR = (f) => viewOf(f, { spot, sigma, atmIV, T, T0, cfg, hedge, dir, best, minCap, W, wa });
     if (!best.whatIf.acceptable) {
       return { ...common, status: "NO_ACCEPTABLE_STRUCTURE", errors: ["No structure meets the target with acceptable risk. Best candidate (" + best.fs + " " + best.v.key + "): " + best.whatIf.gates.join("; ") + "."], rejected: ranked.slice(0, 4).map(viewR), variants: [], gates: GATES };
     }
     const perVariant = []; for (const fs of dir.sides) for (const v of variants) { const c = pool.find((x) => x.fs === fs && x.v.key === v.key); perVariant.push({ fs, v, c }); }
     const alts = []; for (const c of pool.slice(1).filter((x) => x.whatIf.acceptable)) { if (alts.length >= cfg.topN) break; if (!alts.some((a) => a.ds === c.ds && a.cs === c.cs && a.v === c.v)) alts.push(c); }
-    const view = (f) => viewOf(f, { spot, sigma, atmIV, T, T0, cfg, hedge, dir, best, minCap, W });
+    const view = (f) => viewOf(f, { spot, sigma, atmIV, T, T0, cfg, hedge, dir, best, minCap, W, wa });
     const vs = perVariant.map(({ fs, v, c }) => c ? summarise(c, view(c), true) : { id: fs + " " + v.key, key: v.key, side: fs, reachable: false, errors: ["No " + v.key + " strike set reaches the target for a " + fs + " hedge"] });
     for (const x of vs) x.recommended = x.id === best.fs + " " + best.v.key;
     const fmtF = (c) => Object.entries(W).map(([k, w]) => k + " " + (w * (k === "capital" ? c.capitalTotal / minCap - 1 : c.factors[k] || 0)).toFixed(2)).join(", ");
@@ -292,7 +302,7 @@
     const reason = best.fs + " " + (hedge.isStock ? "shares" : "perp") + " · " + best.v.key + " recommended — robustness-ranked score " + best.score.toFixed(2) + " (lower is better): " + wf(best) + ". Factor breakdown: " + fmtF(best) + "." +
       (runner ? " Best other variant " + runner.fs + " " + runner.v.key + " scores " + runner.score.toFixed(2) + ": " + wf(runner) + (runner.whatIf && !runner.whatIf.acceptable ? " — fails: " + runner.whatIf.gates.join("; ") : "") + "." : "") +
       (altBest && altBest !== runner ? " Next candidate overall scores " + altBest.score.toFixed(2) + "." : "") + " Direction: " + dir.reason;
-    return { ...common, status: "OK", best: view(best), alternatives: alts.map(view), variants: vs, recommendation: { mode: "optimizer", id: best.fs + " " + best.v.key, key: best.v.key, side: best.fs, score: best.score, reason } };
+    return { ...common, status: "OK", best: view(best), alternatives: alts.map(view), variants: vs, recommendation: { mode: wa ? "weekly_atr" : "optimizer", id: best.fs + " " + best.v.key, key: best.v.key, side: best.fs, score: best.score, reason } };
   }
   function summarise(c, b) {
     return { key: c.v.key, side: c.fs, id: c.fs + " " + c.v.key, callLotUnits: c.v.call, putLotUnits: c.v.put, status: "OK", reachable: true, callLots: b.callLots, putLots: b.putLots,
@@ -302,7 +312,7 @@
       points: Object.entries(b.factors).map(([k, x]) => ({ points: -x.weighted, why: k + " " + x.value })) };
   }
   function viewOf(f, k) {
-    const { spot, sigma, atmIV, T, T0, cfg, hedge, dir, minCap, W } = k, ev = f.ev;
+    const { spot, sigma, atmIV, T, T0, cfg, hedge, dir, minCap, W, wa } = k, ev = f.ev;
     const gl = Math.max(0, spot - 2.5 * sigma), gh = spot + 2.5 * sigma;
     const xs = [...new Set([...Array.from({ length: 121 }, (_, i) => gl + (gh - gl) * i / 120), ...ev.kinks.filter((x) => x > gl && x < gh), spot, f.up, f.dn])].sort((a, b) => a - b);
     const callLots = f.legs.find((l) => l.type === "call").qty, putLots = f.legs.find((l) => l.type === "put").qty;
@@ -311,7 +321,11 @@
     const exits = [{ label: "CE short (upside exit / target)", price: f.up, perp: ev.perpAt(f.up), pnlToday: ev.at(f.up, 0) - cfg.mmLoss, pnlExpiry: f.netUp, residual: f.netUp - T0 },
       { label: "PE short (downside exit / target)", price: f.dn, perp: ev.perpAt(f.dn), pnlToday: ev.at(f.dn, 0) - cfg.mmLoss, pnlExpiry: f.netDn, residual: f.netDn - T0 }];
     const hedgeWord = hedge.isStock ? "shares" : "perp";
+    const wi = wa && wa.info, pctS = (x) => (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(2) + "%", usd2 = (x) => (x < 0 ? "−$" : "+$") + Math.abs(x).toFixed(2);
     const why = [
+      ...(wi ? ["Weekly ATR distances: weekly ATR $" + wi.atr.toFixed(2) + " (Wilder, N = " + wi.n + " completed weekly bars, " + (wi.source || "price history") + ")" + (wi.scaleToExpiry ? " × √(" + wi.tradingDays + " trading days ÷ 5) = " + wi.scale.toFixed(3) + " → $" + wi.effectiveAtr.toFixed(2) : "") +
+        ". CE short " + wi.ceShort + " = nearest listed strike to spot " + spot.toFixed(2) + " + " + wi.upperMult + " × $" + wi.effectiveAtr.toFixed(2) + " (" + wi.ceTarget.toFixed(2) + "): " + usd2(wi.ceDistance.dollars) + " / " + pctS(wi.ceDistance.pct) + ". PE short " + wi.peShort + " = nearest to spot − " + wi.lowerMult + " × ATR (" + wi.peTarget.toFixed(2) + "): " + usd2(wi.peDistance.dollars) + " / " + pctS(wi.peDistance.pct) +
+        ". Long legs placed as in the reference-sheet method (debit long ≈ " + wi.debitLongSigma + "σ OTM, credit wing ≈ " + wi.wingSigma + "σ beyond the credit short)."] : []),
       "Direction: " + dir.reason + (dir.sides.length > 1 ? " Chosen side: " + f.fs + " (better score)." : ""),
       "Debit " + (f.fs === "SHORT" ? "call" : "put") + " spread " + f.dl.strike + "/" + f.ds.strike + " (" + f.sig.debitLong.toFixed(2) + "σ / " + f.sig.debitShort.toFixed(2) + "σ), credit " + (f.fs === "SHORT" ? "put" : "call") + " spread " + f.cs.strike + "/" + f.cw.strike + " (short " + f.sig.creditShort.toFixed(2) + "σ, wing " + f.sig.wing.toFixed(2) + "σ beyond); σ = $" + sigma.toFixed(2) + " from ATM IV " + (atmIV * 100).toFixed(1) + "% over " + (T * 365).toFixed(1) + " days. Reference-sheet medians: 0.1σ / 0.9σ / 0.63σ / 0.47σ.",
       cfg.targetMode === "perLotSet" ? "Lots " + f.v.key + ": " + callLots + " calls : " + putLots + " puts = " + Math.round(callLots / f.v.call) + " lot set(s); target $" + (T0 / Math.round(callLots / f.v.call)).toLocaleString("en-US") + " per lot set → $" + T0.toLocaleString("en-US") + " total (upside " + usd(f.netUp) + ", downside " + usd(f.netDn) + ")." :
