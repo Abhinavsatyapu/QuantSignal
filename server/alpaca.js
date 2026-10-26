@@ -13,6 +13,8 @@ const dataUrl = () => env('ALPACA_DATA_URL', 'https://data.alpaca.markets').repl
 const tradingUrl = () => env('ALPACA_TRADING_URL', env('ALPACA_ENV') === 'live' ? 'https://api.alpaca.markets' : 'https://paper-api.alpaca.markets').replace(/\/$/, '');
 
 function httpErr(status, message) { const e = Error(message); e.status = status; return e; }
+// errors without an HTTP status are code bugs (ReferenceError, TypeError…): explain them in plain language instead of raw JS text
+function plainError(e) { return e && e.status ? e.message : 'Internal error in QuantSignal while handling this request (a bug on our side, not your input; details: ' + ((e && e.name) || 'Error') + ': ' + ((e && e.message) || e) + '). Nothing was saved or sent.'; }
 const NO_KEYS = 'Alpaca API keys are not configured on this server. Set ALPACA_KEY_ID and ALPACA_SECRET_KEY in the server environment (never in the browser). Manual premium entry still works.';
 
 let fetchImpl = (...a) => fetch(...a);
@@ -165,4 +167,4 @@ function status() {
   return { configured: configured(), optionsFeed: optionsFeed(), stockFeed: stockFeed(), tradingApi: tradingUrl().includes('paper') ? 'paper' : 'live', docs: 'https://docs.alpaca.markets/reference/optionchain' };
 }
 
-module.exports = { configured, status, chain, legs, expiries, stockSnapshots, optionableAssets, parseOcc, normalizeSnapshot, httpErr, NO_KEYS, _setFetch };
+module.exports = { configured, status, chain, legs, expiries, stockSnapshots, optionableAssets, parseOcc, normalizeSnapshot, httpErr, plainError, NO_KEYS, _setFetch };

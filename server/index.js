@@ -47,7 +47,8 @@ function requireAdmin(req, res, next) {
   if (!safeEq(tok, ADMIN())) return res.status(401).json({ error: 'Admin token required (see .env ADMIN_TOKEN)' });
   next();
 }
-const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => res.status(e.status || 500).json({ error: e.message }));
+const { plainError } = require('./alpaca');
+const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { if (!e.status) log.error('http.bug', { path: req.path, error: (e.name || 'Error') + ': ' + e.message }); res.status(e.status || 500).json({ error: plainError(e) }); });
 
 // ------------------------------------------------------------------ health
 app.get('/health', (req, res) => { const rt = config.runtime(); res.json({ ok: true, network: rt.network, dryRun: rt.dryRun, uptimeSec: Math.round(process.uptime()), lastScanAt: engine.state.lastScanAt || null }); });

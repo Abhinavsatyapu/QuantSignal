@@ -8,6 +8,24 @@
   const ist = (iso) => (iso ? new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) + " IST" : "—");
   let expiriesData = null, last = null;
 
+  // plain-language errors: browser/network failures and code bugs are explained instead of shown raw
+  function plainError(m) {
+    m = String(m || "Unknown error");
+    if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Could not reach the QuantSignal server (network problem or the server is restarting). Try again in a minute.";
+    if (/^HTTP 5\d\d$/.test(m)) return "The server hit an internal error (" + m + "). Nothing was saved or sent; try again, and report it if it repeats.";
+    if (/is not defined|is not a function|Cannot read propert|undefined \(reading/i.test(m) && !/^Internal error/.test(m)) return "Internal error in QuantSignal (a bug on our side, not your input; details: " + m + "). Nothing was saved or sent.";
+    return m;
+  }
+  // a previous result card stays visible only when clearly marked as previous (the latest run failed)
+  function markStale(msg) {
+    const box = $("bResult"); if (!box) return; let n = $("bStaleNote");
+    if (!msg) { box.classList.remove("b-stale"); if (n) n.remove(); return; }
+    if (box.hidden) return;
+    box.classList.add("b-stale");
+    if (!n) { n = document.createElement("div"); n.id = "bStaleNote"; n.className = "b-stale-note"; n.setAttribute("role", "alert"); box.prepend(n); }
+    const prev = last ? [last.ticker, last.expiry].filter(Boolean).join(" · ") + (last.id ? " (run #" + last.id + ")" : "") : "an earlier run";
+    n.textContent = "Previous result: " + prev + ". The latest run failed and did not replace it: " + msg;
+  }
   async function api(path, body) {
     const r = await fetch("/api" + path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
     let d = null; try { d = await r.json(); } catch {}
@@ -94,8 +112,9 @@
     if (bad.length) { $("bStatus").textContent = bad.join(" "); return; }
     $("bBuild").disabled = true; $("bStatus").textContent = "Fetching the " + $("bExpiry").value + " chain, Hyperliquid book, indicators and events; searching strike sets and running the what-if analysis…";
     const m = $("bMethod").value; if (m === "delta") c.direction = c.deltaDirection; if (!isOpt(m)) { c.maxLossPct = c.maxLossPct ?? 50; }
+    markStale(null);
     try { last = await api("/strategy/build", { ticker: $("bTicker").value, expiry: $("bExpiry").value, method: m, cfg: c }); render(last); $("bStatus").textContent = last.id ? "Saved as run #" + last.id + " (inputs, structure, alternatives, what-if summary and chain summary)." : ""; loadHistory(); }
-    catch (e) { $("bStatus").textContent = e.message; }
+    catch (e) { const msg = plainError(e.message); $("bStatus").textContent = "This run failed: " + msg; markStale(msg); }
     finally { $("bBuild").disabled = false; }
   };
 

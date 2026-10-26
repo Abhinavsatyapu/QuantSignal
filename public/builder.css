@@ -74,3 +74,7 @@
 .b-check { display: flex; align-items: center; gap: 8px; grid-column: 1 / -1; }
 @media (max-width: 700px) { .b-stage-grid { grid-template-columns: 1fr; } }
 .b-check input { width: auto; }
+
+/* previous result kept on screen after a failed run */
+.b-stale > *:not(.b-stale-note) { opacity: .45; }
+.b-stale-note { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--amber); border-radius: var(--radius-sm); background: var(--amber-soft); color: var(--text); font-size: 13px; }

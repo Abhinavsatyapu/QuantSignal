@@ -24,6 +24,7 @@
     "ws": "^8.22.0"
   },
   "devDependencies": {
+    "eslint": "^8.57.1",
     "pg-mem": "^3.0.14"
   }
 }

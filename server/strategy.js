@@ -413,7 +413,7 @@ function saveRun({ out, chain, perp, t, expiry, method, cfg, market, source, pla
       inputs: JSON.stringify({ ticker: t, expiry, method, cfg, ...(out.weeklyAtr ? { weeklyAtr: weeklyAtrRecord(out.weeklyAtr) } : {}), ...(out.distanceBand ? { distanceBand: distanceRecord(out) } : {}) }), chain_summary: JSON.stringify({ ...data, liquidity: out.liquidity, atmIV: out.atmIV, expectedMove: out.expectedMove, spot: out.spot, basis: out.basis }),
       legs: JSON.stringify(best ? { legs: best.legs.map(({ greeks, ...l }) => ({ ...l, delta: greeks?.delta })), futures: best.futures } : null),
       result: JSON.stringify({ ...out, considered: undefined, best: best ? { ...best, curve: undefined, whatIf: whatIfSummary(best.whatIf) } : undefined, rejected: undefined, variants: undefined,
-        alternatives: (out.alternatives || []).map(a => ({ variant: a.variant, side: a.futuresSide, legs: a.legs.map(l => (l.side === 'buy' ? '+' : '-') + l.qty + ' ' + l.strike + l.type[0].toUpperCase()).join(' '), perpQty: a.futures.signedQty, capital: a.capital.total, exits: a.exits.map(x => x.pnlExpiry), score: a.score, whatIf: whatIfSummary(a.whatIf) })) }),
+        alternatives: (out.alternatives || []).map(a => ({ variant: a.variant, side: a.futuresSide, legs: a.legs.map(l => (l.side === 'buy' ? '+' : '-') + l.qty + ' ' + l.strike + l.type[0].toUpperCase()).join(' '), perpQty: a.futures ? a.futures.signedQty : (a.perpQty ?? null), capital: a.capital && typeof a.capital === 'object' ? a.capital.total : (a.capital ?? a.requiredCapital ?? null), exits: Array.isArray(a.exits) ? a.exits.map(x => x.pnlExpiry) : null, score: a.score, whatIf: whatIfSummary(a.whatIf) })) }),
       recommended_variant: out.recommendation && out.recommendation.id ? out.recommendation.id : null,
       variants: out.variants ? JSON.stringify(out.variants.map(({ best: vb, alternatives, ...v }) => ({ ...v, whatIf: vb ? whatIfSummary(vb.whatIf) : null }))) : null };
     const lotSets = best && best.lotSets ? best.lotSets : null;
@@ -433,7 +433,7 @@ function saveRun({ out, chain, perp, t, expiry, method, cfg, market, source, pla
 function router({ stockSymbols }) {
   const r = express.Router();
   startLearningLoop();
-  const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => res.status(e.status || 400).json({ error: e.message }));
+  const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { if (!e.status) log.error('strategy.bug', { path: req.path, error: (e.name || 'Error') + ': ' + e.message, stack: String(e.stack || '').split('\n').slice(1, 4).join(' | ') }); res.status(e.status || 500).json({ error: alpaca.plainError(e) }); });
   r.get('/strategy/provider', (req, res) => res.json(deriv.providerInfo()));
   r.get('/strategy/expiries', wrap(async (req, res) => {
     const t = tick(req.query.ticker);
@@ -475,7 +475,7 @@ function router({ stockSymbols }) {
     let atrOpts = null;
     if (method === 'weekly_atr') {
       const sheetMult = (x) => x === undefined || x === null || x === '' || x === 'sheet'; // blank = the sheets' own × ATR for this ticker (pooled fallback)
-      const am = sheetMult(c.upperMult) || sheetMult(c.lowerMult) ? sheetAnchor(ticker).atrMultiples : null, r2m = (x, d) => (Number.isFinite(x) ? Math.round(x * 100) / 100 : d);
+      const am = sheetMult(c.upperMult) || sheetMult(c.lowerMult) ? sheetAnchor(t).atrMultiples : null, r2m = (x, d) => (Number.isFinite(x) ? Math.round(x * 100) / 100 : d);
       atrOpts = { n: num(c.atrPeriod, 14), upperMult: sheetMult(c.upperMult) ? r2m(am && am.ce, 0.42) : num(c.upperMult, 0.42), lowerMult: sheetMult(c.lowerMult) ? r2m(am && am.pe, 0.41) : num(c.lowerMult, 0.41), multSource: sheetMult(c.upperMult) || sheetMult(c.lowerMult) ? (am ? am.source : 'pooled sheet medians') : 'user', zoneMinSigma: c.zoneMinSigma === undefined ? 0.7 : num(c.zoneMinSigma, null), zoneMaxSigma: c.zoneMaxSigma === undefined ? 1.2 : num(c.zoneMaxSigma, null), scaleToExpiry: c.scaleToExpiry === true || c.scaleToExpiry === 'true', source: ['perp', 'stock'].includes(c.atrSource) ? c.atrSource : 'auto' };
       const bad = Strategy.validateWeeklyAtr({ atr: 1, ...atrOpts }); if (bad.length) throw httpErr(400, bad.join('; '));
     }
