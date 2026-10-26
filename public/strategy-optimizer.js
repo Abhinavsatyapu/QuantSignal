@@ -376,7 +376,7 @@
     if (dband) {
       const bestPair = new Map(); for (const c of ranked) { const k = pairKey(c); if (!bestPair.has(k)) bestPair.set(k, c); }
       common.distanceBand = dband;
-      common.distancePairs = [...bestPair.values()].slice(0, 5).map((c) => ({ side: c.fs, variant: c.v.key, ...withSheet(c), sheetRef: c.whatIf ? c.factors.reference : null, exitUp: c.netUp, exitDown: c.netDn, exitUpToday: c.ev.at(c.up, 0) - cfg.mmLoss, exitDownToday: c.ev.at(c.dn, 0) - cfg.mmLoss,
+      common.pairsTested = bestPair.size; common.distancePairs = [...bestPair.values()].slice(0, 12).map((c) => ({ side: c.fs, variant: c.v.key, ...withSheet(c), sheetRef: c.whatIf ? c.factors.reference : null, exitUp: c.netUp, exitDown: c.netDn, exitUpToday: c.ev.at(c.up, 0) - cfg.mmLoss, exitDownToday: c.ev.at(c.dn, 0) - cfg.mmLoss,
         pop: c.whatIf.probs.profit, ev: c.whatIf.probs.expectedValue, worst2Sigma: c.whatIf.tail.worst2Sigma, score: c.score, acceptable: c.whatIf.acceptable, chosen: c === ranked[0], lots: c.v.key + " × " + c.n }));
     }
     const viewR = (f) => viewOf(f, { spot, sigma, atmIV, T, T0, cfg, hedge, dir, best, minCap, W, wa, bAtr });

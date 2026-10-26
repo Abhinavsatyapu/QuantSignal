@@ -403,7 +403,7 @@ const weeklyAtrRecord = (w) => (w ? { method: 'weekly_atr', atr: w.atr, effectiv
 const distanceRecord = (out) => { const b = out.distanceBand, best = out.best;
   return { band: { mode: b.mode, sheetBandLow: b.sheetBandLow, sheetBandHigh: b.sheetBandHigh, minShortSigma: b.minShortSigma, minShortAtr: b.minShortAtr, maxShortSigma: b.maxShortSigma, sigma: b.sigma, weeklyAtr: b.weeklyAtr, weeklyAtrSource: b.weeklyAtrSource, anchorSource: b.anchorSource, fallback: b.fallback,
       variants: b.variants.map(v => ({ side: v.side, variant: v.variant, group: v.group, groupSource: v.groupSource, groupN: v.groupN, debitLongSigma: v.debitLongSigma, wingSigma: v.wingSigma, sheet: v.sheet, ce: v.ce, pe: v.pe, fallback: !!v.fallback })) },
-    anchor: b.anchor, chosen: best && best.distances ? best.distances : null, chosenVariant: best ? best.futuresSide + ' ' + best.variant : null, chosenSigmas: best ? best.sigmas : null,
+    anchor: b.anchor, pairsTested: out.pairsTested ?? null, chosen: best && best.distances ? best.distances : null, chosenVariant: best ? best.futuresSide + ' ' + best.variant : null, chosenSigmas: best ? best.sigmas : null,
     pairs: (out.distancePairs || []).map(p => ({ side: p.side, variant: p.variant, ce: p.ce.strike, pe: p.pe.strike, ceSigmas: p.ce.sigmas, peSigmas: p.pe.sigmas, ceSheetSigmas: p.ce.sheet ? p.ce.sheet.sigmas : null, peSheetSigmas: p.pe.sheet ? p.pe.sheet.sigmas : null, sheetRef: p.sheetRef, exitUp: p.exitUp, exitDown: p.exitDown, pop: p.pop, ev: p.ev, worst2Sigma: p.worst2Sigma, score: p.score, chosen: p.chosen })) }; };
 function saveRun({ out, chain, perp, t, expiry, method, cfg, market, source, planId, multiplier }) {
     const quoteTimes = chain.contracts.map(q => Date.parse(q.quoteTime)).filter(Number.isFinite);

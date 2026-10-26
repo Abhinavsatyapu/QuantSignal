@@ -135,7 +135,7 @@ test('sheet band: each short searched within 0.8–1.3× its sheet distance (per
   }
   // the reference factor measures distance to THIS ratio's sheet geometry
   const bs = o.best.sigmas, g = o.best.sheetAnchor; assert.ok(Math.abs(o.best.factors.reference.value - (Math.abs(bs.debitShort - g.debitShortSigma) + Math.abs(bs.creditShort - g.creditShortSigma) + Math.abs(bs.wing - g.wingSigma)) / 3) < 2e-3);
-  assert.ok(o.distancePairs.length >= 1 && o.distancePairs.length <= 5 && o.distancePairs.filter(p => p.chosen).length === 1 && o.distancePairs.every(p => p.ce.sheet && p.pe.sheet));
+  assert.ok(o.distancePairs.length >= 1 && o.distancePairs.length <= 12 && o.pairsTested >= o.distancePairs.length && o.distancePairs.filter(p => p.chosen).length === 1 && o.distancePairs.every(p => p.ce.sheet && p.pe.sheet));
   for (const k of ['exitFit', 'ev', 'pop', 'reference']) assert.ok(k in o.best.factors, k);
   assert.equal(Math.abs(o.best.futures.signedQty) % 5, 0); assert.ok(Math.abs(o.best.capital.futuresMargin - Math.abs(o.best.futures.signedQty) * o.best.futures.entry / 2) < 1e-6);
   assert.deepEqual(new Set(o.variants.map(v => v.key)), new Set(['1C:2P', '2C:1P']));
