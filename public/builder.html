@@ -38,7 +38,7 @@
 <label><span data-tip="Zone upper end, used only when the zone minimum is set." tabindex="0">Zone max (σ)</span><input id="bMaxSig" type="number" min="0.2" max="5" step="0.05" value="1.2"></label>
 <label><span data-tip="Optional floor: each short at least this multiple of the 14-week Wilder weekly ATR. Blank = off." tabindex="0">Min short distance (× weekly ATR)</span><input id="bMinAtr" type="number" min="0" max="5" step="0.05" value="" placeholder="off"></label>
 <label hidden><span>Sheet band low ×</span><input id="bSheetLo" type="number" value="0.8"></label><label hidden><span>Sheet band high ×</span><input id="bSheetHi" type="number" value="1.3"></label>
-</div><p class="market-note">Stage A: the <b>sheet baseline</b> is the 4 strikes of the rule learned from the reference sheets (debit long = the first strike beyond spot; debit short, credit short and wing at the sheet distance for this ticker, blended σ / × weekly ATR), and it always gets the full what-if. Stage B: the <b>optimizer</b> searches around it (both ratios, the sides the signal allows) and runs the full what-if on the top candidates (price grid, IV shocks, theta path, ±2σ / ±3σ, P(profit), EV, slippage, fees, events). The score weighs target fit, EV, P(profit), 2σ worst, theta, capital, liquidity and a moderate sheet-similarity prior. The optimizer pick is recommended only when it clearly beats the baseline.</p></fieldset>
+</div><p class="market-note">Stage A: the <b>sheet baseline</b> is the 4 strikes of the rule learned from the reference sheets (debit long = the first strike beyond spot; debit short, credit short and wing at the sheet distance for this ticker, blended σ / × weekly ATR), and it always gets the full what-if. Stage B: the <b>optimizer</b> searches around it (both ratios, the sides the signal allows) and runs the full what-if on the top candidates (price grid, IV shocks, theta path, ±2σ / ±3σ, P(profit), EV, slippage, fees, events). The score weighs target fit, EV, P(profit), 2σ worst, theta, capital and a moderate sheet-similarity prior. The optimizer pick is recommended only when it clearly beats the baseline.</p></fieldset>
 <fieldset id="bAtrFields" class="b-atr-fields" hidden><legend>Weekly ATR distances</legend><div class="b-grid">
 <label><span data-tip="CE short = nearest listed strike to spot + this multiple of the weekly ATR. Blank = the reference sheets' own multiple for this ticker (pooled 0.42×)." tabindex="0">Upper distance (× weekly ATR)</span><input id="bAtrUp" type="number" min="0.1" max="5" step="0.05" value="" placeholder="sheet"></label>
 <label><span data-tip="PE short = nearest listed strike to spot − this multiple of the weekly ATR. Blank = the reference sheets' own multiple for this ticker (pooled 0.41×)." tabindex="0">Lower distance (× weekly ATR)</span><input id="bAtrDn" type="number" min="0.1" max="5" step="0.05" value="" placeholder="sheet"></label>
@@ -47,22 +47,12 @@
 <label><span data-tip="Wilder ATR over this many completed weekly bars (true range of each weekly bar)." tabindex="0">ATR period N (weekly bars)</span><input id="bAtrN" type="number" min="2" max="52" step="1" value="14"></label>
 <label><span data-tip="Auto: the perp's Hyperliquid candles (the source the indicators use), else the stock's Nasdaq daily OHLC. Weekly bars are built from daily OHLC; the forming week is excluded." tabindex="0">Price history</span><select id="bAtrSrc"><option value="auto">Auto (perp candles → stock daily)</option><option value="perp">Hyperliquid perp daily candles</option><option value="stock">Nasdaq stock daily OHLC</option></select></label>
 <label class="check-label"><input id="bAtrScale" type="checkbox"> <span data-tip="Off (default): plain weekly ATR. On: ATR × √(trading days to expiry ÷ 5)." tabindex="0">Scale ATR to expiry (√(trading days ÷ 5))</span></label>
-</div><p class="market-note">The CE and PE short strikes are the exit / profit targets. Everything else (perp side from the signal, both lot ratios, perp qty floored to 5, margin, theta, long legs as in the reference method, liquidity filters, risk caps and the what-if) runs as for the optimizer.</p></fieldset>
+</div><p class="market-note">The CE and PE short strikes are the exit / profit targets. Everything else (perp side from the signal, both lot ratios, perp qty floored to 5, margin, theta, long legs as in the reference method, risk caps and the what-if) runs as for the optimizer.</p></fieldset>
 <label>Direction<select id="bSignal"><option value="AUTO">Auto from indicators (default)</option><option value="BULLISH">Bullish → LONG perp</option><option value="BEARISH">Bearish → SHORT perp</option><option value="BOTH">Compare both sides</option></select></label>
 <label>Fixed lot ratio · calls : puts (blank = compare both)<span class="b-ratio"><input id="bCallUnits" type="number" min="1" max="10" step="1" placeholder="auto" aria-label="Call lots"> : <input id="bPutUnits" type="number" min="1" max="10" step="1" placeholder="auto" aria-label="Put lots"></span></label>
-<label><span data-tip="How far from mid a combo limit order is assumed to fill on Good / Thin legs (illiquid legs are always priced at the far side). Targets, risk caps and the EV gate use this; the full natural fill is always shown next to it as the worst case." tabindex="0">Expected combo fill (% of half-spread, default 60)</span><input id="bFillPct" type="number" min="0" max="100" step="5" value="60"></label>
-<label>Fill price override, every leg (blank = expected combo fill · 1 = natural · 0 = mid)<input id="bSlip" type="number" min="0" max="1" step="0.05" placeholder="auto"></label>
+<label>Bid/ask haircut (0 = mid, 1 = full spread)<input id="bSlip" type="number" min="0" max="1" step="0.05" value="0.5"></label>
 <label>Capital limit ($, optional)<input id="bCapital" type="number" min="100" step="500" placeholder="no limit"></label>
 <label>Max loss within ±2σ (% of capital, optional)<input id="bMaxLoss" type="number" min="1" max="100" step="1" placeholder="none"></label>
-<label>Min open interest per leg<input id="bMinOI" type="number" min="0" step="1" value="10"></label>
-<label>Max bid/ask spread (% of mid, hard reject)<input id="bSpread" type="number" min="1" max="100" step="1" value="25"></label>
-<label>Too illiquid if market-fill cost &gt; (% of target)<input id="bLiqToo" type="number" min="1" max="100" step="1" value="25"></label>
-<label>Leg "Illiquid" above spread (% of mid)<input id="bLiqIll" type="number" min="1" max="100" step="1" value="15"></label>
-<label>Leg "Good" up to spread (% of mid)<input id="bLiqGood" type="number" min="0.5" max="50" step="0.5" value="6"></label>
-<label class="check-label"><input id="bReqEv" type="checkbox" checked> Never recommend a negative expected value at the expected combo fill</label>
-<label class="check-label"><input id="bRejIll" type="checkbox" checked> Reject structures with an illiquid leg</label>
-<label class="check-label"><input id="bRejToo" type="checkbox" checked> Reject structures that are too illiquid for the target</label>
-<label>Leg "Illiquid" below open interest<input id="bLiqMinOI" type="number" min="0" step="10" value="100"></label>
 <label>Max lots (base units)<input id="bLots" type="number" min="1" max="200" step="1" value="60"></label>
 <label>Basket / MM allowance ($)<input id="bMm" type="number" min="0" step="5" value="50"></label>
 <label>Futures margin divisor<input id="bMarginDiv" type="number" min="1" max="50" step="0.5" value="2"></label>
@@ -75,7 +65,7 @@
 <label class="check-label"><input id="bCal" type="checkbox" checked> Reference method: per-ticker calibration</label>
 <label>Delta method: direction<select id="bDir"><option value="LONG">LONG perp</option><option value="SHORT">SHORT perp</option><option value="NEUTRAL">NEUTRAL (condor)</option></select></label>
 </div><p id="bCalNote" class="market-note"></p><p id="bWeights" class="market-note"></p></details>
-<div class="row"><button id="bBuild" disabled>Analyse &amp; recommend</button><button id="bRefreshQ" class="ghost" type="button" disabled title="Bypass the quote cache and fetch a fresh Cboe chain, then rebuild">Refresh quotes</button><span id="bStatus" class="market-note" role="status"></span></div>
+<div class="row"><button id="bBuild" disabled>Analyse &amp; recommend</button><button id="bRefreshQ" class="ghost" type="button" disabled title="Bypass the quote cache and fetch a fresh option chain, then rebuild">Refresh quotes</button><span id="bStatus" class="market-note" role="status"></span></div>
 </section>
 
 <section id="bResult" class="panel b-panel" hidden>
@@ -87,7 +77,6 @@
 <div id="bSteps" class="b-steps" hidden><h3>How this was chosen</h3><ol id="bStepsList"></ol></div>
 <details id="bScoreDetails" class="b-more" hidden><summary>Score details</summary><div id="bScoreBody" class="market-note"></div></details>
 <p id="bMarket" class="market-note"></p></div>
-<div id="bLiq" class="b-liq" hidden></div>
 <div id="bAtrBox" class="b-atr" hidden><h3>Weekly ATR distances</h3><div id="bAtrMetrics" class="b-metrics small"></div><p id="bAtrNote" class="market-note"></p><details><summary>Weekly bars used</summary><div class="market-scroll"><table class="b-table" id="bAtrBars"></table></div></details></div>
 <details id="bPairsWrap" class="b-more" hidden><summary id="bPairsTitle">Show all pairs tested</summary><div class="market-scroll"><table class="b-table b-pairs" id="bPairs"></table></div><details class="b-more inner"><summary>Band and sheet-anchor details</summary><div id="bBandNote" class="market-note"></div></details></details>
 <div id="bBody">
@@ -132,5 +121,5 @@
 <div class="market-scroll"><table class="b-table" id="hTable"></table></div></section>
 </main>
 <script src="/deriv-shared.js"></script><script src="/strategy-engine.js"></script>
-<script src="/strategy-liquidity.js"></script><script src="/strategy-optimizer.js"></script><script src="/strategy-weekly-atr.js"></script><script src="/builder.js"></script><script src="/deriv-nav.js"></script>
+<script src="/strategy-optimizer.js"></script><script src="/strategy-weekly-atr.js"></script><script src="/builder.js"></script><script src="/deriv-nav.js"></script>
 </body></html>

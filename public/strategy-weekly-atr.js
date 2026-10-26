@@ -7,7 +7,7 @@
 //   PE short   = nearest listed put strike to spot − lowerMult × ATR_eff
 //   ATR_eff    = ATR (default) or ATR × √(trading days to expiry ÷ 5) when "scale to expiry" is on.
 // Everything else (perp side from the signal, both lot ratios, equalising perp qty floored to 5, margin = FQ × entry / 2,
-// theta check, liquidity filters, risk caps, per-lot targets, what-if) is the optimizer's machinery with the two short
+// theta check, data-sanity filters, risk caps, per-lot targets, what-if) is the optimizer's machinery with the two short
 // strikes fixed and the long legs placed the way the reference-sheet method places them.
 (function (root) {
   "use strict";
@@ -69,7 +69,7 @@
     return e;
   }
   // Fix the CE / PE short strikes from the weekly ATR. group = every contract listed at the expiry; calls / puts = the
-  // quotes that passed the liquidity filters. A snapped strike that fails the filters is moved to the nearest liquid
+  // quotes that have a usable quote and IV. A snapped strike without one is moved to the nearest quoted
   // strike on the same side, with a warning (quotes are never invented).
   function resolveWeeklyAtrShorts(w, { spot, sigma, group, calls, puts, tradingDays }) {
     const errs = validateWeeklyAtr(w); if (errs.length) return { errors: errs };
@@ -90,9 +90,9 @@
     const liquid = (list, k, side) => { const q = list.find((x) => x.strike === k); if (q) return { q, moved: false };
       const cand = list.filter((x) => (side > 0 ? x.strike > spot : x.strike < spot)).sort((a, b) => Math.abs(a.strike - k) - Math.abs(b.strike - k))[0]; return cand ? { q: cand, moved: true } : null; };
     const ce = liquid(calls, ceSnap, 1), pe = liquid(puts, peSnap, -1);
-    if (!ce || !pe) return { errors: ["No liquid " + (!ce ? "call above" : "put below") + " spot passes the liquidity filters for the weekly-ATR short strike"] };
-    if (ce.moved) warnings.push("CE short " + ceSnap + " (nearest listed to spot + " + w.upperMult + "×ATR) fails the liquidity filters; using the nearest liquid call " + ce.q.strike + ".");
-    if (pe.moved) warnings.push("PE short " + peSnap + " (nearest listed to spot − " + w.lowerMult + "×ATR) fails the liquidity filters; using the nearest liquid put " + pe.q.strike + ".");
+    if (!ce || !pe) return { errors: ["No quoted " + (!ce ? "call above" : "put below") + " spot for the weekly-ATR short strike"] };
+    if (ce.moved) warnings.push("CE short " + ceSnap + " (nearest listed to spot + " + w.upperMult + "×ATR) has no usable quote; using the nearest quoted call " + ce.q.strike + ".");
+    if (pe.moved) warnings.push("PE short " + peSnap + " (nearest listed to spot − " + w.lowerMult + "×ATR) has no usable quote; using the nearest quoted put " + pe.q.strike + ".");
     const dist = (k) => ({ dollars: k - spot, pct: (k / spot - 1) * 100, atrs: (k - spot) / eff, sigmas: sigma > 0 ? (k - spot) / sigma : null });
     const info = { atr: w.atr, n: w.n, source: w.source || null, sourceKind: w.sourceKind || null, barsUsed: w.barsUsed ?? null, firstWeek: w.firstWeek || null, lastWeek: w.lastWeek || null, recentBars: w.recentBars || null,
       upperMult: w.upperMult, lowerMult: w.lowerMult, multSource: w.multSource || null, scaleToExpiry: !!w.scaleToExpiry, tradingDays, scale, effectiveAtr: eff, spot,

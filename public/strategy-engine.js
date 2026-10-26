@@ -48,13 +48,13 @@
     try { edt = /EDT/.test(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", timeZoneName: "short" }).format(noon)); } catch (e) {}
     return Date.parse(date + (edt ? "T20:00:00Z" : "T21:00:00Z"));
   }
-  // ---------------------------------------------------------------- quotes / liquidity
+  // ---------------------------------------------------------------- quotes (data sanity only)
   function classify(q, ctx) {
     if (q.multiplier != null && q.multiplier !== 100) return { ok: false, reason: "non-standard multiplier" };
     if (!(q.bid > 0)) return { ok: false, reason: "no bid (zero-bid strike)" };
     if (!(q.ask > 0) || q.ask < q.bid) return { ok: false, reason: "no ask / crossed quote" };
     const mid = (q.bid + q.ask) / 2, spreadPct = (q.ask - q.bid) / mid * 100;
-    if (spreadPct > ctx.maxSpreadPct) return { ok: false, reason: "bid/ask spread wider than " + ctx.maxSpreadPct + "%" };
+    if (ctx.maxSpreadPct > 0 && spreadPct > ctx.maxSpreadPct) return { ok: false, reason: "bid/ask spread wider than " + ctx.maxSpreadPct + "%" };
     let iv = q.iv > 0 && q.iv < 6 ? q.iv : null, ivSource = "provider";
     if (!iv) { iv = impliedVol(mid, ctx.spot, q.strike, ctx.T, ctx.r, q.type); ivSource = "solved from mid"; }
     if (!iv) return { ok: false, reason: "no implied volatility" };
@@ -72,8 +72,7 @@
     for (const buy of list) for (const sell of list) {
       const width = Math.abs(buy.strike - sell.strike);
       if (buy.symbol === sell.symbol || (highBuy ? buy.strike <= sell.strike : buy.strike >= sell.strike) || width < Math.max(0.2 * move, 1.5 * (atr || 0)) || width > 2 * move) continue;
-      const execution = buy.ask - buy.bid + sell.ask - sell.bid;
-      const score = Math.abs(Math.abs(buy.greeks.delta) - buyTarget) + Math.abs(Math.abs(sell.greeks.delta) - sellTarget) + Math.abs(width - 0.5 * move) / move * 0.25 + execution / width;
+      const score = Math.abs(Math.abs(buy.greeks.delta) - buyTarget) + Math.abs(Math.abs(sell.greeks.delta) - sellTarget) + Math.abs(width - 0.5 * move) / move * 0.25;
       out.push({ buy, sell, score, width });
     }
     return out.sort((a, b) => a.score - b.score).slice(0, 6);
@@ -145,7 +144,7 @@
   }
   // ---------------------------------------------------------------- builder
   function build(input) {
-    const cfg = { ratio: 2, directionalPct: 25, maxSpreadPct: 25, commission: 0.65, futureFeePct: 0.045, leverage: 5, maxScale: 25, reachSigma: 1, riskSigma: 2, maxLossPct: 50, r: 0.04, ...input.cfg };
+    const cfg = { ratio: 2, directionalPct: 25, maxSpreadPct: null, commission: 0.65, futureFeePct: 0.045, leverage: 5, maxScale: 25, reachSigma: 1, riskSigma: 2, maxLossPct: 50, r: 0.04, ...input.cfg };
     const errs = [];
     const need = (ok, msg) => { if (!ok) errs.push(msg); };
     need(["LONG", "SHORT", "NEUTRAL"].includes(cfg.direction), "Choose a direction: bullish (long perp), bearish (short perp) or neutral (condor)");
@@ -154,7 +153,7 @@
     need(fin(cfg.maxLossPct) && cfg.maxLossPct > 0 && cfg.maxLossPct <= 100, "Max loss must be between 0 and 100% of capital");
     need(Number.isInteger(cfg.ratio) && cfg.ratio >= 1 && cfg.ratio <= 4, "Put:call lot ratio must be a whole number 1–4");
     need(fin(cfg.directionalPct) && cfg.directionalPct >= 0 && cfg.directionalPct <= 100, "Directional increment must be 0–100%");
-    need(fin(cfg.maxSpreadPct) && cfg.maxSpreadPct > 0 && cfg.maxSpreadPct <= 100, "Max bid/ask spread must be 0–100%");
+    need(cfg.maxSpreadPct == null || (fin(cfg.maxSpreadPct) && cfg.maxSpreadPct > 0 && cfg.maxSpreadPct <= 100), "Max bid/ask spread must be 0–100% (blank = off)");
     need(fin(cfg.leverage) && cfg.leverage >= 1 && cfg.leverage <= 50, "Leverage must be 1–50×");
     need(Number.isInteger(cfg.maxScale) && cfg.maxScale >= 1 && cfg.maxScale <= 200, "Max call lots must be 1–200");
     need(fin(cfg.commission) && cfg.commission >= 0 && fin(cfg.futureFeePct) && cfg.futureFeePct >= 0, "Fees must be ≥ 0");
@@ -172,12 +171,12 @@
     for (const c of group) { const k = classify(c, ctx); if (k.ok) quotes.push(k.q); else excluded[k.reason] = (excluded[k.reason] || 0) + 1; }
     const liquidity = { listed: group.length, usable: quotes.length, excluded };
     if (!group.length) return { status: "NO_DATA", errors: ["No contracts listed for " + input.expiry], liquidity };
-    if (quotes.length < 4) return { status: "NO_LIQUIDITY", errors: ["Only " + quotes.length + " strikes have two-sided quotes within the " + cfg.maxSpreadPct + "% spread limit"], liquidity };
+    if (quotes.length < 4) return { status: "NO_DATA", errors: ["Only " + quotes.length + " strikes have a usable two-sided quote on " + input.expiry], liquidity };
     const atm = quotes.slice().sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot)).slice(0, 4);
     const atmIV = atm.reduce((n, q) => n + q.iv, 0) / atm.length, move = spot * atmIV * Math.sqrt(T);
     const strategy = cfg.direction === "NEUTRAL" ? "condor" : "directional", dir = cfg.direction === "SHORT" ? "SHORT" : "LONG";
     const callPairs = pairs(quotes, "call", dir, move, 0, strategy), putPairs = pairs(quotes, "put", dir, move, 0, strategy);
-    if (!callPairs.length || !putPairs.length) return { status: "NO_LIQUIDITY", errors: ["No liquid " + (!callPairs.length ? "call" : "put") + " spread with width between 0.2σ and 2σ (σ move ≈ $" + move.toFixed(2) + ")"], liquidity, atmIV, expectedMove: move };
+    if (!callPairs.length || !putPairs.length) return { status: "NO_DATA", errors: ["No quoted " + (!callPairs.length ? "call" : "put") + " spread with width between 0.2σ and 2σ (σ move ≈ $" + move.toFixed(2) + ")"], liquidity, atmIV, expectedMove: move };
     const step = perp ? 10 ** -perp.szDecimals : 1, roundQ = (x) => Math.round(Math.round(x / step) * step * 1e8) / 1e8;
     const lo = Math.max(0, spot - 3 * move), hi = spot + 3 * move;
     const reachLo = cfg.direction === "SHORT" ? spot - cfg.reachSigma * move : cfg.direction === "NEUTRAL" ? spot : spot, reachHi = cfg.direction === "SHORT" ? spot : spot + cfg.reachSigma * move;
@@ -212,7 +211,7 @@
         if (!reached) { nearMiss.push({ k, atReach, requiredCapital: ev.requiredCapital, worstRisk }); continue; }
         const prob = region.reduce((n, [a, b]) => n + probIn(spot, a, b >= hi - 1e-9 ? 1e12 : b, atmIV, T, cfg.r), 0);
         const friction = legs.reduce((n, l) => n + (l.ask - l.bid) * l.qty * 100, 0) + 2 * ev.optionFees + 2 * ev.futuresEntryFee;
-        feasible.push({ k, legs, ev, fq, fEntry, region, targetPrice, prob, friction, worstRisk, callPair: c, putPair: p, score: -prob + friction / cfg.targetPnl * 0.25 + (c.score + p.score) * 0.05 });
+        feasible.push({ k, legs, ev, fq, fEntry, region, targetPrice, prob, friction, worstRisk, callPair: c, putPair: p, score: -prob + (c.score + p.score) * 0.05 });
         break; // smallest size that reaches the target within the reach window
       }
     }
@@ -249,7 +248,7 @@
   // 2 calls : 1 put, bearish 1 call : 2 puts (the credit spread carries 2× lots → theta near-neutral or credit); perp sized to EQUALISE today's P&L at the two short strikes (the exit / target levels,
   // "CE short" and "PE short") and rounded DOWN to a multiple of 5; futures margin = FQ × entry / 2, 5× leverage.
   const REFERENCE_DEFAULTS = { debitLongSigma: 0.1, debitShortSigma: 0.9, creditShortSigma: 0.63, wingSigma: 0.47, callLotUnits: null, putLotUnits: null, // null = compute BOTH 1C:2P and 2C:1P and recommend one; numbers = a fixed override
-    futuresRound: 5, futuresFactor: 1, marginDivisor: 2, leverage: 5, thetaTolerancePct: 15, mmLoss: 50, maxLots: 30, maxLossPct: 50, riskSigma: 2, commission: 0.65, futureFeePct: 0.045, maxSpreadPct: 25, maxPriceGapPct: 5, r: 0.04 };
+    futuresRound: 5, futuresFactor: 1, marginDivisor: 2, leverage: 5, thetaTolerancePct: 15, mmLoss: 50, maxLots: 30, maxLossPct: 50, riskSigma: 2, commission: 0.65, futureFeePct: 0.045, maxSpreadPct: null, maxPriceGapPct: 5, r: 0.04 };
   const SIGNAL_SIDE = { BULLISH: "LONG", BEARISH: "SHORT" };
   // Net options theta ($/day). CREDIT ≥ 0; NEAR-NEUTRAL when the debit is within tolPct of the gross |theta|; otherwise DEBIT.
   function thetaCheck(legs, tolPct = 15) {
@@ -274,7 +273,7 @@
     need(fin(cfg.capital) && cfg.capital > 0, "Capital must be a positive dollar amount");
     need(fin(cfg.maxLossPct) && cfg.maxLossPct > 0 && cfg.maxLossPct <= 100, "Max loss must be 0–100% of capital");
     need(fin(cfg.mmLoss) && cfg.mmLoss >= 0, "Basket / market-making allowance must be ≥ 0");
-    need(fin(cfg.maxSpreadPct) && cfg.maxSpreadPct > 0 && cfg.maxSpreadPct <= 100, "Max bid/ask spread must be 0–100%");
+    need(cfg.maxSpreadPct == null || (fin(cfg.maxSpreadPct) && cfg.maxSpreadPct > 0 && cfg.maxSpreadPct <= 100), "Max bid/ask spread must be 0–100% (blank = off)");
     need(Number.isInteger(cfg.maxLots) && cfg.maxLots >= 1 && cfg.maxLots <= 200, "Max debit-spread lots must be 1–200");
     need([cfg.debitShortSigma, cfg.creditShortSigma].every((x) => fin(x) && x > 0.1 && x <= 3) && fin(cfg.debitLongSigma) && cfg.debitLongSigma >= 0 && cfg.debitLongSigma < 1 && fin(cfg.wingSigma) && cfg.wingSigma > 0.05 && cfg.wingSigma <= 3, "Strike distances (σ) out of range");
     need(fin(cfg.leverage) && cfg.leverage >= 1 && cfg.leverage <= 50, "Leverage must be 1–50×");
@@ -292,22 +291,13 @@
     const liquidity = { listed: group.length, usable: quotes.length, excluded };
     if (!group.length) return { status: "NO_DATA", errors: ["No contracts listed for " + input.expiry], liquidity };
     const calls = quotes.filter((q) => q.type === "call").sort((a, b) => a.strike - b.strike), puts = quotes.filter((q) => q.type === "put").sort((a, b) => a.strike - b.strike);
-    if (calls.length < 2 || puts.length < 2) return { status: "NO_LIQUIDITY", errors: ["Not enough liquid strikes (" + calls.length + " calls, " + puts.length + " puts within the " + cfg.maxSpreadPct + "% spread limit)"], liquidity };
+    if (calls.length < 2 || puts.length < 2) return { status: "NO_DATA", errors: ["Not enough quoted strikes (" + calls.length + " calls, " + puts.length + " puts with a usable quote)"], liquidity };
     const atm = quotes.slice().sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot)).slice(0, 4), atmIV = atm.reduce((n, q) => n + q.iv, 0) / atm.length;
     const sigma = spot * atmIV * Math.sqrt(T), step = perp ? 10 ** -perp.szDecimals : 1;
     const unit = Math.max(step, cfg.futuresRound), toward0 = (x) => Math.sign(x) * Math.floor(Math.abs(x) / unit + 1e-9) * unit; // rounded DOWN to a multiple of 5
     const priceGapPct = input.stock && input.stock.price > 0 && perp.mid > 0 ? Math.abs(perp.mid - input.stock.price) / input.stock.price * 100 : null;
     if (priceGapPct != null && priceGapPct > cfg.maxPriceGapPct) return { status: "PRICE_MISMATCH", errors: ["Hyperliquid " + perp.symbol + " mid " + perp.mid + " differs from the options provider's " + input.ticker + " price " + input.stock.price + " by " + priceGapPct.toFixed(1) + "% (limit " + cfg.maxPriceGapPct + "%). The perp may not track this stock (or a quote is stale), so no recommendation is made."], perp: { symbol: perp.symbol, mid: perp.mid }, spot: input.stock.price };
-    // nearest listed strike, liquidity-aware (same rule as the optimizer): among the 3 nearest, cost = strikes away + liquidity
-    // penalty (Good 0 / Thin 0.6 / Illiquid 1.5) − 0.15 for a round strike; moves away from the plain nearest are reported
-    const liqMoves = [], LQ = root.Strategy && root.Strategy.legLiquidity, RS = root.Strategy && root.Strategy.roundStrike;
-    const nearest = (list, x, pred = () => true, leg) => { const L2 = list.filter(pred).sort((a, b) => Math.abs(a.strike - x) - Math.abs(b.strike - x)); if (!L2.length || !LQ || cfg.liquidityAware === false) return L2[0];
-      const c3 = L2.slice(0, 3), gap = c3.length > 1 ? Math.max(1e-9, Math.abs(c3[1].strike - c3[0].strike)) : 1, lq = (q) => LQ(q, cfg, spot);
-      const cost = (q) => Math.abs(q.strike - x) / gap + { Good: 0, Thin: 0.6, Illiquid: 1.5 }[lq(q).grade] - (RS && RS(q.strike, spot) ? 0.15 : 0);
-      const pick = c3.reduce((m, q) => (cost(q) < cost(m) - 1e-9 ? q : m), c3[0]);
-      const RK = { Good: 0, Thin: 1, Illiquid: 2 };
-      if (leg && pick !== c3[0] && RK[lq(pick).grade] < RK[lq(c3[0]).grade]) { const a = lq(c3[0]), b2 = lq(pick), msg = leg + " " + pick.type + ": rule strike " + c3[0].strike + " is " + a.grade + " (" + a.why + ") → moved to " + pick.strike + " (" + b2.grade + (b2.spreadPct != null ? ", spread " + b2.spreadPct.toFixed(1) + "%" : "") + (b2.openInterest != null ? ", OI " + b2.openInterest : "") + ")"; if (!liqMoves.some((m) => m.msg === msg)) liqMoves.push({ type: pick.type, from: c3[0].strike, to: pick.strike, msg }); }
-      return pick; };
+    const nearest = (list, x, pred = () => true) => list.filter(pred).sort((a, b) => Math.abs(a.strike - x) - Math.abs(b.strike - x))[0];
     const sides = cfg.futuresSide === "AUTO" ? ["SHORT", "LONG"] : [cfg.futuresSide];
     const dsig = [...new Set([cfg.debitShortSigma, 0.75, 0.9, 1.05].map(r6))], csig = [...new Set([cfg.creditShortSigma, 0.55, 0.65, 0.8].map(r6))], wings = [...new Set([cfg.wingSigma, 0.35, 0.47, 0.6].map(r6))];
     const combos = []; for (const a of dsig) for (const c of csig) combos.push([a, c]);
@@ -318,11 +308,11 @@
       // SHORT perp → bullish options: call DEBIT (long ≈ATM, short +aσ) + put CREDIT (short −aσ, wing −wσ further).
       // LONG perp  → bearish options: put DEBIT (long ≈ATM, short −aσ) + call CREDIT (short +aσ, wing +wσ further).
       const debitList = fs === "SHORT" ? calls : puts, creditList = fs === "SHORT" ? puts : calls, dir = fs === "SHORT" ? 1 : -1;
-      const dLong = nearest(debitList, spot + dir * cfg.debitLongSigma * sigma, (q) => dir * (q.strike - spot) >= 0, "debit long") || nearest(debitList, spot); if (!dLong) continue;
-      const dShort = nearest(debitList, spot + dir * a * sigma, (q) => dir * (q.strike - dLong.strike) > 0, "debit short");
-      const cShort = nearest(creditList, spot - dir * ac * sigma, (q) => dir * (spot - q.strike) > 0, "credit short");
+      const dLong = nearest(debitList, spot + dir * cfg.debitLongSigma * sigma, (q) => dir * (q.strike - spot) >= 0) || nearest(debitList, spot); if (!dLong) continue;
+      const dShort = nearest(debitList, spot + dir * a * sigma, (q) => dir * (q.strike - dLong.strike) > 0);
+      const cShort = nearest(creditList, spot - dir * ac * sigma, (q) => dir * (spot - q.strike) > 0);
       if (!dShort || !cShort) continue;
-      const cWing = nearest(creditList, cShort.strike - dir * w * sigma, (q) => dir * (cShort.strike - q.strike) > 0, "wing");
+      const cWing = nearest(creditList, cShort.strike - dir * w * sigma, (q) => dir * (cShort.strike - q.strike) > 0);
       if (!cWing) continue;
       const key = [fs, dLong.symbol, dShort.symbol, cShort.symbol, cWing.symbol].join("|"); if (seen.has(key)) continue; seen.add(key);
       const up = fs === "SHORT" ? dShort.strike : cShort.strike, dn = fs === "SHORT" ? cShort.strike : dShort.strike; // scenario prices = the two short strikes
@@ -347,7 +337,7 @@
         const deviation = Math.abs(a - cfg.debitShortSigma) + Math.abs(ac - cfg.creditShortSigma) + Math.abs(w - cfg.wingSigma);
         const th = thetaCheck(legs, cfg.thetaTolerancePct);
         found.push({ fs, a, ac, w, n, legs, ev, fq, qRaw, fEntry, up, dn, netUp, netDn, region, prob, friction, worstRisk, day, dLong, dShort, cShort, cWing, th, callN, putN, lotRule: cu + ":" + pu, lotSource: cfg.lotSource || (lotOverride ? "override" : "default"),
-          score: -prob + 0.1 * deviation + 0.25 * friction / cfg.targetPnl + 0.05 * ev.requiredCapital / cfg.capital + (th.status === "DEBIT" ? 0.5 : 0) });
+          score: -prob + 0.1 * deviation + 0.05 * ev.requiredCapital / cfg.capital + (th.status === "DEBIT" ? 0.5 : 0) });
         break;
       }
     }
@@ -355,12 +345,12 @@
     const band = (list, lo, hi) => { const g = list.filter((q) => q.strike >= lo && q.strike <= hi); return g.length ? g.reduce((n, q) => n + q.iv, 0) / g.length : null; };
     const putIV = band(puts, spot - sigma, spot - 0.25 * sigma), callIV = band(calls, spot + 0.25 * sigma, spot + sigma);
     const ivSkew = { putIV, callIV, diffPts: putIV != null && callIV != null ? (putIV - callIV) * 100 : null };
-    const common = { method: "reference", priceGapPct, ivSkew, ticker: input.ticker, expiry: input.expiry, expiryCloseUtc: new Date(expiryMs).toISOString(), days: T * 365, spot, spotSource: input.stock && input.stock.price > 0 ? input.stock.source : "Hyperliquid perp mid (proxy: no stock quote)", basis, atmIV, expectedMove: sigma, liquidity, liquidityMoveList: liqMoves, cfg, calibration: input.calibration || null,
+    const common = { method: "reference", priceGapPct, ivSkew, ticker: input.ticker, expiry: input.expiry, expiryCloseUtc: new Date(expiryMs).toISOString(), days: T * 365, spot, spotSource: input.stock && input.stock.price > 0 ? input.stock.source : "Hyperliquid perp mid (proxy: no stock quote)", basis, atmIV, expectedMove: sigma, liquidity, cfg, calibration: input.calibration || null,
       perp: perp ? { symbol: perp.symbol, bid: perp.bid, ask: perp.ask, mid: perp.mid, szDecimals: perp.szDecimals, maxLeverage: perp.maxLeverage, time: perp.time } : null };
     if (!found.length) {
       const ok = misses.filter((m) => fin(m.achieved)).sort((x, y) => y.achieved - x.achieved)[0];
       const allLimited = misses.length && misses.every((m) => m.overCapital || m.overRisk || !fin(m.achieved));
-      const why = !seen.size ? "no strike set matched the reference geometry on this chain (too few liquid strikes)" : ok ? "the best equalised scenario P&L within your capital / max-loss limits is about $" + Math.round(ok.achieved).toLocaleString("en-US") + (ok.overCapital ? " (the next lot breaks the capital limit)" : ok.overRisk ? " (the next lot breaks the max-loss limit)" : ok.lotLimit ? " (max lots reached)" : "") : allLimited ? "even 1 debit lot exceeds your capital or max-loss limit" : "no candidate qualified (" + [...new Set(misses.map((m) => m.reason).filter(Boolean))].join("; ") + ")";
+      const why = !seen.size ? "no strike set matched the reference geometry on this chain (too few quoted strikes)" : ok ? "the best equalised scenario P&L within your capital / max-loss limits is about $" + Math.round(ok.achieved).toLocaleString("en-US") + (ok.overCapital ? " (the next lot breaks the capital limit)" : ok.overRisk ? " (the next lot breaks the max-loss limit)" : ok.lotLimit ? " (max lots reached)" : "") : allLimited ? "even 1 debit lot exceeds your capital or max-loss limit" : "no candidate qualified (" + [...new Set(misses.map((m) => m.reason).filter(Boolean))].join("; ") + ")";
       return { ...common, status: "TARGET_NOT_REACHABLE", errors: ["Target $" + cfg.targetPnl.toLocaleString("en-US") + " is not reachable: " + why + ". Lower the target, add capital, raise the max-loss limit, or pick another expiry."], bestAchievable: ok ? ok.achieved : null };
     }
     found.sort((x, y) => x.score - y.score);
@@ -378,7 +368,7 @@
         "Lots: calls " + f.callN + " : puts " + f.putN + " (" + f.lotRule + ", " + (f.lotSource === "override" ? "your override" : f.lotSource) + ", to keep theta near-neutral or a credit). Net options theta " + f.th.theta.toFixed(2) + " $/day (" + f.th.status + "). This is the smallest size whose equalised expiry P&L reaches the $" + cfg.targetPnl.toLocaleString("en-US") + " target.",
         "Perp " + perp.symbol + ": " + Math.abs(f.fq) + " units = the quantity that equalises today's P&L at the PE short " + f.dn + " and CE short " + f.up + " (" + Math.abs(f.qRaw).toFixed(2) + (cfg.futuresFactor !== 1 ? " × " + cfg.futuresFactor : "") + "), rounded down to a multiple of " + unit + ".",
         "Exit / profit targets: close near the CE short " + f.up + " (upside) or the PE short " + f.dn + " (downside).",
-        "Chosen among " + found.length + " qualifying strike sets by risk-neutral probability of finishing in the target zone, closeness to the calibrated distances, bid/ask friction and capital use.",
+        "Chosen among " + found.length + " qualifying strike sets by risk-neutral probability of finishing in the target zone, closeness to the calibrated distances and capital use.",
       ];
       return {
         signal: cfg.signal || "AUTO", futuresSide: f.fs, debitShortSigma: f.a, creditShortSigma: f.ac, wingSigma: f.w, callLots: f.callN, putLots: f.putN, lotRule: f.lotRule, lotSource: f.lotSource, scenarioPrices: { up: f.up, down: f.dn },
@@ -463,5 +453,5 @@
     return { order_class: "mleg", qty: String(g), type: "limit", limit_price: (Math.round(net * 100) / 100).toFixed(2), time_in_force: "day",
       legs: legs.map((l) => ({ symbol: l.contract, ratio_qty: String(l.qty / g), side: l.side, position_intent: l.side === "buy" ? "buy_to_open" : "sell_to_open" })) };
   }
-  root.Strategy = Object.assign(root.Strategy || {}, { build, buildReference, buildReferenceOne, recommendVariant, VARIANTS, REFERENCE_DEFAULTS, thetaCheck, SIGNAL_SIDE, evaluate, classify, pairs, regionAtLeast, probIn, bs, bsGreeks, impliedVol, expiryCloseMs, alpacaOrderPreview, cdf });
+  root.Strategy = { build, buildReference, buildReferenceOne, recommendVariant, VARIANTS, REFERENCE_DEFAULTS, thetaCheck, SIGNAL_SIDE, evaluate, classify, pairs, regionAtLeast, probIn, bs, bsGreeks, impliedVol, expiryCloseMs, alpacaOrderPreview, cdf };
 })(typeof globalThis !== "undefined" ? globalThis : window);

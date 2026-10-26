@@ -8,7 +8,6 @@ const path = require('path');
 require('../public/strategy-engine.js');
 require('../public/strategy-optimizer.js');
 require('../public/strategy-weekly-atr.js');
-require('../public/strategy-liquidity.js');
 const { Strategy } = globalThis;
 const deriv = require('./derivatives');
 const alpaca = require('./alpaca');
@@ -407,12 +406,6 @@ const distanceRecord = (out) => { const b = out.distanceBand, best = out.best;
     twoStage: out.twoStage ? { margin: out.twoStage.margin, maxPopDrop: out.twoStage.maxPopDrop, window: out.twoStage.window, searched: out.twoStage.searched, recommendedStage: out.recommendation ? out.recommendation.stage : null, why: out.recommendation ? out.recommendation.why : null,
       decisions: out.twoStage.decisions.map(d => ({ id: d.id, stage: d.stage, why: d.why, recommended: d.recommended, baseline: d.baseline, optimized: d.optimized })) } : null,
     pairs: (out.distancePairs || []).map(p => ({ side: p.side, variant: p.variant, ce: p.ce.strike, pe: p.pe.strike, ceSigmas: p.ce.sigmas, peSigmas: p.pe.sigmas, ceSheetSigmas: p.ce.sheet ? p.ce.sheet.sigmas : null, peSheetSigmas: p.pe.sheet ? p.pe.sheet.sigmas : null, sheetRef: p.sheetRef, exitUp: p.exitUp, exitDown: p.exitDown, pop: p.pop, ev: p.ev, worst2Sigma: p.worst2Sigma, score: p.score, chosen: p.chosen })) }; };
-// liquidity / fill record saved with every run (training data); actualFills is filled in when entry fills are recorded
-const liquidityRecord = (out) => { const b = out.best, f = b && b.fill; if (!f) return null; const p = out.execPlan || {};
-  return { verdict: f.verdict, text: f.verdictText, worstGrade: f.worstGrade, counts: f.counts, marketSlippage: f.marketSlippage, optionsMarket: f.optionsMarket, perpMarket: f.perpMarket, modelCharged: f.modelCharged, extraVsModel: f.extraVsModel,
-    shareOfTarget: f.shareOfTarget, targetAfterSlippage: f.targetAfterSlippage, exitsAtLimit: f.exitsAtLimit, evAfterSlippage: f.evAfterSlippage, fillModel: f.model, thresholds: f.thresholds, quotes: out.quoteFreshness || null,
-    legs: f.legs.map((l, i) => ({ contract: (b.legs[i] || {}).contract || null, tag: l.tag, grade: l.grade, bid: l.bid, ask: l.ask, mid: l.mid, spreadPct: l.spreadPct, spreadAbs: l.spreadAbs, openInterest: l.openInterest, volume: l.volume, marketCost: l.marketCost })),
-    execPlan: { comboUnits: p.comboUnits, netMid: p.netMid, netNatural: p.netNatural, maxNet: p.maxNet, step: p.step }, actualFills: null }; };
 function saveRun({ out, chain, perp, t, expiry, method, cfg, market, source, planId, multiplier }) {
     const quoteTimes = chain.contracts.map(q => Date.parse(q.quoteTime)).filter(Number.isFinite);
     const quoteTime = quoteTimes.length ? new Date(Math.max(...quoteTimes)).toISOString() : chain.stock?.time || null;
@@ -436,7 +429,6 @@ function saveRun({ out, chain, perp, t, expiry, method, cfg, market, source, pla
         out.considered ? JSON.stringify(out.considered) : null, multiplier || 1, out.weightsInfo ? out.weightsInfo.id : null, id);
       if (out.weeklyAtr) db.prepare('UPDATE strategy_runs SET weekly_atr=? WHERE id=?').run(JSON.stringify(weeklyAtrRecord(out.weeklyAtr)), id);
       if (out.distanceBand) db.prepare('UPDATE strategy_runs SET distance_band=? WHERE id=?').run(JSON.stringify(distanceRecord(out)), id);
-      const lr = liquidityRecord(out); if (lr) db.prepare('UPDATE strategy_runs SET liquidity=? WHERE id=?').run(JSON.stringify(lr), id);
       changed('strategy_runs', id);
     }
     return { id, data };
@@ -497,8 +489,8 @@ function router({ stockSymbols }) {
     const cfg = opt
       ? { targetMode: c.targetMode === 'fixed' ? 'fixed' : 'perLotSet', targetPerLotSet: num(c.targetPerLotSet, tickerTarget(getAccount(), t)), lotSets: num(c.lotSets, getAccount().defaultLotSets),
           targetPnl: c.targetMode === 'fixed' ? num(c.targetPnl ?? b.targetPnl) : null, direction: ['BULLISH', 'BEARISH', 'BOTH'].includes(c.direction) ? c.direction : ['BULLISH', 'BEARISH'].includes(c.signal) ? c.signal : 'AUTO',
-          callLotUnits: num(c.callLotUnits, null), putLotUnits: num(c.putLotUnits, null), slippage: num(c.slippage, null), capital: num(c.capital, null), maxLossPct: num(c.maxLossPct, null), minOpenInterest: num(c.minOpenInterest, 10),
-          maxSpreadPct: num(c.maxSpreadPct, 25), maxLots: num(c.maxLots, 60), mmLoss: num(c.mmLoss, 50), marginDivisor: num(c.marginDivisor, 2), leverage: num(c.leverage, 5), futuresRound: num(c.futuresRound, 5), commission: num(c.commission, 0.65), futureFeePct: num(c.futureFeePct, 0.045), maxPriceGapPct: num(c.maxPriceGapPct, 5), account: accountLimitsForBuild(), minShortSigma: num(c.minShortSigma, null), minShortAtr: num(c.minShortAtr, null), maxShortSigma: num(c.maxShortSigma, 1.2), sheetBandLow: num(c.sheetBandLow, 0.8), sheetBandHigh: num(c.sheetBandHigh, 1.3),
+          callLotUnits: num(c.callLotUnits, null), putLotUnits: num(c.putLotUnits, null), slippage: num(c.slippage, 0.5), capital: num(c.capital, null), maxLossPct: num(c.maxLossPct, null), minOpenInterest: num(c.minOpenInterest, 0),
+          maxSpreadPct: num(c.maxSpreadPct, null), maxLots: num(c.maxLots, 60), mmLoss: num(c.mmLoss, 50), marginDivisor: num(c.marginDivisor, 2), leverage: num(c.leverage, 5), futuresRound: num(c.futuresRound, 5), commission: num(c.commission, 0.65), futureFeePct: num(c.futureFeePct, 0.045), maxPriceGapPct: num(c.maxPriceGapPct, 5), account: accountLimitsForBuild(), minShortSigma: num(c.minShortSigma, null), minShortAtr: num(c.minShortAtr, null), maxShortSigma: num(c.maxShortSigma, 1.2), sheetBandLow: num(c.sheetBandLow, 0.8), sheetBandHigh: num(c.sheetBandHigh, 1.3),
           selection: c.selection === 'band' ? 'band' : 'sheet', optimizerSearch: !(c.optimizerSearch === false || c.optimizerSearch === 'false'), searchBelowSigma: num(c.searchBelowSigma, 0.35), searchAboveSigma: num(c.searchAboveSigma, 0.5), searchLongSteps: num(c.searchLongSteps, 2), hardMaxSigma: num(c.hardMaxSigma, 1.5), overrideMargin: num(c.overrideMargin, 0.05), overrideMaxPopDrop: num(c.overrideMaxPopDrop, 0.03),
           ...(atrOpts ? { atrPeriod: atrOpts.n, upperMult: atrOpts.upperMult, lowerMult: atrOpts.lowerMult, zoneMinSigma: atrOpts.zoneMinSigma, zoneMaxSigma: atrOpts.zoneMaxSigma, scaleToExpiry: atrOpts.scaleToExpiry, atrSource: atrOpts.source } : {}) }
       : method === 'reference'
@@ -511,18 +503,11 @@ function router({ stockSymbols }) {
     if (opt && market && market.error) input.market = market; // decideDirection explains the failure
     if (method === 'optimizer') { input.bandAtr = wAtr && !wAtr.error ? { atr: wAtr.atr, source: wAtr.source } : { error: (wAtr && wAtr.error) || 'not fetched' }; input.sheetAnchor = anchor; }
     if (method === 'weekly_atr' && wAtr) input.weeklyAtr = { ...wAtr, upperMult: atrOpts.upperMult, lowerMult: atrOpts.lowerMult, multSource: atrOpts.multSource, zoneMinSigma: atrOpts.zoneMinSigma, zoneMaxSigma: atrOpts.zoneMaxSigma, scaleToExpiry: atrOpts.scaleToExpiry, tradingDays: Strategy.tradingDaysTo(expiry), debitLongSigma: c.useCalibration === false ? 0.1 : cal.debitLongSigma, wingSigma: c.useCalibration === false ? 0.47 : cal.wingSigma };
-    for (const k of ['requirePositiveEv', 'rejectIlliquidLegs', 'rejectTooIlliquid']) if (c[k] === false || c[k] === 'false') cfg[k] = false; // liquidity gates: on unless switched off in Advanced
-    // quote freshness BEFORE building: on stale quotes (> 30 min old, e.g. the last session's) a negative EV is a "recheck"
-    // caution, not a refusal — the structure is still shown, badged, so the strikes can be re-checked once quotes refresh
+    // quote freshness (honest labelling of the quote time / age; Cboe is 15 min delayed)
     const qts = chain.contracts.map(q => Date.parse(q.quoteTime)).filter(Number.isFinite), qAt = qts.length ? Math.max(...qts) : null, ageMin = qAt ? Math.round((Date.now() - qAt) / 6e4) : null;
     const qi = chain.quoteInfo || null, isStale = (ageMin != null && ageMin > 30) || !!(qi && qi.lastSession);
-    cfg.staleQuotes = isStale;
-    for (const k of Object.keys(Strategy.LIQ_DEFAULTS)) if (c[k] !== undefined && c[k] !== '' && c[k] !== null && Number.isFinite(Number(c[k]))) cfg[k] = Number(c[k]);
     const out = opt ? Strategy.optimize(input) : method === 'reference' ? Strategy.buildReference(input) : Strategy.build(input);
-    // quote freshness (honest labelling) + liquidity / fill model / execution plan for EVERY method
-    out.quoteFreshness = { quoteTime: qAt ? new Date(qAt).toISOString() : null, ageMinutes: ageMin, delayed: !!chain.delayed, stale: isStale, lastSession: !!(qi && qi.lastSession), fileTime: qi ? qi.fileTime : null, newestOptionTrade: qi ? qi.newestOptionTrade : null, marketOpen: qi ? qi.marketOpen : null, note: qi ? qi.note : null, refreshed: fresh, oiNote: 'Open interest is as of the last session close; volume is the current or last session.' };
-    const stale = out.quoteFreshness.stale ? (chain.delayed ? 'Cboe delayed quotes' : 'quotes') + ' from ' + new Date(qAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' IST (' + (ageMin >= 120 ? Math.round(ageMin / 60) + ' h' : ageMin + ' min') + ' old) — spreads at the open can be much wider, and open interest / volume are from the last session' : null;
-    Strategy.attachLiquidity(out, { ...cfg, hedge: perp && perp.available ? perp : (chain.stock ? Strategy.hedgeFromStock(t, chain.stock) : null), stale });
+    out.quoteFreshness = { quoteTime: qAt ? new Date(qAt).toISOString() : null, ageMinutes: ageMin, delayed: !!chain.delayed, stale: isStale, lastSession: !!(qi && qi.lastSession), fileTime: qi ? qi.fileTime : null, newestOptionTrade: qi ? qi.newestOptionTrade : null, marketOpen: qi ? qi.marketOpen : null, note: qi ? qi.note : null, refreshed: fresh };
     if (notices.length) out.warnings = [...notices, ...(out.warnings || [])];
     if (W) out.weightsInfo = { id: W.id, source: W.source, closedRuns: W.closed_runs };
     const best = out.best, { id, data } = saveRun({ out, chain, perp, t, expiry, method, cfg, market, source: 'builder' });
@@ -600,19 +585,14 @@ function router({ stockSymbols }) {
     const one = async (t) => {
       const ex = await withRetry(() => deriv.getExpiries(t)), dte = (d) => (Strategy.expiryCloseMs(d) - Date.now()) / 864e5;
       const listed = (ex.expiries || []).map(e => e.date).filter(d => dte(d) >= 1); if (!listed.length) return { ticker: t, sector: sectorOf(t), error: 'no listed expiry ≥ 1 day away' };
-      // expiry: the nearest weekly (≤ 9 days) unless another one in that window has a clearly better quoted share (+15 pts)
-      const qShare = (d) => { const e = (ex.expiries || []).find(z => z.date === d); return e && e.contracts ? e.quoted / e.contracts : 0; };
-      const win = listed.filter(d => dte(d) <= 9), nearest = win[0] || listed[0], bestQ = win.slice().sort((a, c2) => qShare(c2) - qShare(a))[0];
-      const expiry = bestQ && qShare(bestQ) >= qShare(nearest) + 0.15 ? bestQ : nearest;
+      const expiry = listed.find(d => dte(d) <= 9) || listed[0];
       st(t, 'fetching', 'chain ' + expiry);
       const [chain, perp] = await Promise.all([withRetry(() => deriv.getChain({ symbol: t, near: expiry, far: expiry })), perpFor(t, stockSymbols)]);
       const [market, events, hlR, nqR, wAtr] = await Promise.all([marketFor(perp), eventsFor(t).catch(() => null), returnsFor(t, perp), nasdaqDaily(t), weeklyAtrFor(t, perp, { n: 14 }).catch(e => ({ error: e.message }))]);
       st(t, 'optimizing'); await new Promise(r0 => setImmediate(r0)); // let progress polls through before the CPU-heavy part
       const cfg = { ...Strategy.OPT_DEFAULTS, targetMode: 'perLotSet', targetPerLotSet: tickerTarget(acct, t), lotSets: 1, direction: 'AUTO', account: lim };
       const out = Strategy.optimize({ ticker: t, expiry, contracts: chain.contracts, stock: chain.stock, perp, cfg, market: market && !market.error ? market : null, referenceLots: referenceLots(), events, weights: W.weights, bandAtr: wAtr && !wAtr.error ? { atr: wAtr.atr, source: wAtr.source } : { error: wAtr && wAtr.error }, sheetAnchor: sheetAnchor(t) });
-      Strategy.attachLiquidity(out, { hedge: perp && perp.available ? perp : null });
-      const chainLiq = Strategy.chainLiquidity(chain.contracts, out.spot || (chain.stock && chain.stock.price), out.expectedMove);
-      return { ticker: t, sector: sectorOf(t), expiry, perp, hlR, nqR, out, chain, market, cfg, chainLiq, expiryQuotedShare: qShare(expiry), expiryNote: expiry !== nearest ? 'chose ' + expiry + ' over ' + nearest + ' (quoted ' + Math.round(qShare(expiry) * 100) + '% vs ' + Math.round(qShare(nearest) * 100) + '% of strikes)' : null };
+      return { ticker: t, sector: sectorOf(t), expiry, perp, hlR, nqR, out, chain, market, cfg };
     };
     // worker pool: PLAN_CONCURRENCY tickers at a time, each capped at PLAN_TICKER_MS, the whole plan at PLAN_BUDGET_MS
     const queue = tickers.slice(), results = new Map();
@@ -638,18 +618,13 @@ function router({ stockSymbols }) {
       const items = ok.map((x) => {
         const sc = Strategy.rescale(x.out, x.out.best, L * (x.out.best.lotSets || 1)), w = sc.whatIf, a = w.account;
         const ev = Strategy.evaluate({ legs: sc.legs, future: { qty: sc.perpQty, entry: x.out.best.futures.entry, basis: x.out.basis || 0 }, commission: x.out.cfg.commission, futureFeePct: x.out.cfg.futureFeePct, leverage: x.out.cfg.marginDivisor, r: x.out.cfg.r, nowMs: Date.now(), expiryMs: Strategy.expiryCloseMs(x.expiry) });
-        // liquidity is part of the rank: tighter option markets are preferred when splitting the weekly target
-        const share = sc.fill && sc.fill.shareOfTarget != null ? sc.fill.shareOfTarget : 0.5, chainF = { Good: 1, Thin: 0.85, Illiquid: 0.6 }[x.chainLiq ? x.chainLiq.grade : 'Thin'];
-        return { x, sc, ev, riskLoss: a.riskLoss, rr: a.rewardToRisk, pProfit: w.probs.profit, evv: w.probs.expectedValue, liqFactor: Math.max(0.1, 1 - share) * chainF, rank: (a.rewardToRisk || 0) * w.probs.profit * Math.max(0.1, 1 - share) * chainF };
+        return { x, sc, ev, riskLoss: a.riskLoss, rr: a.rewardToRisk, pProfit: w.probs.profit, evv: w.probs.expectedValue, rank: (a.rewardToRisk || 0) * w.probs.profit };
       }).sort((p, q) => q.rank - p.rank);
       const per = items.length ? items.reduce((m, it) => m + it.sc.target, 0) / items.length : acct.targetPerLotSet * L, needed = Math.ceil(acct.weeklyTargetMin / Math.max(1, per));
       const sel = [], skipped = [], sectors = {}; let cap = 0, risk = 0, tgt = 0;
-      const x0cfg = (it) => it.x.out.cfg || {};
       for (const it of items) {
         const t = it.x.ticker, why = [];
         if (!it.sc.ok) why.push(...it.sc.flags);
-        if (it.sc.fill && it.sc.fill.verdict === 'TOO_ILLIQUID') why.push('LIQUIDITY: too illiquid for this target — a market fill would cost $' + Math.round(it.sc.fill.marketSlippage).toLocaleString('en-US') + ' (' + Math.round(it.sc.fill.shareOfTarget * 100) + '% of the target)');
-        for (const r of Strategy.recommendBlockers(it.sc.fill, { ...x0cfg(it), rejectTooIlliquid: false })) if (!why.some(w => w.includes(r))) why.push('NOT RECOMMENDED: ' + r);
         if ((sectors[it.x.sector] || 0) >= acct.maxPerSector) why.push('sector ' + it.x.sector + ' already has ' + acct.maxPerSector);
         const hiCorr = sel.map(s2 => ({ t: s2.x.ticker, ...corr(it.x, s2.x) })).filter(c => Math.abs(c.rho) > acct.maxPairCorrelation);
         if (hiCorr.length) why.push('correlated with ' + hiCorr.map(c => c.t + ' ρ ' + c.rho.toFixed(2) + (/assumed/.test(c.source) ? ' (assumed)' : '')).join(', '));
@@ -663,25 +638,21 @@ function router({ stockSymbols }) {
       const m = sel.map(a => sel.map(c => (a === c ? 1 : corr(a.x, c.x).rho)));
       const comb = sel.length ? Strategy.combine(sel.map(it => ({ spot: it.x.out.spot, atmIV: it.x.out.atmIV, T: Math.max(1, it.x.out.days) / 365, pnl: (s0) => it.ev.expiry(s0) - it.x.out.cfg.mmLoss, riskLoss: it.riskLoss, capital: it.sc.capital })), m, { targetMin: acct.weeklyTargetMin, targetMax: acct.weeklyTargetMax, weeklyLossLimit: acct.maxWeeklyLoss, sims: 20000 }) : null;
       const pairs = []; for (let i = 0; i < sel.length; i++) for (let j = i + 1; j < sel.length; j++) pairs.push({ a: sel[i].x.ticker, b: sel[j].x.ticker, ...corr(sel[i].x, sel[j].x) });
-      const cat = (w) => /^RISK LIMIT: max loss/.test(w) ? 'per-trade loss cap' : /^RISK LIMIT: capital/.test(w) ? 'capital per trade' : /remaining weekly loss|weekly loss cap/.test(w) ? 'weekly loss cap' : /^capital/.test(w) ? 'account capital' : /^correlated/.test(w) ? 'correlation' : /^sector/.test(w) ? 'sector cap' : /LIQUIDITY/.test(w) ? 'liquidity' : /concurrent/.test(w) ? 'max concurrent' : /already covered/.test(w) ? null : /below the .* target/.test(w) ? 'target not met at this size' : 'other';
+      const cat = (w) => /^RISK LIMIT: max loss/.test(w) ? 'per-trade loss cap' : /^RISK LIMIT: capital/.test(w) ? 'capital per trade' : /remaining weekly loss|weekly loss cap/.test(w) ? 'weekly loss cap' : /^capital/.test(w) ? 'account capital' : /^correlated/.test(w) ? 'correlation' : /^sector/.test(w) ? 'sector cap' : /concurrent/.test(w) ? 'max concurrent' : /already covered/.test(w) ? null : /below the .* target/.test(w) ? 'target not met at this size' : 'other';
       const limiter = skipped.length ? [...new Set(skipped.flatMap(s2 => s2.why.map(cat)).filter(Boolean))].join(', ') : null;
       return { multiplier: L, lotSets: L, perStructureTarget: per, needed, fits: sel.length, targetSum: tgt, coversWeeklyMin: tgt >= acct.weeklyTargetMin,
         summary: sel.length >= needed ? `${sel.length} structures at size ×${L} cover the $${acct.weeklyTargetMin.toLocaleString('en-US')} weekly minimum ($${Math.round(tgt).toLocaleString('en-US')} of targets).` : `Needs ${needed} structures at size ×${L} (≈ $${Math.round(per).toLocaleString('en-US')} target each) to reach $${acct.weeklyTargetMin.toLocaleString('en-US')}, but only ${sel.length} fit` + (limiter ? ` (limited by: ${limiter})` : '') + '.',
         capitalUsed: cap, combinedMaxLoss: risk, combined: comb, pairs,
-        structures: sel.map(({ x, sc, riskLoss, rr, pProfit, evv, liqFactor }) => ({ ticker: x.ticker, sector: x.sector, expiry: x.expiry, side: x.out.best.futuresSide, variant: x.out.best.variant, hedge: x.out.best.futures.isStock ? 'stock' : x.out.best.futures.symbol, multiplier: L, lotSets: sc.lotSets, targetAdjusted: !!x.out.targetAdjusted,
+        structures: sel.map(({ x, sc, riskLoss, rr, pProfit, evv }) => ({ ticker: x.ticker, sector: x.sector, expiry: x.expiry, side: x.out.best.futuresSide, variant: x.out.best.variant, hedge: x.out.best.futures.isStock ? 'stock' : x.out.best.futures.symbol, multiplier: L, lotSets: sc.lotSets, targetAdjusted: !!x.out.targetAdjusted,
           legs: sc.legs.map(l => ({ side: l.side, qty: l.qty, type: l.type, strike: l.strike, openInterest: l.openInterest ?? null, volume: l.volume ?? null })), perpQty: sc.perpQty, target: sc.target, exits: sc.exits, capital: sc.capital, margin: sc.futuresMargin,
-          riskLoss, rewardToRisk: rr, probProfit: pProfit, ev: evv, liquidityFlags: sc.liquidity.flags, direction: x.out.direction && x.out.direction.reason,
-          liquidity: sc.fill ? { verdict: sc.fill.verdict, worstGrade: sc.fill.worstGrade, counts: sc.fill.counts, marketSlippage: sc.fill.marketSlippage, shareOfTarget: sc.fill.shareOfTarget, targetAfterSlippage: sc.fill.targetAfterSlippage } : null, chainLiquidity: x.chainLiq })),
+          riskLoss, rewardToRisk: rr, probProfit: pProfit, ev: evv, direction: x.out.direction && x.out.direction.reason })),
         skipped };
     });
     const good = plans.filter(p => p.coversWeeklyMin && p.combined);
     const rec = (good.length ? good.sort((a, c) => c.combined.probHitMin - a.combined.probHitMin || c.combined.expectedValue - a.combined.expectedValue)[0] : plans.slice().sort((a, c) => c.targetSum - a.targetSum)[0]) || null;
-    const tickerStatus = perTicker.map(x => x.error ? { ticker: x.ticker, sector: x.sector, status: 'ERROR', reason: x.error } : { ticker: x.ticker, sector: x.sector, expiry: x.expiry, hedge: x.perp && x.perp.available ? x.perp.symbol : 'stock', status: x.out.status, reason: x.out.status === 'OK' ? null : (x.out.errors || []).join(' '),
-      liquidity: { chain: x.chainLiq, verdict: x.out.liquidityVerdict || null, expiryNote: x.expiryNote } });
-    // liquidity ranking of the universe (most liquid option markets first)
-    const liquidityRank = perTicker.filter(x => !x.error && x.chainLiq).sort((a, c2) => c2.chainLiq.score - a.chainLiq.score).map((x, i) => ({ rank: i + 1, ticker: x.ticker, expiry: x.expiry, grade: x.chainLiq.grade, medianSpreadPct: x.chainLiq.medianSpreadPct, goodStrikes: x.chainLiq.good, strikes: x.chainLiq.strikes, verdict: x.out.liquidityVerdict ? x.out.liquidityVerdict.verdict : null, marketSlippage: x.out.liquidityVerdict ? x.out.liquidityVerdict.marketSlippage : null, shareOfTarget: x.out.liquidityVerdict ? x.out.liquidityVerdict.shareOfTarget : null }));
+    const tickerStatus = perTicker.map(x => x.error ? { ticker: x.ticker, sector: x.sector, status: 'ERROR', reason: x.error } : { ticker: x.ticker, sector: x.sector, expiry: x.expiry, hedge: x.perp && x.perp.available ? x.perp.symbol : 'stock', status: x.out.status, reason: x.out.status === 'OK' ? null : (x.out.errors || []).join(' ') });
     const annual = { simpleMin: acct.weeklyTargetMin / acct.capital * 52, simpleMax: acct.weeklyTargetMax / acct.capital * 52, compoundMin: (1 + acct.weeklyTargetMin / acct.capital) ** 52 - 1, compoundMax: (1 + acct.weeklyTargetMax / acct.capital) ** 52 - 1 };
-    const v = { account: acct, limits: lim, tickers: tickerStatus, liquidityRank, plans: plans.sort((a, c) => a.lotSets - c.lotSets), recommendedLotSets: rec ? rec.lotSets : null, annual,
+    const v = { account: acct, limits: lim, tickers: tickerStatus, plans: plans.sort((a, c) => a.lotSets - c.lotSets), recommendedLotSets: rec ? rec.lotSets : null, annual,
       honesty: 'A ' + (acct.weeklyTargetMin / acct.capital * 100).toFixed(1) + '–' + (acct.weeklyTargetMax / acct.capital * 100).toFixed(1) + '% weekly target is ~' + Math.round(annual.simpleMin * 100) + '–' + Math.round(annual.simpleMax * 100) + '% a year simple (' + Math.round(annual.compoundMin * 100) + '%+ compounded) — far above what professional funds sustain. The probabilities come from an options-implied lognormal model on delayed quotes and assume holding to expiry; they are estimates, never guarantees.', generatedAt: new Date().toISOString() };
     // save the plan and EVERY ticker's optimizer run (training data, whether or not it is traded)
     const planId = db.prepare('INSERT INTO strategy_plans(ts, inputs, result) VALUES(?,?,?)').run(Date.now(), JSON.stringify({ tickers, lotList, account: acct, limits: lim }),
@@ -712,18 +683,13 @@ function router({ stockSymbols }) {
   r.get('/strategy/weekly-plan/jobs/:id', (req, res) => { const j = planJobs.get(String(req.params.id)); if (!j) return res.status(404).json({ error: 'This plan job is no longer on the server (it restarts on deploys or when idle). Build the plan again.' }); res.json(jobView(j, true)); });
   // ---- trade lifecycle: Taken / Not taken → entry fills → close with exit fills + realised P&L
   r.post('/strategy/history/:id/trade', wrap(async (req, res) => {
-    const id = Number(req.params.id), b = req.body || {}, x = db.prepare('SELECT id, legs, result, taken, entry_fills, liquidity FROM strategy_runs WHERE id=?').get(id);
+    const id = Number(req.params.id), b = req.body || {}, x = db.prepare('SELECT id, legs, result, taken, entry_fills FROM strategy_runs WHERE id=?').get(id);
     if (!x) throw httpErr(404, 'Run not found');
     const fillsOf = (f) => { if (f == null) return null; const legs = {}; for (const [k, v] of Object.entries(f.legs || {})) { if (v === '' || v == null) continue; const n = Number(v); if (!(n >= 0)) throw httpErr(400, 'Fill for ' + k + ' must be a non-negative price'); legs[k] = n; }
       const perp = f.perp === '' || f.perp == null ? null : Number(f.perp); if (perp != null && !(perp > 0)) throw httpErr(400, 'Perp fill must be positive'); return { legs, perp, at: Date.now(), note: String(f.note || '').slice(0, 300) }; };
     const sets = [], vals = [];
     if (b.taken !== undefined) { sets.push('taken=?'); vals.push(b.taken === true || b.taken === 1 || b.taken === 'yes' ? 1 : b.taken === null ? null : 0); }
-    if (b.entryFills !== undefined) { const ef = fillsOf(b.entryFills); sets.push('entry_fills=?'); vals.push(JSON.stringify(ef));
-      // actual entry fills vs the quoted mid (positive = worse than mid), next to the modelled market-fill slippage
-      if (ef && x.liquidity) { try { const lq = JSON.parse(x.liquidity), legs = (JSON.parse(x.legs || '{}').legs) || [], rows = [];
-        for (const l of legs) { const fp = ef.legs[l.contract]; if (!(fp >= 0) || !(l.mid > 0)) continue; const worse = (l.side === 'buy' ? fp - l.mid : l.mid - fp) * l.qty * 100; rows.push({ contract: l.contract, fill: fp, mid: l.mid, vsMid: worse }); }
-        lq.actualFills = { at: ef.at, legs: rows, optionsVsMid: rows.reduce((m, r2) => m + r2.vsMid, 0), perpFill: ef.perp, modelledMarketSlippage: lq.marketSlippage };
-        sets.push('liquidity=?'); vals.push(JSON.stringify(lq)); } catch (e) { log.warn('fills.compare_failed', { id, error: e.message }); } } }
+    if (b.entryFills !== undefined) { sets.push('entry_fills=?'); vals.push(JSON.stringify(fillsOf(b.entryFills))); }
     if (b.exitFills !== undefined) { sets.push('exit_fills=?'); vals.push(JSON.stringify(fillsOf(b.exitFills))); }
     if (b.realisedPnl !== undefined && b.realisedPnl !== '') { const pnl = Number(b.realisedPnl); if (!Number.isFinite(pnl) || Math.abs(pnl) > 1e9) throw httpErr(400, 'Realised P&L must be a number'); sets.push('realised_pnl=?', 'realised_at=?', 'closed_at=?'); vals.push(pnl, Date.now(), Date.now()); }
     if (b.notes !== undefined) { sets.push('outcome_notes=?'); vals.push(String(b.notes).slice(0, 500)); }

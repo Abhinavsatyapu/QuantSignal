@@ -29,7 +29,7 @@ test('weekly plan job: progress, per-ticker timeout and errors, all tickers anal
     const by = Object.fromEntries(j.tickers.map((t) => [t.ticker, t]));
     assert.equal(by.BAD.status, 'error'); assert.match(by.BAD.detail, /No listed options/);
     assert.equal(by.SLOW.status, 'timeout'); assert.match(by.SLOW.detail, /timed out after 2 s/);
-    const R = j.result; assert.equal(R.tickers.length, 27); assert.ok(R.planId); assert.ok(Array.isArray(R.liquidityRank)); assert.ok(R.elapsedMs >= 0);
+    const R = j.result; assert.equal(R.tickers.length, 27); assert.ok(R.planId); assert.ok(!('liquidityRank' in R)); assert.ok(R.elapsedMs >= 0);
     assert.equal(R.tickers.find((t) => t.ticker === 'SLOW').status, 'ERROR');
     const [s404, e404] = await f('/strategy/weekly-plan/jobs/nope'); assert.equal(s404, 404); assert.match(e404.error, /Build the plan again/);
     const [s400] = await f('/strategy/weekly-plan/jobs', { tickers: Array.from({ length: 41 }, (_, i) => 'X' + i) }); assert.equal(s400, 400);

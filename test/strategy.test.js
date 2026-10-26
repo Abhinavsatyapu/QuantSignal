@@ -65,12 +65,14 @@ test('buildReference: equalisation makes 1-day P&L equal at both short strikes w
   assert.ok(Math.abs(out.best.expected.upToday - out.best.expected.downToday) < 1, `${out.best.expected.upToday} vs ${out.best.expected.downToday}`);
 });
 
-test('buildReference: validation, no perp, no liquidity, unreachable target', () => {
+test('buildReference: validation, no perp, no quotes, unreachable target', () => {
   const base = { ticker: 'TEST', expiry: EXP, nowMs: NOW, stock: { price: 100 }, perp: perp(100) };
   assert.equal(Strategy.buildReference({ ...base, contracts: chain(100, 0.6), cfg: { futuresSide: 'LONG', targetPnl: -1, capital: 1000 } }).status, 'INVALID');
   assert.equal(Strategy.buildReference({ ...base, perp: { available: false, reason: 'none' }, contracts: chain(100, 0.6), cfg: { futuresSide: 'LONG', targetPnl: 100, capital: 1000 } }).status, 'NO_PERP');
   const wide = Strategy.buildReference({ ...base, contracts: chain(100, 0.6, { spreadPct: 80 }), cfg: { futuresSide: 'LONG', targetPnl: 100, capital: 50000 } });
-  assert.equal(wide.status, 'NO_LIQUIDITY');
+  assert.notEqual(wide.status, 'NO_DATA'); // wide spreads are not filtered (liquidity is not considered)
+  const none = Strategy.buildReference({ ...base, contracts: chain(100, 0.6).map(q => ({ ...q, bid: 0 })), cfg: { futuresSide: 'LONG', targetPnl: 100, capital: 50000 } });
+  assert.equal(none.status, 'NO_DATA');
   const far = Strategy.buildReference({ ...base, contracts: chain(100, 0.6), cfg: { futuresSide: 'LONG', targetPnl: 1e6, capital: 5000 } });
   assert.equal(far.status, 'TARGET_NOT_REACHABLE'); assert.match(far.errors[0], /not reachable/);
   const past = Strategy.buildReference({ ...base, expiry: '2026-10-01', contracts: [], cfg: { futuresSide: 'LONG', targetPnl: 100, capital: 5000 } });

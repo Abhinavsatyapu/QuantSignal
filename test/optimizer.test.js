@@ -1,5 +1,3 @@
-// fixture chains are priced at the model's own risk-neutral fair value (no real edge): the liquidity / positive-EV gates are
-// switched off here and tested on purpose in test/liquidity.test.js
 // Optimizer, what-if, sizing and plan maths. Chains are synthetic Black-Scholes fixtures (exercise the math only).
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -18,7 +16,7 @@ function chain(spot, iv, { oi = 500 } = {}) {
 }
 const perp = (x) => ({ available: true, symbol: 'xyz:TEST', bid: x - 0.01, ask: x + 0.01, mid: x, szDecimals: 2, maxLeverage: 10, funding: 0.00001 });
 const WIDE = { selection: 'band', minShortSigma: null, maxShortSigma: 2.5, sheetBandHigh: 2 }; // band selection (no two-stage rerun), sheet band only, wider: the flat-IV fixture needs farther shorts for $150 per lot set
-const run = (cfg = {}, extra = {}) => S.optimize({ nowMs: NOW, ticker: 'TEST', expiry: EXP, contracts: chain(100, 0.6), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { requirePositiveEv: false, rejectIlliquidLegs: false, rejectTooIlliquid: false, targetMode: 'fixed', targetPnl: 400, ...cfg }, market: { direction: 'LONG', score: 7, maxScore: 8, trend: 'UP', momentum: 'UP', rsi: 60 }, ...extra });
+const run = (cfg = {}, extra = {}) => S.optimize({ nowMs: NOW, ticker: 'TEST', expiry: EXP, contracts: chain(100, 0.6), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { targetMode: 'fixed', targetPnl: 400, ...cfg }, market: { direction: 'LONG', score: 7, maxScore: 8, trend: 'UP', momentum: 'UP', rsi: 60 }, ...extra });
 
 test('decideDirection: signal, lean and override', () => {
   assert.deepEqual(S.decideDirection({ direction: 'LONG', score: 7, maxScore: 8, trend: 'UP', momentum: 'UP', rsi: 60 }).sides, ['LONG']);
@@ -54,9 +52,11 @@ test('optimize: per-lot-set target scales with the lots (lot sets fixed, target 
   assert.ok(two.best.perLotSet.up >= 150 && two.best.perLotSet.down >= 150);
 });
 
-test('optimize: refuses an illiquid chain and falls back to a stock hedge without a perp', () => {
-  const thin = S.optimize({ nowMs: NOW, ticker: 'TEST', expiry: EXP, contracts: chain(100, 0.6, { oi: 1 }), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { requirePositiveEv: false, rejectIlliquidLegs: false, rejectTooIlliquid: false, targetMode: 'fixed', targetPnl: 400 } });
-  assert.notEqual(thin.status, 'OK');
+test('optimize: liquidity is not considered (low OI / wide spreads still build), unquoted chains refused, stock hedge without a perp', () => {
+  const lowOi = S.optimize({ nowMs: NOW, ticker: 'TEST', expiry: EXP, contracts: chain(100, 0.6, { oi: 1 }), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { targetMode: 'fixed', targetPnl: 400 } });
+  assert.equal(lowOi.status, 'OK', JSON.stringify(lowOi.errors)); assert.ok(!('liquidity' in lowOi.best.factors));
+  const noQuotes = S.optimize({ nowMs: NOW, ticker: 'TEST', expiry: EXP, contracts: chain(100, 0.6).map(q => ({ ...q, bid: 0 })), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { targetMode: 'fixed', targetPnl: 400 } });
+  assert.equal(noQuotes.status, 'NO_DATA'); assert.match(noQuotes.errors[0], /quoted strikes/);
   const st = run({}, { perp: { available: false, reason: 'no perp' } });
   assert.equal(st.hedgeType, 'STOCK'); assert.ok(st.warnings.some(w => /stock/i.test(w)));
   const gap = run({}, { perp: perp(110) });
@@ -95,7 +95,7 @@ test('account risk limits reject candidates that hit the target but breach the c
   assert.ok(o.errors[0].includes('RISK LIMIT'));
 });
 
-test('rescale: legs × k, perp re-equalised and floored to 5, target × k, and the size check flags thin open interest', () => {
+test('rescale: legs × k, perp re-equalised and floored to 5, target × k; order size vs open interest is not a gate', () => {
   const o = run({ targetMode: 'perLotSet', targetPerLotSet: 150, lotSets: 1, ...WIDE }), b = o.best;
   const r3 = S.rescale(o, b, 3);
   r3.legs.forEach((l, i) => assert.equal(l.qty, b.legs[i].qty * 3));
@@ -103,7 +103,7 @@ test('rescale: legs × k, perp re-equalised and floored to 5, target × k, and t
   assert.equal(r3.target, 450);
   const r1 = S.rescale(o, b, 1); assert.ok(Math.abs(r1.exits.up - b.exits[0].pnlExpiry) < 1);
   const thin = S.sizeCheck([{ side: 'sell', qty: 30, type: 'call', strike: 105, openInterest: 40, volume: 5, bidSize: 10 }]);
-  assert.equal(thin.ok, false); assert.equal(thin.blocking.length, 1); assert.ok(thin.flags.length >= 3);
+  assert.equal(thin.ok, true); assert.equal(thin.blocking.length, 0); assert.equal(thin.flags.length, 0);
 });
 
 test('cholesky reproduces the correlation matrix', () => {
@@ -156,9 +156,9 @@ test('sheet band: optional σ / weekly-ATR floors (blank = off), max σ ceiling,
   assert.ok(wide.considered.some(c => Math.abs(c.sig.ds - c.sig.cs) > 0.2), 'upper and lower distances vary independently');
   assert.equal(run({ sheetBandLow: 1.3, sheetBandHigh: 0.8 }).status, 'INVALID'); assert.equal(run({ sheetBandHigh: 4 }).status, 'INVALID'); assert.equal(run({ minShortSigma: 2, maxShortSigma: 1 }).status, 'INVALID');
 });
-test('sheet band: no liquid strike inside a band → nearest liquid strike used, and said so', () => {
+test('sheet band: no quoted strike inside a band → nearest listed strike used, and said so', () => {
   const o = sheetRun({ sheetBandLow: 1.0, sheetBandHigh: 1.01 }); // a 1%-wide band rarely contains a listed strike on a 2.5-wide grid
-  assert.ok(o.distanceBand.fallback.length > 0); assert.ok(o.warnings.some(w => /No liquid .* inside the sheet band .* using the nearest liquid/.test(w)));
+  assert.ok(o.distanceBand.fallback.length > 0); assert.ok(o.warnings.some(w => /No quoted .* inside the sheet band .* using the nearest listed/.test(w)));
   assert.ok(o.distanceBand.variants.some(v => v.fallback));
 });
 
