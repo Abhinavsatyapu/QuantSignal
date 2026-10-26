@@ -16,12 +16,24 @@
   const usd = (x) => (x < 0 ? "−$" : "$") + Math.round(Math.abs(x)).toLocaleString("en-US");
   const OPT_DEFAULTS = { mmLoss: 50, maxLots: 60, maxSpreadPct: 25, minOpenInterest: 10, slippage: 0.5, commission: 0.65, futureFeePct: 0.045, marginDivisor: 2, leverage: 5, futuresRound: 5,
     thetaTolerancePct: 15, maxPriceGapPct: 5, riskSigma: 2, r: 0.04, capital: null, maxLossPct: null, topN: 3,
-    // short-strike distance band: each short ≥ max(minShortSigma × 1σ-to-expiry, minShortAtr × weekly ATR) and ≤ maxShortSigma × σ from spot
-    minShortSigma: 1, minShortAtr: 1, maxShortSigma: 2.5 };
+    // short-strike distance band, anchored to the reference sheets: each short is searched within
+    // [sheetBandLow, sheetBandHigh] × the sheet distance for that short (per ticker, ratio and side), capped at maxShortSigma × σ.
+    // minShortSigma / minShortAtr are optional floors (null = off): σ-to-expiry multiples / weekly-ATR multiples.
+    // Default = the "middle zone" 0.7–1.2σ for both shorts (not too close, not too wide); the sheet distance is clamped into it
+    // and used as the scoring anchor. Blank minShortSigma → the sheet band itself is searched (capped at maxShortSigma).
+    sheetBandLow: 0.8, sheetBandHigh: 1.3, minShortSigma: 0.7, minShortAtr: null, maxShortSigma: 1.2 };
   // Penalty weights (lower total = better). Stored server-side; tuned from recorded outcomes once enough runs are closed.
-  const DEFAULT_WEIGHTS = { fit: 3, capital: 1, risk: 1, theta: 1, liquidity: 1.5, reference: 0.5, skew: 0.5, probability: 1, robustness: 2, tail: 1, exitFit: 2, ev: 1.5, pop: 1.5 };
+  const DEFAULT_WEIGHTS = { fit: 3, capital: 1, risk: 1, theta: 1, liquidity: 1.5, reference: 1.5, skew: 0.5, probability: 1, robustness: 2, tail: 1, exitFit: 2, ev: 1.5, pop: 1.5 };
   // exitFit = shortfall of the P&L if an exit (CE / PE short) is hit TODAY vs the target; ev = −EV/target; pop = 1 − P(profit) (what-if, analysed candidates)
-  const REF = { debitLongSigma: 0.1, debitShortSigma: 0.9, creditShortSigma: 0.63, wingSigma: 0.47 }; // reference-sheet medians
+  const REF = { debitLongSigma: 0.1, debitShortSigma: 0.9, creditShortSigma: 0.63, wingSigma: 0.47 }; // pooled reference-sheet medians (fallback)
+  // Sheet anchor per lot-ratio group: "credit2" = credit spread carries 2× the debit lots (the sheets' usual 1C:2P on a SHORT
+  // hedge / 2C:1P on a LONG hedge), "credit05" = the other ratio. input.sheetAnchor comes from the server (per-ticker calibration).
+  function sheetGroups(a) {
+    const base = { ...REF, n: 0, source: "built-in pooled reference-sheet medians" }, g = (a && a.groups) || {};
+    const fix = (x) => (x && fin(x.debitShortSigma) && fin(x.creditShortSigma) ? { ...base, ...x } : null);
+    const c2 = fix(g.credit2) || base, c05 = fix(g.credit05) || c2;
+    return { credit2: { ...c2, key: "credit2" }, credit05: { ...c05, key: "credit05" }, source: (a && a.source) || base.source };
+  }
   const VARIANTS = [{ key: "1C:2P", call: 1, put: 2 }, { key: "2C:1P", call: 2, put: 1 }];
   const MOVES = [-10, -7, -5, -3, -2, -1, 0, 1, 2, 3, 5, 7, 10], IV_SHOCKS = [-20, -10, 0, 10, 20];
   const GATES = { minProbProfit: 0.35, maxTail2SigmaX: 4, minRobustHit: 0.25, minEvX: -0.5 }; // acceptable-risk gates (× target)
@@ -114,7 +126,11 @@
     const t = (m.trend === "UP" ? 1 : m.trend === "DOWN" ? -1 : 0) + (m.momentum === "UP" ? 1 : m.momentum === "DOWN" ? -1 : 0) + (m.rsi > 55 ? 1 : m.rsi < 45 ? -1 : 0);
     if (t >= 2) return { sides: ["LONG"], side: "LONG", source: "trend", reason: "No qualified signal, but trend/momentum/RSI lean up (" + t + "/3) → LONG perp. " + desc + "." };
     if (t <= -2) return { sides: ["SHORT"], side: "SHORT", source: "trend", reason: "No qualified signal, but trend/momentum/RSI lean down (" + t + "/3) → SHORT perp. " + desc + "." };
-    return { sides: ["LONG", "SHORT"], side: null, source: "neutral", reason: "No clear direction (lean " + t + "/3): both perp sides compared, best score wins. " + desc + "." };
+    // neutral lean: follow the EMA trend (EMA20 vs EMA50) rather than a pure score tie-break between the two sides
+    const emaDir = fin(m.ema20) && fin(m.ema50) && m.ema20 !== m.ema50 ? (m.ema20 > m.ema50 ? "UP" : "DOWN") : m.trend === "UP" || m.trend === "DOWN" ? m.trend : null;
+    if (emaDir) { const side = emaDir === "UP" ? "LONG" : "SHORT";
+      return { sides: [side], side, source: "trend-neutral", reason: "No clear direction (lean " + t + "/3), so the EMA trend decides: EMA20 " + (fin(m.ema20) ? m.ema20.toFixed(2) : "—") + (emaDir === "UP" ? " above" : " below") + " EMA50 " + (fin(m.ema50) ? m.ema50.toFixed(2) : "—") + " (trend " + emaDir + ") → " + side + " perp (not a score tie-break). " + desc + "." }; }
+    return { sides: ["LONG", "SHORT"], side: null, source: "neutral", reason: "No clear direction (lean " + t + "/3) and no EMA trend: both perp sides compared, best score wins. " + desc + "." };
   }
   // When the ticker has no Hyperliquid perp, hedge with shares (real stock quote; Reg-T 50% margin ≈ the same /2 rule).
   function hedgeFromStock(ticker, stock) {
@@ -149,7 +165,11 @@
     if (!(cfg.slippage >= 0 && cfg.slippage <= 1)) errs.push("Bid/ask haircut must be 0–1 (0 = mid, 1 = full bid/ask)");
     if (!(cfg.marginDivisor >= 1 && cfg.marginDivisor <= 50)) errs.push("Futures margin divisor must be 1–50");
     if (!(cfg.futuresRound > 0)) errs.push("Futures rounding must be > 0");
-    if (!(fin(cfg.minShortSigma) && cfg.minShortSigma >= 0 && fin(cfg.minShortAtr) && cfg.minShortAtr >= 0 && fin(cfg.maxShortSigma) && cfg.maxShortSigma > 0 && cfg.maxShortSigma <= 5 && cfg.minShortSigma < cfg.maxShortSigma)) errs.push("Short-distance band: min σ and min × ATR must be ≥ 0, max σ must be > min σ and ≤ 5");
+    const off = (x) => x == null || x === "";
+    if (off(cfg.minShortSigma)) cfg.minShortSigma = null; if (off(cfg.minShortAtr)) cfg.minShortAtr = null;
+    if (!((cfg.minShortSigma == null || (fin(cfg.minShortSigma) && cfg.minShortSigma >= 0)) && (cfg.minShortAtr == null || (fin(cfg.minShortAtr) && cfg.minShortAtr >= 0)) && fin(cfg.maxShortSigma) && cfg.maxShortSigma > 0 && cfg.maxShortSigma <= 5 && (cfg.minShortSigma == null || cfg.minShortSigma < cfg.maxShortSigma)))
+      errs.push("Short-distance band: optional min σ and min × ATR must be ≥ 0 (blank = off), max σ must be > min σ and ≤ 5");
+    if (!(fin(cfg.sheetBandLow) && fin(cfg.sheetBandHigh) && cfg.sheetBandLow > 0 && cfg.sheetBandHigh > cfg.sheetBandLow && cfg.sheetBandHigh <= 3)) errs.push("Sheet band: low × must be > 0 and below high ×, high × ≤ 3");
     if (errs.length) return { status: "INVALID", errors: errs };
     const now = input.nowMs ?? Date.now(), expiryMs = S.expiryCloseMs(input.expiry), T = (expiryMs - now) / (365 * 864e5);
     if (!(T > 0)) return { status: "INVALID", errors: ["Expiry " + input.expiry + " has passed"] };
@@ -190,41 +210,78 @@
       if (wa.errors) return { status: wa.errors.some((e) => /liquid/i.test(e)) ? "NO_LIQUIDITY" : "INVALID", method: "weekly_atr", errors: wa.errors, liquidity, spot };
       warnings.push(...wa.warnings);
     }
-    // short-strike distance band (optimizer only; the weekly-ATR method fixes the shorts itself)
-    const bAtr = input.bandAtr && fin(input.bandAtr.atr) && input.bandAtr.atr > 0 ? input.bandAtr : null;
-    const minDist = Math.max(cfg.minShortSigma * sigma, bAtr ? cfg.minShortAtr * bAtr.atr : 0), maxDist = Math.max(minDist, cfg.maxShortSigma * sigma);
-    const dband = wa ? null : { minShortSigma: cfg.minShortSigma, minShortAtr: cfg.minShortAtr, maxShortSigma: cfg.maxShortSigma, sigma, weeklyAtr: bAtr ? bAtr.atr : null, weeklyAtrSource: bAtr ? bAtr.source || null : null,
-      minDist, maxDist, minSigmas: minDist / sigma, maxSigmas: maxDist / sigma, binding: bAtr && cfg.minShortAtr * bAtr.atr > cfg.minShortSigma * sigma ? "weekly ATR" : "σ", fallback: [],
-      note: bAtr ? null : (input.bandAtr && input.bandAtr.error ? "Weekly ATR unavailable (" + input.bandAtr.error + "): band uses σ only." : "Weekly ATR not supplied: band uses σ only.") };
-    if (dband && dband.note && cfg.minShortAtr > 0) warnings.push(dband.note);
+    // short-strike distance band (optimizer only; the weekly-ATR method fixes the shorts itself): anchored to the reference
+    // sheets. For each side × ratio, the debit-spread short and the credit-spread short are searched within
+    // [sheetBandLow, sheetBandHigh] × the sheet σ distance, raised by the optional σ / weekly-ATR floors, capped at maxShortSigma.
+    const bAtr = input.bandAtr && fin(input.bandAtr.atr) && input.bandAtr.atr > 0 ? input.bandAtr : null, SG = sheetGroups(input.sheetAnchor);
+    const groupOf = (fs, v) => { const cr = fs === "SHORT" ? v.put : v.call, db = fs === "SHORT" ? v.call : v.put; return cr >= db ? SG.credit2 : SG.credit05; };
+    const sideBand = (aRaw) => {
+      // zone on: the short's scoring anchor = max(sheet distance, zone midpoint), clamped into the zone → the middle distance
+      // unless the sheets for this ticker / ratio sit wider; zone off: the sheet distance itself
+      const zLo = cfg.minShortSigma, zHi = cfg.maxShortSigma, mid = zLo != null ? (zLo + zHi) / 2 : null;
+      const aSig = Math.min(zHi, Math.max(zLo ?? 0, mid != null ? Math.max(aRaw, mid) : aRaw));
+      let lo, hi, binding;
+      if (zLo != null) { lo = Math.max(zLo, Math.min(cfg.sheetBandLow * aSig, zLo)); hi = Math.min(zHi, Math.max(cfg.sheetBandHigh * aSig, zHi)); binding = "middle zone"; } // the whole zone (it contains the clamped sheet band)
+      else { lo = cfg.sheetBandLow * aSig; hi = Math.min(cfg.sheetBandHigh * aSig, zHi); binding = "sheet"; }
+      if (cfg.minShortAtr != null && bAtr && cfg.minShortAtr * bAtr.atr / sigma > lo) { lo = cfg.minShortAtr * bAtr.atr / sigma; binding = "weekly-ATR floor"; }
+      if (hi < lo) hi = Math.max(lo, Math.min(zHi, lo + (cfg.sheetBandHigh - cfg.sheetBandLow) * aSig));
+      return { sheetRawSigmas: aRaw, sheetSigmas: aSig, clampedToZone: Math.abs(aSig - aRaw) > 1e-9, zoneMid: mid, anchorRule: mid != null ? "max(sheet, zone midpoint " + mid.toFixed(2) + "σ) within the zone" : "sheet distance", loSigmas: lo, hiSigmas: hi, lo: lo * sigma, hi: hi * sigma, binding };
+    };
+    const distOf = (k) => ({ strike: k, dollars: k - spot, pct: (k / spot - 1) * 100, sigmas: (k - spot) / sigma, atrs: bAtr ? (k - spot) / bAtr.atr : null });
+    const sheetDist = (sg) => ({ sigmas: sg, dollars: sg * sigma, pct: sg * sigma / spot * 100, atrs: bAtr ? sg * sigma / bAtr.atr : null });
+    const variantsAll = cfg.callLotUnits != null ? [{ key: cfg.callLotUnits + "C:" + cfg.putLotUnits + "P", call: cfg.callLotUnits, put: cfg.putLotUnits }] : VARIANTS;
+    const dband = wa ? null : { mode: cfg.minShortSigma != null ? "middle zone + sheet anchor" : "sheet", sheetBandLow: cfg.sheetBandLow, sheetBandHigh: cfg.sheetBandHigh, minShortSigma: cfg.minShortSigma, minShortAtr: cfg.minShortAtr, maxShortSigma: cfg.maxShortSigma, sigma,
+      weeklyAtr: bAtr ? bAtr.atr : null, weeklyAtrSource: bAtr ? bAtr.source || null : null, anchorSource: SG.source, anchor: input.sheetAnchor || null, fallback: [], variants: [],
+      note: bAtr ? null : (input.bandAtr && input.bandAtr.error ? "Weekly ATR unavailable (" + input.bandAtr.error + ")" : "Weekly ATR not supplied") + (cfg.minShortAtr != null ? ": the × weekly ATR floor is ignored." : "; distances are shown without the × ATR column.") };
+    const vband = {};
+    if (dband) for (const fs of dir.sides) for (const v of variantsAll) {
+      const g = groupOf(fs, v), dB = sideBand(g.debitShortSigma), cB = sideBand(g.creditShortSigma), ceB = fs === "SHORT" ? dB : cB, peB = fs === "SHORT" ? cB : dB;
+      const e = { side: fs, variant: v.key, group: g.key, rawSheet: { debitShortSigma: g.debitShortSigma, creditShortSigma: g.creditShortSigma }, groupSource: g.source, groupN: g.n, debitLongSigma: g.debitLongSigma, wingSigma: g.wingSigma,
+        sheet: { ce: { ...sheetDist(ceB.sheetSigmas), role: fs === "SHORT" ? "debit short" : "credit short", pctSheets: fs === "SHORT" ? g.debitShortPct ?? null : g.creditShortPct ?? null, atrSheets: fs === "SHORT" ? g.debitShortAtr ?? null : g.creditShortAtr ?? null },
+          pe: { ...sheetDist(peB.sheetSigmas), role: fs === "SHORT" ? "credit short" : "debit short", pctSheets: fs === "SHORT" ? g.creditShortPct ?? null : g.debitShortPct ?? null, atrSheets: fs === "SHORT" ? g.creditShortAtr ?? null : g.debitShortAtr ?? null } },
+        ce: ceB, pe: peB };
+      dband.variants.push(e); vband[fs + "|" + v.key] = { e, dB, cB, g: { ...g, rawDebitShortSigma: g.debitShortSigma, rawCreditShortSigma: g.creditShortSigma, debitShortSigma: dB.sheetSigmas, creditShortSigma: cB.sheetSigmas } };
+    }
+    if (dband && dband.note && cfg.minShortAtr != null) warnings.push(dband.note);
     const step = 10 ** -(hedge.szDecimals || 0), unit = Math.max(step, cfg.futuresRound), floorQ = (x) => Math.sign(x) * Math.floor(Math.abs(x) / unit + 1e-9) * unit;
     const price = (q, side) => (side === "buy" ? q.mid + cfg.slippage * (q.ask - q.mid) : q.mid - cfg.slippage * (q.mid - q.bid));
     const mk = (q, side, qty) => ({ type: q.type, side, strike: q.strike, qty, premium: r6(price(q, side)), iv: q.iv, greeks: q.greeks, multiplier: 100, contract: q.symbol, expiry: q.expiry, bid: q.bid, ask: q.ask, mid: q.mid, spreadPct: q.spreadPct, bidSize: q.bidSize, askSize: q.askSize, openInterest: q.openInterest, volume: q.volume, quoteTime: q.quoteTime, ivSource: q.ivSource, greeksSource: q.greeksSource, provider: q.provider });
-    const variants = cfg.callLotUnits != null ? [{ key: cfg.callLotUnits + "C:" + cfg.putLotUnits + "P", call: cfg.callLotUnits, put: cfg.putLotUnits }] : VARIANTS;
+    const variants = variantsAll;
     const riskLo = Math.max(0, spot - cfg.riskSigma * sigma), riskHi = spot + cfg.riskSigma * sigma, cands = [], misses = { notReachable: 0, overLots: 0, wrongSign: 0, overCapital: 0, overRisk: 0 };
     let best1 = -Infinity;
     for (const fs of dir.sides) {
       const D = fs === "SHORT" ? calls : puts, C = fs === "SHORT" ? puts : calls, d = fs === "SHORT" ? 1 : -1;
       const sd = (K) => d * (K - spot) / sigma; // signed σ distance on the debit side
-      const dLongs = evenPick(D.filter((q) => sd(q.strike) >= -0.15 && sd(q.strike) <= 0.4).sort((a, b) => Math.abs(sd(a.strike) - 0.1) - Math.abs(sd(b.strike) - 0.1)).slice(0, 3), 3);
-      // shorts inside the distance band (separately on each side → asymmetric pairs); if no liquid strike is that far out,
-      // fall back to the farthest liquid strikes ≥ 0.3σ and say so
-      const lo = dband ? dband.minSigmas - 1e-9 : 0, hi = dband ? dband.maxSigmas + 1e-9 : 9;
-      const pool = (list, dist, typ) => {
-        const inBand = list.filter((q) => dist(q.strike) >= lo && dist(q.strike) <= hi); if (inBand.length || !dband) return inBand;
-        const far = list.filter((q) => dist(q.strike) >= 0.3).sort((a, b) => dist(b.strike) - dist(a.strike)).slice(0, 2);
-        const msg = "No liquid " + typ + " strike at " + dband.minDist.toFixed(2) + "–" + dband.maxDist.toFixed(2) + " from spot (" + dband.minSigmas.toFixed(2) + "–" + dband.maxSigmas.toFixed(2) + "σ, binding: " + dband.binding + ") passes the liquidity filters; using the farthest acceptable " + (far.length ? far.map((q) => q.strike + " (" + dist(q.strike).toFixed(2) + "σ)").join(", ") : "— none") + ".";
+      const vbs = variants.map((v) => vband[fs + "|" + v.key]).filter(Boolean);
+      const dlAnchor = vbs.length ? vbs.reduce((m, x) => m + x.g.debitLongSigma, 0) / vbs.length : 0.1;
+      const dLongs = evenPick(D.filter((q) => sd(q.strike) >= -0.15 && sd(q.strike) <= 0.4).sort((a, b) => Math.abs(sd(a.strike) - dlAnchor) - Math.abs(sd(b.strike) - dlAnchor)).slice(0, 3), 3);
+      // shorts inside each variant's sheet band (debit side and credit side separately → asymmetric pairs); when no liquid strike
+      // is inside a band, snap to the liquid strikes nearest to it and say so
+      const allowed = (list, dist, B, typ, vb) => {
+        const inBand = list.filter((q) => dist(q.strike) >= B.loSigmas - 1e-9 && dist(q.strike) <= B.hiSigmas + 1e-9);
+        if (inBand.length) return inBand;
+        const gap = (q) => { const x = dist(q.strike); return x < B.loSigmas ? B.loSigmas - x : x - B.hiSigmas; };
+        const near = list.filter((q) => dist(q.strike) >= 0.1).sort((a, b) => gap(a) - gap(b)).slice(0, 2);
+        const msg = "No liquid " + typ + " strike inside the sheet band " + B.lo.toFixed(2) + "–" + B.hi.toFixed(2) + " from spot (" + B.loSigmas.toFixed(2) + "–" + B.hiSigmas.toFixed(2) + "σ, sheet " + B.sheetSigmas.toFixed(2) + "σ) for " + fs + " " + vb.e.variant + "; using the nearest liquid " + (near.length ? near.map((q) => q.strike + " (" + dist(q.strike).toFixed(2) + "σ)").join(", ") : "— none") + ".";
         if (!dband.fallback.includes(msg)) { dband.fallback.push(msg); warnings.push(msg); }
-        return far;
+        vb.e.fallback = true; return near;
       };
-      const dsPool = pool(D, sd, fs === "SHORT" ? "call (CE short)" : "put (PE short)"), csPool = pool(C, (k) => -sd(k), fs === "SHORT" ? "put (PE short)" : "call (CE short)");
+      const typD = fs === "SHORT" ? "call (CE short)" : "put (PE short)", typC = fs === "SHORT" ? "put (PE short)" : "call (CE short)";
+      for (const vb of vbs) { vb.dSet = new Set(allowed(D, sd, vb.dB, typD, vb).map((q) => q.strike)); vb.cSet = new Set(allowed(C, (k) => -sd(k), vb.cB, typC, vb).map((q) => q.strike)); }
+      const uni = (list, key) => list.filter((q) => vbs.some((vb) => vb[key].has(q.strike)));
+      const dsPool = dband ? uni(D, "dSet") : [], csPool = dband ? uni(C, "cSet") : [];
       const cShorts = dband ? evenPick(csPool, 7) : evenPick(C.filter((q) => -sd(q.strike) >= 0.3 && -sd(q.strike) <= 1.3), 5);
+      const wMin = vbs.length ? Math.min(...vbs.map((x) => x.g.wingSigma)) : 0.47, wMax = vbs.length ? Math.max(...vbs.map((x) => x.g.wingSigma)) : 0.47;
+      const wings = (cs) => { const w = (q) => d * (cs.strike - q.strike) / sigma, anch = C.filter((q) => w(q) >= Math.max(0.12, 0.5 * wMin) && w(q) <= Math.min(1.2, 1.6 * wMax));
+        return evenPick(dband && anch.length ? anch : C.filter((q) => w(q) >= 0.2 && w(q) <= 1.0), 4); };
       const sets = [];
       if (wa) sets.push(...S.weeklyAtrStrikeSets(fs, wa, { spot, sigma, calls, puts }));
       else for (const dl of dLongs) for (const ds of evenPick((dband ? dsPool : D.filter((q) => sd(q.strike) >= 0.4 && sd(q.strike) <= 1.5)).filter((q) => d * (q.strike - dl.strike) > 0), dband ? 7 : 5))
-        for (const cs of cShorts) for (const cw of evenPick(C.filter((q) => d * (cs.strike - q.strike) / sigma >= 0.2 && d * (cs.strike - q.strike) / sigma <= 1.0), 4)) sets.push([dl, ds, cs, cw]);
+        for (const cs of cShorts) for (const cw of wings(cs)) sets.push([dl, ds, cs, cw]);
       for (const [dl, ds, cs, cw] of sets)
           for (const v of variants) {
+            const vb = vband[fs + "|" + v.key]; if (vb && (!vb.dSet.has(ds.strike) || !vb.cSet.has(cs.strike))) continue; // outside this ratio's sheet band
+            const g = vb ? vb.g : groupOf(fs, v);
             const dU = fs === "SHORT" ? v.call : v.put, cU = fs === "SHORT" ? v.put : v.call;
             const up = fs === "SHORT" ? ds.strike : cs.strike, dn = fs === "SHORT" ? cs.strike : ds.strike;
             const legsFor = (n) => [mk(dl, "buy", n * dU), mk(ds, "sell", n * dU), mk(cs, "sell", n * cU), mk(cw, "buy", n * cU)].sort((x, y) => (x.type === y.type ? x.strike - y.strike : x.type === "call" ? -1 : 1));
@@ -265,11 +322,12 @@
               risk: worstRisk / Math.max(1, capitalTotal),
               theta: th.status === "DEBIT" ? 1 : th.status === "NEAR-NEUTRAL" ? 0.3 : 0,
               liquidity: liq,
-              reference: (Math.abs(sig.debitShort - REF.debitShortSigma) + Math.abs(sig.creditShort - REF.creditShortSigma) + Math.abs(sig.wing - REF.wingSigma)) / 3,
+              reference: (Math.abs(sig.debitShort - g.debitShortSigma) + Math.abs(sig.creditShort - g.creditShortSigma) + Math.abs(sig.wing - g.wingSigma)) / 3, // vs the sheet geometry for this ticker / ratio
               skew: rich && doubled === rich ? (doubledIsCredit ? -0.5 : 1) : 0,
               probability: 0,
             };
-            cands.push({ fs, v, dl, ds, cs, cw, up, dn, ...pick, worstRisk, th, factors, sig, capitalTotal, doubled, doubledIsCredit, rich });
+            const anchor = { group: g.key, source: g.source, rawDebitShortSigma: g.rawDebitShortSigma ?? g.debitShortSigma, rawCreditShortSigma: g.rawCreditShortSigma ?? g.creditShortSigma, debitLongSigma: g.debitLongSigma, debitShortSigma: g.debitShortSigma, creditShortSigma: g.creditShortSigma, wingSigma: g.wingSigma, ceSigmas: fs === "SHORT" ? g.debitShortSigma : g.creditShortSigma, peSigmas: -(fs === "SHORT" ? g.creditShortSigma : g.debitShortSigma) };
+            cands.push({ fs, v, dl, ds, cs, cw, up, dn, ...pick, worstRisk, th, factors, sig, capitalTotal, doubled, doubledIsCredit, rich, anchor });
           }
     }
     const common = { method: wa ? "weekly_atr" : "optimizer", weeklyAtr: wa ? wa.info : undefined, ticker: input.ticker, expiry: input.expiry, expiryCloseUtc: new Date(expiryMs).toISOString(), days, spot, spotSource: input.stock && input.stock.price > 0 ? input.stock.source : "hedge mid", basis, atmIV, expectedMove: sigma, ivSkew: { putIV, callIV, diffPts: skewPts },
@@ -314,20 +372,20 @@
       sig: { dl: +c.sig.debitLong.toFixed(2), ds: +c.sig.debitShort.toFixed(2), cs: +c.sig.creditShort.toFixed(2), w: +c.sig.wing.toFixed(2) }, factors: Object.fromEntries(Object.entries(c.factors).map(([k2, v2]) => [k2, typeof v2 === "number" ? +v2.toFixed(4) : v2])),
       baseScore: c.baseScore != null ? +c.baseScore.toFixed(4) : null, score: c.score != null ? +c.score.toFixed(4) : null, analysed: !!c.whatIf, acceptable: c.whatIf ? c.whatIf.acceptable : null, gates: c.whatIf ? c.whatIf.gates : null, pProfit: c.whatIf ? +c.whatIf.probs.profit.toFixed(4) : null }));
     common.searched.considered = cands.length;
-    const distOf = (k) => ({ strike: k, dollars: k - spot, pct: (k / spot - 1) * 100, sigmas: (k - spot) / sigma });
+    const withSheet = (c) => distancesOf(c, { spot, sigma, bAtr });
     if (dband) {
       const bestPair = new Map(); for (const c of ranked) { const k = pairKey(c); if (!bestPair.has(k)) bestPair.set(k, c); }
       common.distanceBand = dband;
-      common.distancePairs = [...bestPair.values()].slice(0, 5).map((c) => ({ side: c.fs, variant: c.v.key, ce: distOf(c.up), pe: distOf(c.dn), exitUp: c.netUp, exitDown: c.netDn, exitUpToday: c.ev.at(c.up, 0) - cfg.mmLoss, exitDownToday: c.ev.at(c.dn, 0) - cfg.mmLoss,
+      common.distancePairs = [...bestPair.values()].slice(0, 5).map((c) => ({ side: c.fs, variant: c.v.key, ...withSheet(c), sheetRef: c.whatIf ? c.factors.reference : null, exitUp: c.netUp, exitDown: c.netDn, exitUpToday: c.ev.at(c.up, 0) - cfg.mmLoss, exitDownToday: c.ev.at(c.dn, 0) - cfg.mmLoss,
         pop: c.whatIf.probs.profit, ev: c.whatIf.probs.expectedValue, worst2Sigma: c.whatIf.tail.worst2Sigma, score: c.score, acceptable: c.whatIf.acceptable, chosen: c === ranked[0], lots: c.v.key + " × " + c.n }));
     }
-    const viewR = (f) => viewOf(f, { spot, sigma, atmIV, T, T0, cfg, hedge, dir, best, minCap, W, wa });
+    const viewR = (f) => viewOf(f, { spot, sigma, atmIV, T, T0, cfg, hedge, dir, best, minCap, W, wa, bAtr });
     if (!best.whatIf.acceptable) {
-      return { ...common, status: "NO_ACCEPTABLE_STRUCTURE", errors: ["No structure meets the target with acceptable risk. Best candidate (" + best.fs + " " + best.v.key + "): " + best.whatIf.gates.join("; ") + "." + (dband ? " Shorts were searched " + dband.minDist.toFixed(2) + "–" + dband.maxDist.toFixed(2) + " from spot (" + dband.minSigmas.toFixed(2) + "–" + dband.maxSigmas.toFixed(2) + "σ, minimum set by " + dband.binding + "); a smaller minimum short distance or a later expiry may find an acceptable structure." : "")], rejected: ranked.slice(0, 4).map(viewR), variants: [], gates: GATES };
+      return { ...common, status: "NO_ACCEPTABLE_STRUCTURE", errors: ["No structure meets the target with acceptable risk. Best candidate (" + best.fs + " " + best.v.key + "): " + best.whatIf.gates.join("; ") + "." + (dband ? " Shorts were searched inside the reference-sheet band (" + dband.sheetBandLow + "–" + dband.sheetBandHigh + "× the sheet distance: " + dband.variants.map((x) => x.side + " " + x.variant + " CE " + x.ce.loSigmas.toFixed(2) + "–" + x.ce.hiSigmas.toFixed(2) + "σ / PE " + x.pe.loSigmas.toFixed(2) + "–" + x.pe.hiSigmas.toFixed(2) + "σ").join(", ") + "); widening the band or a later expiry may find an acceptable structure." : "")], rejected: ranked.slice(0, 4).map(viewR), variants: [], gates: GATES };
     }
     const perVariant = []; for (const fs of dir.sides) for (const v of variants) { const c = pool.find((x) => x.fs === fs && x.v.key === v.key); perVariant.push({ fs, v, c }); }
     const alts = []; for (const c of pool.slice(1).filter((x) => x.whatIf.acceptable)) { if (alts.length >= cfg.topN) break; if (!alts.some((a) => a.ds === c.ds && a.cs === c.cs && a.v === c.v)) alts.push(c); }
-    const view = (f) => viewOf(f, { spot, sigma, atmIV, T, T0, cfg, hedge, dir, best, minCap, W, wa });
+    const view = (f) => viewOf(f, { spot, sigma, atmIV, T, T0, cfg, hedge, dir, best, minCap, W, wa, bAtr });
     const vs = perVariant.map(({ fs, v, c }) => c ? summarise(c, view(c), true) : { id: fs + " " + v.key, key: v.key, side: fs, reachable: false, errors: ["No " + v.key + " strike set reaches the target for a " + fs + " hedge"] });
     for (const x of vs) x.recommended = x.id === best.fs + " " + best.v.key;
     const fmtF = (c) => Object.entries(W).map(([k, w]) => k + " " + (w * (k === "capital" ? c.capitalTotal / minCap - 1 : c.factors[k] || 0)).toFixed(2)).join(", ");
@@ -346,6 +404,15 @@
       probability: b.target.probability, score: c.score, distances: b.distances, factors: b.factors, residual: b.residual, best: b, alternatives: [],
       points: Object.entries(b.factors).map(([k, x]) => ({ points: -x.weighted, why: k + " " + x.value })) };
   }
+  // chosen CE / PE short distances ($, %, σ, × weekly ATR) next to the reference-sheet distance and the deviation from it
+  function distancesOf(f, k) {
+    const { spot, sigma, bAtr } = k, a = f.anchor || null;
+    const one = (K, sheetSig) => { const x = { strike: K, dollars: K - spot, pct: (K / spot - 1) * 100, sigmas: (K - spot) / sigma, atrs: bAtr ? (K - spot) / bAtr.atr : null };
+      if (sheetSig != null) { x.sheet = { sigmas: sheetSig, dollars: sheetSig * sigma, pct: sheetSig * sigma / spot * 100, atrs: bAtr ? sheetSig * sigma / bAtr.atr : null, strike: spot + sheetSig * sigma };
+        x.deviation = { sigmas: x.sigmas - sheetSig, dollars: x.dollars - sheetSig * sigma, ratio: Math.abs(x.sigmas) / Math.abs(sheetSig) }; }
+      return x; };
+    return { ce: one(f.up, a ? a.ceSigmas : null), pe: one(f.dn, a ? a.peSigmas : null) };
+  }
   function viewOf(f, k) {
     const { spot, sigma, atmIV, T, T0, cfg, hedge, dir, minCap, W, wa } = k, ev = f.ev;
     const gl = Math.max(0, spot - 2.5 * sigma), gh = spot + 2.5 * sigma;
@@ -362,7 +429,7 @@
         ". CE short " + wi.ceShort + " = nearest listed strike to spot " + spot.toFixed(2) + " + " + wi.upperMult + " × $" + wi.effectiveAtr.toFixed(2) + " (" + wi.ceTarget.toFixed(2) + "): " + usd2(wi.ceDistance.dollars) + " / " + pctS(wi.ceDistance.pct) + ". PE short " + wi.peShort + " = nearest to spot − " + wi.lowerMult + " × ATR (" + wi.peTarget.toFixed(2) + "): " + usd2(wi.peDistance.dollars) + " / " + pctS(wi.peDistance.pct) +
         ". Long legs placed as in the reference-sheet method (debit long ≈ " + wi.debitLongSigma + "σ OTM, credit wing ≈ " + wi.wingSigma + "σ beyond the credit short)."] : []),
       "Direction: " + dir.reason + (dir.sides.length > 1 ? " Chosen side: " + f.fs + " (better score)." : ""),
-      "Debit " + (f.fs === "SHORT" ? "call" : "put") + " spread " + f.dl.strike + "/" + f.ds.strike + " (" + f.sig.debitLong.toFixed(2) + "σ / " + f.sig.debitShort.toFixed(2) + "σ), credit " + (f.fs === "SHORT" ? "put" : "call") + " spread " + f.cs.strike + "/" + f.cw.strike + " (short " + f.sig.creditShort.toFixed(2) + "σ, wing " + f.sig.wing.toFixed(2) + "σ beyond); σ = $" + sigma.toFixed(2) + " from ATM IV " + (atmIV * 100).toFixed(1) + "% over " + (T * 365).toFixed(1) + " days. Reference-sheet medians: 0.1σ / 0.9σ / 0.63σ / 0.47σ.",
+      "Debit " + (f.fs === "SHORT" ? "call" : "put") + " spread " + f.dl.strike + "/" + f.ds.strike + " (" + f.sig.debitLong.toFixed(2) + "σ / " + f.sig.debitShort.toFixed(2) + "σ), credit " + (f.fs === "SHORT" ? "put" : "call") + " spread " + f.cs.strike + "/" + f.cw.strike + " (short " + f.sig.creditShort.toFixed(2) + "σ, wing " + f.sig.wing.toFixed(2) + "σ beyond); σ = $" + sigma.toFixed(2) + " from ATM IV " + (atmIV * 100).toFixed(1) + "% over " + (T * 365).toFixed(1) + " days. Reference-sheet geometry for this ratio (" + (f.anchor ? f.anchor.source : "pooled") + "): debit long " + (f.anchor || REF).debitLongSigma + "σ / debit short " + (f.anchor || REF).debitShortSigma + "σ / credit short " + (f.anchor || REF).creditShortSigma + "σ / wing " + (f.anchor || REF).wingSigma + "σ.",
       cfg.targetMode === "perLotSet" ? "Lots " + f.v.key + ": " + callLots + " calls : " + putLots + " puts = " + Math.round(callLots / f.v.call) + " lot set(s); target $" + (T0 / Math.round(callLots / f.v.call)).toLocaleString("en-US") + " per lot set → $" + T0.toLocaleString("en-US") + " total (upside " + usd(f.netUp) + ", downside " + usd(f.netDn) + ")." :
       "Lots " + f.v.key + ": " + callLots + " calls : " + putLots + " puts — the smallest size whose projected expiry P&L at both exits reaches $" + T0.toLocaleString("en-US") + " (upside " + usd(f.netUp) + ", downside " + usd(f.netDn) + "; residual " + usd(f.netUp - T0) + " / " + usd(f.netDn - T0) + ").",
       (hedge.isStock ? "Stock hedge " : "Perp ") + hedge.symbol + ": " + Math.abs(f.fq) + " units " + (f.fq > 0 ? "LONG" : "SHORT") + " = today's-P&L equalising quantity at the PE short " + f.dn + " and CE short " + f.up + " (" + Math.abs(f.qRaw).toFixed(2) + ") rounded down to a multiple of " + cfg.futuresRound + ".",
@@ -371,7 +438,7 @@
     ];
     return {
       signal: f.fs === "LONG" ? "BULLISH" : "BEARISH", futuresSide: f.fs, hedgeType: hedge.isStock ? "STOCK" : "PERP", variant: f.v.key, lotRule: f.v.call + ":" + f.v.put, lotSource: "optimizer", callLots, putLots, lots: f.n, scenarioPrices: { up: f.up, down: f.dn },
-      sigmas: f.sig, distances: { ce: { strike: f.up, dollars: f.up - spot, pct: (f.up / spot - 1) * 100, sigmas: (f.up - spot) / sigma }, pe: { strike: f.dn, dollars: f.dn - spot, pct: (f.dn / spot - 1) * 100, sigmas: (f.dn - spot) / sigma } }, legs: f.legs.map((l) => ({ ...l, positionDelta: sgn(l.side) * l.qty * 100 * l.greeks.delta, cashFlow: -sgn(l.side) * l.qty * 100 * l.premium })),
+      sigmas: f.sig, sheetAnchor: f.anchor || null, distances: distancesOf(f, k), legs: f.legs.map((l) => ({ ...l, positionDelta: sgn(l.side) * l.qty * 100 * l.greeks.delta, cashFlow: -sgn(l.side) * l.qty * 100 * l.premium })),
       futures: { symbol: hedge.symbol, isStock: !!hedge.isStock, side: f.fq > 0 ? "LONG" : "SHORT", qty: Math.abs(f.fq), signedQty: f.fq, entry: f.fEntry, notional, equalisingQty: r6(f.qRaw), roundTo: cfg.futuresRound, deltaNeutralQty: r6(-ev.greeks.optionDelta), margin: ev.futuresMargin, marginDivisor: cfg.marginDivisor, leverage: cfg.leverage, venueInitialMargin: notional / cfg.leverage, minNotionalOk: notional >= 10 },
       exits, residual: { up: f.netUp - T0, down: f.netDn - T0, meanAbs: (Math.abs(f.netUp - T0) + Math.abs(f.netDn - T0)) / 2 }, theta: f.th,
       capital: { futuresNotional: notional, futuresMargin: ev.futuresMargin, marginDivisor: cfg.marginDivisor, leverage: cfg.leverage, venueInitialMargin: notional / cfg.leverage, optionsCapital: ev.optionsCapital, fees: ev.optionFees + ev.futuresEntryFee, total: ev.requiredCapital,
@@ -452,5 +519,5 @@
       probLossOverLimit: lim != null ? frac((x) => x <= -lim) : null, combinedMaxLoss: legs.reduce((t, g) => t + g.riskLoss, 0), capitalUsed: legs.reduce((t, g) => t + g.capital, 0), commonMoveGrid: grid };
   }
 
-  Object.assign(S, { sizeCheck, rescale, combine, cholesky, optimize, whatIf, decideDirection, hedgeFromStock, OPT_DEFAULTS, DEFAULT_WEIGHTS, GATES, MOVES, IV_SHOCKS });
+  Object.assign(S, { sheetGroups, sizeCheck, rescale, combine, cholesky, optimize, whatIf, decideDirection, hedgeFromStock, OPT_DEFAULTS, DEFAULT_WEIGHTS, GATES, MOVES, IV_SHOCKS });
 })(typeof globalThis !== "undefined" ? globalThis : window);

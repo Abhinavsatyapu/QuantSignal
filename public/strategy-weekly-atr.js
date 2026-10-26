@@ -14,7 +14,7 @@
   const S = root.Strategy;
   const fin = (x) => typeof x === "number" && Number.isFinite(x);
   const DAY = 864e5;
-  const WEEKLY_ATR_DEFAULTS = { atrPeriod: 14, upperMult: 1, lowerMult: 1, scaleToExpiry: false, atrSource: "auto", debitLongSigma: 0.1, wingSigma: 0.47 };
+  const WEEKLY_ATR_DEFAULTS = { atrPeriod: 14, upperMult: 0.7, lowerMult: 0.7, zoneMinSigma: 0.7, zoneMaxSigma: 1.2, scaleToExpiry: false, atrSource: "auto", debitLongSigma: 0.1, wingSigma: 0.47 };
   // Monday (YYYY-MM-DD) of the week containing an ISO date
   function weekStartOf(date) {
     const d = new Date(String(date).slice(0, 10) + "T00:00:00Z"), dow = (d.getUTCDay() + 6) % 7;
@@ -64,6 +64,8 @@
     if (!(Number.isInteger(w.n) && w.n >= 2 && w.n <= 52)) e.push("Weekly ATR period N must be a whole number 2–52");
     if (!(fin(w.upperMult) && w.upperMult > 0 && w.upperMult <= 5)) e.push("Upper distance must be > 0 and ≤ 5 × weekly ATR");
     if (!(fin(w.lowerMult) && w.lowerMult > 0 && w.lowerMult <= 5)) e.push("Lower distance must be > 0 and ≤ 5 × weekly ATR");
+    const zl = w.zoneMinSigma, zh = w.zoneMaxSigma;
+    if (!((zl == null || (fin(zl) && zl >= 0 && zl <= 5)) && (zh == null || (fin(zh) && zh > 0 && zh <= 5)) && (zl == null || zh == null || zl < zh))) e.push("σ zone: min ≥ 0, max > min and ≤ 5 (blank = off)");
     return e;
   }
   // Fix the CE / PE short strikes from the weekly ATR. group = every contract listed at the expiry; calls / puts = the
@@ -72,7 +74,14 @@
   function resolveWeeklyAtrShorts(w, { spot, sigma, group, calls, puts, tradingDays }) {
     const errs = validateWeeklyAtr(w); if (errs.length) return { errors: errs };
     const scale = w.scaleToExpiry ? Math.sqrt(Math.max(1, tradingDays) / 5) : 1, eff = w.atr * scale, warnings = [];
-    const ceTarget = spot + w.upperMult * eff, peTarget = spot - w.lowerMult * eff;
+    // the ATR distance, clamped into the σ "middle zone" (default 0.7–1.2σ to expiry) so the shorts are neither too close nor too wide
+    const zl = fin(w.zoneMinSigma) && sigma > 0 ? w.zoneMinSigma * sigma : null, zh = fin(w.zoneMaxSigma) && sigma > 0 ? w.zoneMaxSigma * sigma : null;
+    const clampD = (x) => { let y = x; if (zl != null && y < zl) y = zl; if (zh != null && y > zh) y = zh; return y; };
+    const ceRaw = w.upperMult * eff, peRaw = w.lowerMult * eff, ceD = clampD(ceRaw), peD = clampD(peRaw);
+    const ceTarget = spot + ceD, peTarget = spot - peD, ceRawTarget = spot + ceRaw, peRawTarget = spot - peRaw;
+    const zoneTxt = (raw, used) => (raw < used ? "raised to the " + w.zoneMinSigma + "σ zone minimum" : "lowered to the " + w.zoneMaxSigma + "σ zone maximum");
+    if (Math.abs(ceD - ceRaw) > 1e-9) warnings.push("CE distance " + w.upperMult + "×ATR = $" + ceRaw.toFixed(2) + " (" + (ceRaw / sigma).toFixed(2) + "σ) " + zoneTxt(ceRaw, ceD) + " → $" + ceD.toFixed(2) + ".");
+    if (Math.abs(peD - peRaw) > 1e-9) warnings.push("PE distance " + w.lowerMult + "×ATR = $" + peRaw.toFixed(2) + " (" + (peRaw / sigma).toFixed(2) + "σ) " + zoneTxt(peRaw, peD) + " → $" + peD.toFixed(2) + ".");
     const listed = (type) => group.filter((c) => c.type === type).map((c) => c.strike);
     let ceSnap = snapStrike(listed("call"), ceTarget, spot), peSnap = snapStrike(listed("put"), peTarget, spot);
     if (ceSnap != null && !(ceSnap > spot)) { const up = listed("call").filter((k) => k > spot).sort((a, b) => a - b)[0]; warnings.push("Nearest call strike to spot + " + w.upperMult + "×ATR is " + ceSnap + ", not above spot " + spot.toFixed(2) + "; using the first strike above spot" + (up != null ? " (" + up + ")" : "") + "."); ceSnap = up ?? null; }
@@ -87,6 +96,7 @@
     const dist = (k) => ({ dollars: k - spot, pct: (k / spot - 1) * 100, atrs: (k - spot) / eff, sigmas: sigma > 0 ? (k - spot) / sigma : null });
     const info = { atr: w.atr, n: w.n, source: w.source || null, sourceKind: w.sourceKind || null, barsUsed: w.barsUsed ?? null, firstWeek: w.firstWeek || null, lastWeek: w.lastWeek || null, recentBars: w.recentBars || null,
       upperMult: w.upperMult, lowerMult: w.lowerMult, scaleToExpiry: !!w.scaleToExpiry, tradingDays, scale, effectiveAtr: eff, spot,
+      zoneMinSigma: fin(w.zoneMinSigma) ? w.zoneMinSigma : null, zoneMaxSigma: fin(w.zoneMaxSigma) ? w.zoneMaxSigma : null, ceRawTarget, peRawTarget, ceClamped: Math.abs(ceD - ceRaw) > 1e-9, peClamped: Math.abs(peD - peRaw) > 1e-9,
       ceTarget, peTarget, ceSnapped: ceSnap, peSnapped: peSnap, ceShort: ce.q.strike, peShort: pe.q.strike, ceMoved: ce.moved, peMoved: pe.moved,
       ceDistance: dist(ce.q.strike), peDistance: dist(pe.q.strike), debitLongSigma: fin(w.debitLongSigma) ? w.debitLongSigma : WEEKLY_ATR_DEFAULTS.debitLongSigma, wingSigma: fin(w.wingSigma) ? w.wingSigma : WEEKLY_ATR_DEFAULTS.wingSigma };
     return { ceQ: ce.q, peQ: pe.q, info, warnings };

@@ -15,13 +15,18 @@ function chain(spot, iv, { oi = 500 } = {}) {
   return out;
 }
 const perp = (x) => ({ available: true, symbol: 'xyz:TEST', bid: x - 0.01, ask: x + 0.01, mid: x, szDecimals: 2, maxLeverage: 10, funding: 0.00001 });
+const WIDE = { minShortSigma: null, maxShortSigma: 2.5, sheetBandHigh: 2 }; // sheet band only, wider: the flat-IV fixture needs farther shorts for $150 per lot set
 const run = (cfg = {}, extra = {}) => S.optimize({ nowMs: NOW, ticker: 'TEST', expiry: EXP, contracts: chain(100, 0.6), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { targetMode: 'fixed', targetPnl: 400, ...cfg }, market: { direction: 'LONG', score: 7, maxScore: 8, trend: 'UP', momentum: 'UP', rsi: 60 }, ...extra });
 
 test('decideDirection: signal, lean and override', () => {
   assert.deepEqual(S.decideDirection({ direction: 'LONG', score: 7, maxScore: 8, trend: 'UP', momentum: 'UP', rsi: 60 }).sides, ['LONG']);
   assert.deepEqual(S.decideDirection({ direction: 'SHORT', score: 7, maxScore: 8, trend: 'DOWN', momentum: 'DOWN', rsi: 40 }).sides, ['SHORT']);
   assert.deepEqual(S.decideDirection({ direction: 'WAIT', score: 3, maxScore: 8, trend: 'UP', momentum: 'UP', rsi: 60 }).sides, ['LONG']);
-  assert.equal(S.decideDirection({ direction: 'WAIT', score: 3, maxScore: 8, trend: 'UP', momentum: 'DOWN', rsi: 50 }).sides.length, 2);
+  // neutral lean (0/3) → the EMA trend decides, and the note says so
+  const nt = S.decideDirection({ direction: 'WAIT', score: 3, maxScore: 8, trend: 'DOWN', momentum: 'UP', rsi: 50, ema20: 93.84, ema50: 94.25 });
+  assert.deepEqual(nt.sides, ['SHORT']); assert.equal(nt.source, 'trend-neutral'); assert.match(nt.reason, /EMA trend decides: EMA20 93.84 below EMA50 94.25 \(trend DOWN\) → SHORT/);
+  assert.deepEqual(S.decideDirection({ direction: 'WAIT', score: 3, maxScore: 8, trend: 'UP', momentum: 'DOWN', rsi: 50 }).sides, ['LONG']);
+  assert.equal(S.decideDirection({ direction: 'WAIT', score: 3, maxScore: 8, trend: 'FLAT', momentum: 'FLAT', rsi: 50 }).sides.length, 2); // no trend at all → both sides
   assert.deepEqual(S.decideDirection({ direction: 'LONG' }, 'BEARISH').sides, ['SHORT']);
 });
 
@@ -39,7 +44,8 @@ test('optimize: OK, perp floored to 5, both variants compared, target met at bot
 });
 
 test('optimize: per-lot-set target scales with the lots (lot sets fixed, target = per-lot × lot sets)', () => {
-  const one = run({ targetMode: 'perLotSet', targetPerLotSet: 150, lotSets: 1 }), two = run({ targetMode: 'perLotSet', targetPerLotSet: 150, lotSets: 2 });
+  // wider sheet band: the flat-IV fixture needs farther shorts to pay $150 per lot set (this test is about lot scaling)
+  const one = run({ targetMode: 'perLotSet', targetPerLotSet: 150, lotSets: 1, ...WIDE }), two = run({ targetMode: 'perLotSet', targetPerLotSet: 150, lotSets: 2, ...WIDE });
   assert.equal(one.status, 'OK', JSON.stringify(one.errors)); assert.equal(two.status, 'OK', JSON.stringify(two.errors));
   assert.equal(one.best.lotSets, 1); assert.equal(two.best.lotSets, 2);
   assert.equal(one.cfg.targetPnl, 150); assert.equal(two.cfg.targetPnl, 300);
@@ -88,7 +94,7 @@ test('account risk limits reject candidates that hit the target but breach the c
 });
 
 test('rescale: legs × k, perp re-equalised and floored to 5, target × k, and the size check flags thin open interest', () => {
-  const o = run({ targetMode: 'perLotSet', targetPerLotSet: 150, lotSets: 1 }), b = o.best;
+  const o = run({ targetMode: 'perLotSet', targetPerLotSet: 150, lotSets: 1, ...WIDE }), b = o.best;
   const r3 = S.rescale(o, b, 3);
   r3.legs.forEach((l, i) => assert.equal(l.qty, b.legs[i].qty * 3));
   assert.equal(Math.abs(r3.perpQty) % 5, 0); assert.ok(Math.abs(r3.perpQty) <= Math.abs(b.futures.equalisingQty * 3) + 1e-9 && Math.abs(b.futures.equalisingQty * 3) - Math.abs(r3.perpQty) < 5);
@@ -103,32 +109,69 @@ test('cholesky reproduces the correlation matrix', () => {
   for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) { let v = 0; for (let k = 0; k < 3; k++) v += L[i][k] * L[j][k]; assert.ok(Math.abs(v - m[i][j]) < 1e-12); }
 });
 
-// ---- short-strike distance band (min max(minSigma·σ, minAtr·weekly ATR), max maxSigma·σ)
-const bandRun = (cfg = {}, extra = {}) => run(cfg, { bandAtr: { atr: 9, source: 'fixture' }, ...extra });
-test('distance band: every short is ≥ max(1σ, 1 × weekly ATR) and ≤ 2.5σ from spot; binding minimum reported', () => {
-  const o = bandRun(), b = o.distanceBand;
-  assert.equal(o.status, 'OK', JSON.stringify(o.errors));
-  const sigma = o.expectedMove; assert.ok(Math.abs(b.minDist - Math.max(sigma, 9)) < 1e-9); assert.ok(Math.abs(b.maxDist - 2.5 * sigma) < 1e-9);
-  assert.equal(b.binding, sigma > 9 ? 'σ' : 'weekly ATR');
-  const ok = (k) => Math.abs(k - o.spot) >= b.minDist - 1e-9 && Math.abs(k - o.spot) <= b.maxDist + 1e-9;
-  for (const v of o.variants.filter(x => x.reachable)) { assert.ok(ok(v.exits[0].price) && ok(v.exits[1].price), v.id); assert.ok(v.distances && Math.abs(v.distances.ce.dollars - (v.exits[0].price - o.spot)) < 1e-9); }
-  for (const p of o.distancePairs) assert.ok(ok(p.ce.strike) && ok(p.pe.strike));
-  assert.ok(o.distancePairs.length >= 1 && o.distancePairs.length <= 5 && o.distancePairs.filter(p => p.chosen).length === 1);
-  const ch = o.distancePairs.find(p => p.chosen); assert.deepEqual([ch.ce.strike, ch.pe.strike], [o.best.exits[0].price, o.best.exits[1].price]);
-  for (const k of ['exitFit', 'ev', 'pop']) assert.ok(k in o.best.factors, k); // what-if-based ranking factors
-  // methodology rules unchanged inside the band
+// ---- short-strike band anchored to the reference sheets (per ticker / ratio / side), with optional σ / weekly-ATR floors
+const ANCHOR = { source: 'fixture sheets', groups: {
+  credit2: { n: 8, source: 'TEST sheets, credit 2× debit lots (8 rows)', debitLongSigma: 0.09, debitShortSigma: 0.79, creditShortSigma: 0.61, wingSigma: 0.33, debitShortPct: 6.7, creditShortPct: 5.4, debitShortAtr: 0.53, creditShortAtr: 0.42 },
+  credit05: { n: 7, source: 'pooled sheets, credit ½× debit lots (7 rows)', debitLongSigma: 0.17, debitShortSigma: 0.99, creditShortSigma: 0.76, wingSigma: 0.51 } } };
+const SHEET = { minShortSigma: null, maxShortSigma: 2.5 }; // middle zone off → the 0.8–1.3× sheet band alone
+const sheetRun = (cfg = {}, extra = {}) => run({ ...SHEET, ...cfg }, { bandAtr: { atr: 9, source: 'fixture' }, sheetAnchor: ANCHOR, ...extra });
+const inB = (x, B) => x >= B.loSigmas - 1e-9 && x <= B.hiSigmas + 1e-9;
+test('sheet band: each short searched within 0.8–1.3× its sheet distance (per ratio and side); rules, both ratios and sheet deviation reported', () => {
+  const o = sheetRun(), b = o.distanceBand, sigma = o.expectedMove;
+  assert.equal(o.status, 'OK', JSON.stringify(o.errors)); assert.equal(b.mode, 'sheet'); assert.equal(o.weights.reference, 1.5);
+  assert.equal(b.minShortSigma, null); assert.equal(b.minShortAtr, null); // zone / floors off in this run
+  // LONG hedge: CE short = credit-spread short, PE short = debit-spread short. 2C:1P (credit calls 2×) → credit2 group; 1C:2P → credit05
+  const v2 = b.variants.find(v => v.variant === '2C:1P'), v1 = b.variants.find(v => v.variant === '1C:2P');
+  assert.equal(v2.group, 'credit2'); assert.equal(v1.group, 'credit05');
+  assert.ok(Math.abs(v2.ce.loSigmas - 0.8 * 0.61) < 1e-9 && Math.abs(v2.ce.hiSigmas - 1.3 * 0.61) < 1e-9 && Math.abs(v2.pe.loSigmas - 0.8 * 0.79) < 1e-9 && Math.abs(v2.pe.hiSigmas - 1.3 * 0.79) < 1e-9);
+  assert.ok(Math.abs(v1.ce.sheetSigmas - 0.76) < 1e-9 && Math.abs(v1.pe.sheetSigmas - 0.99) < 1e-9);
+  assert.equal(v2.sheet.ce.role, 'credit short'); assert.equal(v2.sheet.ce.pctSheets, 5.4); assert.equal(v2.sheet.pe.atrSheets, 0.53);
+  for (const v of o.variants.filter(x => x.reachable)) {
+    const e = b.variants.find(x => x.variant === v.key), d = v.distances;
+    if (!e.fallback) { assert.ok(inB(d.ce.sigmas, e.ce), v.id + ' CE in band'); assert.ok(inB(-d.pe.sigmas, e.pe), v.id + ' PE in band'); }
+    assert.ok(Math.abs(d.ce.sheet.sigmas - e.ce.sheetSigmas) < 1e-9 && Math.abs(d.pe.sheet.sigmas + e.pe.sheetSigmas) < 1e-9);
+    assert.ok(Math.abs(d.ce.deviation.ratio - d.ce.sigmas / e.ce.sheetSigmas) < 1e-9); assert.ok(Math.abs(d.ce.atrs - d.ce.dollars / 9) < 1e-9);
+    assert.ok(Math.abs(d.ce.sheet.dollars - e.ce.sheetSigmas * sigma) < 1e-9);
+  }
+  // the reference factor measures distance to THIS ratio's sheet geometry
+  const bs = o.best.sigmas, g = o.best.sheetAnchor; assert.ok(Math.abs(o.best.factors.reference.value - (Math.abs(bs.debitShort - g.debitShortSigma) + Math.abs(bs.creditShort - g.creditShortSigma) + Math.abs(bs.wing - g.wingSigma)) / 3) < 2e-3);
+  assert.ok(o.distancePairs.length >= 1 && o.distancePairs.length <= 5 && o.distancePairs.filter(p => p.chosen).length === 1 && o.distancePairs.every(p => p.ce.sheet && p.pe.sheet));
+  for (const k of ['exitFit', 'ev', 'pop', 'reference']) assert.ok(k in o.best.factors, k);
   assert.equal(Math.abs(o.best.futures.signedQty) % 5, 0); assert.ok(Math.abs(o.best.capital.futuresMargin - Math.abs(o.best.futures.signedQty) * o.best.futures.entry / 2) < 1e-6);
   assert.deepEqual(new Set(o.variants.map(v => v.key)), new Set(['1C:2P', '2C:1P']));
+  // narrower than the earlier fixed 1σ / 1× ATR floor: the chosen shorts sit near the sheet distances, not ≥ 1σ out
+  assert.ok(Math.abs(o.best.distances.ce.sigmas) < 1.3 && Math.abs(o.best.distances.pe.sigmas) < 1.3);
+  // without a server anchor the pooled built-in medians are used
+  const p = run(SHEET); assert.equal(p.distanceBand.anchorSource, 'built-in pooled reference-sheet medians'); assert.ok(Math.abs(p.distanceBand.variants[0].ce.sheetSigmas - 0.63) < 1e-9);
 });
-test('distance band: σ-only without a weekly ATR (warned); asymmetric pairs are searched; validation', () => {
-  const o = run({ minShortSigma: 1, minShortAtr: 1 });
-  assert.equal(o.distanceBand.binding, 'σ'); assert.equal(o.distanceBand.weeklyAtr, null); assert.ok(o.warnings.some(w => /Weekly ATR not supplied/.test(w)));
-  const wide = bandRun({ minShortSigma: 0.3, minShortAtr: 0, maxShortSigma: 1.6 });
-  assert.equal(wide.status, 'OK', JSON.stringify(wide.errors));
+test('sheet band: optional σ / weekly-ATR floors (blank = off), max σ ceiling, asymmetric pairs, validation', () => {
+  const f = sheetRun({ minShortSigma: 1 }); for (const v of f.distanceBand.variants) { assert.ok(v.ce.loSigmas >= 1 - 1e-9 && v.pe.loSigmas >= 1 - 1e-9); assert.equal(v.ce.binding, 'middle zone'); assert.ok(v.ce.hiSigmas > v.ce.loSigmas); }
+  const a = sheetRun({ minShortAtr: 1 }), sig = a.expectedMove; for (const v of a.distanceBand.variants) assert.ok(v.ce.loSigmas >= 9 / sig - 1e-9);
+  const off = sheetRun({ minShortSigma: '', minShortAtr: null }); assert.equal(off.distanceBand.minShortSigma, null); assert.equal(off.distanceBand.minShortAtr, null);
+  const cap = sheetRun({ sheetBandHigh: 3, maxShortSigma: 0.9 }); for (const v of cap.distanceBand.variants) assert.ok(v.ce.hiSigmas <= 0.9 + 1e-9 && v.pe.hiSigmas <= 0.9 + 1e-9);
+  const noAtr = run({ ...SHEET, minShortAtr: 1 }, { sheetAnchor: ANCHOR }); assert.equal(noAtr.distanceBand.weeklyAtr, null); assert.ok(noAtr.warnings.some(w => /Weekly ATR not supplied: the × weekly ATR floor is ignored/.test(w)));
+  const wide = sheetRun({ sheetBandLow: 0.5, sheetBandHigh: 2 }); assert.equal(wide.status, 'OK', JSON.stringify(wide.errors));
   assert.ok(wide.considered.some(c => Math.abs(c.sig.ds - c.sig.cs) > 0.2), 'upper and lower distances vary independently');
-  assert.equal(run({ minShortSigma: 2, maxShortSigma: 1 }).status, 'INVALID');
+  assert.equal(run({ sheetBandLow: 1.3, sheetBandHigh: 0.8 }).status, 'INVALID'); assert.equal(run({ sheetBandHigh: 4 }).status, 'INVALID'); assert.equal(run({ minShortSigma: 2, maxShortSigma: 1 }).status, 'INVALID');
 });
-test('distance band: no liquid strike that far out → farthest acceptable strike used, and said so', () => {
-  const o = bandRun({ minShortSigma: 2.45, minShortAtr: 0, maxShortSigma: 2.5 }); // no listed strike falls in a 0.05σ-wide band this far out
-  assert.ok(o.distanceBand.fallback.length > 0); assert.ok(o.warnings.some(w => /No liquid .* farthest acceptable/.test(w)));
+test('sheet band: no liquid strike inside a band → nearest liquid strike used, and said so', () => {
+  const o = sheetRun({ sheetBandLow: 1.0, sheetBandHigh: 1.01 }); // a 1%-wide band rarely contains a listed strike on a 2.5-wide grid
+  assert.ok(o.distanceBand.fallback.length > 0); assert.ok(o.warnings.some(w => /No liquid .* inside the sheet band .* using the nearest liquid/.test(w)));
+  assert.ok(o.distanceBand.variants.some(v => v.fallback));
+});
+
+test('middle zone (default 0.7–1.2σ): both shorts searched in the zone, sheet anchor clamped into it, chosen shorts inside', () => {
+  const o = run({}, { bandAtr: { atr: 9, source: 'fixture' }, sheetAnchor: ANCHOR }), b = o.distanceBand;
+  assert.equal(o.status, 'OK', JSON.stringify(o.errors)); assert.equal(b.mode, 'middle zone + sheet anchor'); assert.deepEqual([b.minShortSigma, b.maxShortSigma], [0.7, 1.2]);
+  for (const v of b.variants) for (const k of ['ce', 'pe']) {
+    assert.ok(Math.abs(v[k].loSigmas - 0.7) < 1e-9 && Math.abs(v[k].hiSigmas - 1.2) < 1e-9, v.variant + k);
+    assert.ok(v[k].sheetSigmas >= 0.7 - 1e-9 && v[k].sheetSigmas <= 1.2 + 1e-9);
+  }
+  const v2 = b.variants.find(v => v.variant === '2C:1P'); // LONG 2C:1P: CE = credit short 0.61σ, PE = debit short 0.79σ → both anchored at the zone midpoint 0.95σ
+  assert.equal(v2.rawSheet.creditShortSigma, 0.61); assert.ok(v2.ce.clampedToZone && Math.abs(v2.ce.sheetSigmas - 0.95) < 1e-9 && Math.abs(v2.pe.sheetSigmas - 0.95) < 1e-9);
+  const wideSheet = run({}, { sheetAnchor: { groups: { credit2: { ...ANCHOR.groups.credit2, debitShortSigma: 1.1, creditShortSigma: 1.6 } } } }).distanceBand.variants.find(v => v.variant === '2C:1P');
+  assert.ok(Math.abs(wideSheet.pe.sheetSigmas - 1.1) < 1e-9 && Math.abs(wideSheet.ce.sheetSigmas - 1.2) < 1e-9); // wider sheets kept, clamped to the 1.2σ ceiling
+  for (const v of o.variants.filter(x => x.reachable)) { const e = b.variants.find(x => x.variant === v.key); if (e.fallback) continue;
+    assert.ok(v.distances.ce.sigmas >= 0.7 - 1e-9 && v.distances.ce.sigmas <= 1.2 + 1e-9, v.id + ' CE ' + v.distances.ce.sigmas); assert.ok(-v.distances.pe.sigmas >= 0.7 - 1e-9 && -v.distances.pe.sigmas <= 1.2 + 1e-9, v.id + ' PE'); }
+  assert.ok(Math.abs(o.best.distances.ce.sheet.sigmas) >= 0.7 - 1e-9); // the deviation is measured against the clamped anchor
 });
