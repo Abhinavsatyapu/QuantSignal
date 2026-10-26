@@ -15,9 +15,12 @@
   const sgn = (side) => (side === "buy" ? 1 : -1);
   const usd = (x) => (x < 0 ? "−$" : "$") + Math.round(Math.abs(x)).toLocaleString("en-US");
   const OPT_DEFAULTS = { mmLoss: 50, maxLots: 60, maxSpreadPct: 25, minOpenInterest: 10, slippage: 0.5, commission: 0.65, futureFeePct: 0.045, marginDivisor: 2, leverage: 5, futuresRound: 5,
-    thetaTolerancePct: 15, maxPriceGapPct: 5, riskSigma: 2, r: 0.04, capital: null, maxLossPct: null, topN: 3 };
+    thetaTolerancePct: 15, maxPriceGapPct: 5, riskSigma: 2, r: 0.04, capital: null, maxLossPct: null, topN: 3,
+    // short-strike distance band: each short ≥ max(minShortSigma × 1σ-to-expiry, minShortAtr × weekly ATR) and ≤ maxShortSigma × σ from spot
+    minShortSigma: 1, minShortAtr: 1, maxShortSigma: 2.5 };
   // Penalty weights (lower total = better). Stored server-side; tuned from recorded outcomes once enough runs are closed.
-  const DEFAULT_WEIGHTS = { fit: 3, capital: 1, risk: 1, theta: 1, liquidity: 1.5, reference: 0.5, skew: 0.5, probability: 1, robustness: 2, tail: 1 };
+  const DEFAULT_WEIGHTS = { fit: 3, capital: 1, risk: 1, theta: 1, liquidity: 1.5, reference: 0.5, skew: 0.5, probability: 1, robustness: 2, tail: 1, exitFit: 2, ev: 1.5, pop: 1.5 };
+  // exitFit = shortfall of the P&L if an exit (CE / PE short) is hit TODAY vs the target; ev = −EV/target; pop = 1 − P(profit) (what-if, analysed candidates)
   const REF = { debitLongSigma: 0.1, debitShortSigma: 0.9, creditShortSigma: 0.63, wingSigma: 0.47 }; // reference-sheet medians
   const VARIANTS = [{ key: "1C:2P", call: 1, put: 2 }, { key: "2C:1P", call: 2, put: 1 }];
   const MOVES = [-10, -7, -5, -3, -2, -1, 0, 1, 2, 3, 5, 7, 10], IV_SHOCKS = [-20, -10, 0, 10, 20];
@@ -146,6 +149,7 @@
     if (!(cfg.slippage >= 0 && cfg.slippage <= 1)) errs.push("Bid/ask haircut must be 0–1 (0 = mid, 1 = full bid/ask)");
     if (!(cfg.marginDivisor >= 1 && cfg.marginDivisor <= 50)) errs.push("Futures margin divisor must be 1–50");
     if (!(cfg.futuresRound > 0)) errs.push("Futures rounding must be > 0");
+    if (!(fin(cfg.minShortSigma) && cfg.minShortSigma >= 0 && fin(cfg.minShortAtr) && cfg.minShortAtr >= 0 && fin(cfg.maxShortSigma) && cfg.maxShortSigma > 0 && cfg.maxShortSigma <= 5 && cfg.minShortSigma < cfg.maxShortSigma)) errs.push("Short-distance band: min σ and min × ATR must be ≥ 0, max σ must be > min σ and ≤ 5");
     if (errs.length) return { status: "INVALID", errors: errs };
     const now = input.nowMs ?? Date.now(), expiryMs = S.expiryCloseMs(input.expiry), T = (expiryMs - now) / (365 * 864e5);
     if (!(T > 0)) return { status: "INVALID", errors: ["Expiry " + input.expiry + " has passed"] };
@@ -186,6 +190,13 @@
       if (wa.errors) return { status: wa.errors.some((e) => /liquid/i.test(e)) ? "NO_LIQUIDITY" : "INVALID", method: "weekly_atr", errors: wa.errors, liquidity, spot };
       warnings.push(...wa.warnings);
     }
+    // short-strike distance band (optimizer only; the weekly-ATR method fixes the shorts itself)
+    const bAtr = input.bandAtr && fin(input.bandAtr.atr) && input.bandAtr.atr > 0 ? input.bandAtr : null;
+    const minDist = Math.max(cfg.minShortSigma * sigma, bAtr ? cfg.minShortAtr * bAtr.atr : 0), maxDist = Math.max(minDist, cfg.maxShortSigma * sigma);
+    const dband = wa ? null : { minShortSigma: cfg.minShortSigma, minShortAtr: cfg.minShortAtr, maxShortSigma: cfg.maxShortSigma, sigma, weeklyAtr: bAtr ? bAtr.atr : null, weeklyAtrSource: bAtr ? bAtr.source || null : null,
+      minDist, maxDist, minSigmas: minDist / sigma, maxSigmas: maxDist / sigma, binding: bAtr && cfg.minShortAtr * bAtr.atr > cfg.minShortSigma * sigma ? "weekly ATR" : "σ", fallback: [],
+      note: bAtr ? null : (input.bandAtr && input.bandAtr.error ? "Weekly ATR unavailable (" + input.bandAtr.error + "): band uses σ only." : "Weekly ATR not supplied: band uses σ only.") };
+    if (dband && dband.note && cfg.minShortAtr > 0) warnings.push(dband.note);
     const step = 10 ** -(hedge.szDecimals || 0), unit = Math.max(step, cfg.futuresRound), floorQ = (x) => Math.sign(x) * Math.floor(Math.abs(x) / unit + 1e-9) * unit;
     const price = (q, side) => (side === "buy" ? q.mid + cfg.slippage * (q.ask - q.mid) : q.mid - cfg.slippage * (q.mid - q.bid));
     const mk = (q, side, qty) => ({ type: q.type, side, strike: q.strike, qty, premium: r6(price(q, side)), iv: q.iv, greeks: q.greeks, multiplier: 100, contract: q.symbol, expiry: q.expiry, bid: q.bid, ask: q.ask, mid: q.mid, spreadPct: q.spreadPct, bidSize: q.bidSize, askSize: q.askSize, openInterest: q.openInterest, volume: q.volume, quoteTime: q.quoteTime, ivSource: q.ivSource, greeksSource: q.greeksSource, provider: q.provider });
@@ -196,10 +207,21 @@
       const D = fs === "SHORT" ? calls : puts, C = fs === "SHORT" ? puts : calls, d = fs === "SHORT" ? 1 : -1;
       const sd = (K) => d * (K - spot) / sigma; // signed σ distance on the debit side
       const dLongs = evenPick(D.filter((q) => sd(q.strike) >= -0.15 && sd(q.strike) <= 0.4).sort((a, b) => Math.abs(sd(a.strike) - 0.1) - Math.abs(sd(b.strike) - 0.1)).slice(0, 3), 3);
-      const cShorts = evenPick(C.filter((q) => -sd(q.strike) >= 0.3 && -sd(q.strike) <= 1.3), 5);
+      // shorts inside the distance band (separately on each side → asymmetric pairs); if no liquid strike is that far out,
+      // fall back to the farthest liquid strikes ≥ 0.3σ and say so
+      const lo = dband ? dband.minSigmas - 1e-9 : 0, hi = dband ? dband.maxSigmas + 1e-9 : 9;
+      const pool = (list, dist, typ) => {
+        const inBand = list.filter((q) => dist(q.strike) >= lo && dist(q.strike) <= hi); if (inBand.length || !dband) return inBand;
+        const far = list.filter((q) => dist(q.strike) >= 0.3).sort((a, b) => dist(b.strike) - dist(a.strike)).slice(0, 2);
+        const msg = "No liquid " + typ + " strike at " + dband.minDist.toFixed(2) + "–" + dband.maxDist.toFixed(2) + " from spot (" + dband.minSigmas.toFixed(2) + "–" + dband.maxSigmas.toFixed(2) + "σ, binding: " + dband.binding + ") passes the liquidity filters; using the farthest acceptable " + (far.length ? far.map((q) => q.strike + " (" + dist(q.strike).toFixed(2) + "σ)").join(", ") : "— none") + ".";
+        if (!dband.fallback.includes(msg)) { dband.fallback.push(msg); warnings.push(msg); }
+        return far;
+      };
+      const dsPool = pool(D, sd, fs === "SHORT" ? "call (CE short)" : "put (PE short)"), csPool = pool(C, (k) => -sd(k), fs === "SHORT" ? "put (PE short)" : "call (CE short)");
+      const cShorts = dband ? evenPick(csPool, 7) : evenPick(C.filter((q) => -sd(q.strike) >= 0.3 && -sd(q.strike) <= 1.3), 5);
       const sets = [];
       if (wa) sets.push(...S.weeklyAtrStrikeSets(fs, wa, { spot, sigma, calls, puts }));
-      else for (const dl of dLongs) for (const ds of evenPick(D.filter((q) => d * (q.strike - dl.strike) > 0 && sd(q.strike) >= 0.4 && sd(q.strike) <= 1.5), 5))
+      else for (const dl of dLongs) for (const ds of evenPick((dband ? dsPool : D.filter((q) => sd(q.strike) >= 0.4 && sd(q.strike) <= 1.5)).filter((q) => d * (q.strike - dl.strike) > 0), dband ? 7 : 5))
         for (const cs of cShorts) for (const cw of evenPick(C.filter((q) => d * (cs.strike - q.strike) / sigma >= 0.2 && d * (cs.strike - q.strike) / sigma <= 1.0), 4)) sets.push([dl, ds, cs, cw]);
       for (const [dl, ds, cs, cw] of sets)
           for (const v of variants) {
@@ -271,10 +293,16 @@
     // ---- what-if on the top candidates (and the best of every side/variant), then rank by robustness
     const wk = { spot, sigma, atmIV, T, basis, cfg, now, expiryMs, T0, events: input.events || null, funding: hedge.isStock ? null : hedge.funding, isStock: !!hedge.isStock, expiry: input.expiry };
     const analysed = new Set(short.slice(0, 12)); for (const fs of dir.sides) for (const v of variants) { const c = short.find((x) => x.fs === fs && x.v.key === v.key) || cands.find((x) => x.fs === fs && x.v.key === v.key); if (c) analysed.add(c); }
+    // wider pairs must get a what-if before they can win: the best candidate of every distinct (side, variant, CE, PE) pair is analysed too
+    const pairKey = (c) => c.fs + "|" + c.v.key + "|" + c.up + "|" + c.dn, seenPair = new Set([...analysed].map(pairKey));
+    for (const c of cands) { if (analysed.size >= 60) break; if (!seenPair.has(pairKey(c))) { seenPair.add(pairKey(c)); analysed.add(c); } }
     for (const c of analysed) {
       c.whatIf = whatIf(c, wk);
       c.factors.robustness = 1 - c.whatIf.robustness.hitRate;
       c.factors.tail = Math.max(0, -c.whatIf.tail.worst2Sigma / T0 - 1) / 2;
+      c.factors.exitFit = Math.max(0, T0 - Math.min(c.ev.at(c.up, 0), c.ev.at(c.dn, 0)) + cfg.mmLoss) / T0; // exit hit today vs target
+      c.factors.ev = Math.max(-1, Math.min(2, -c.whatIf.probs.expectedValue / T0));
+      c.factors.pop = 1 - c.whatIf.probs.profit;
       c.baseScore = c.score; c.score = scoreOf(c);
     }
     const ranked = [...analysed].sort((a, b) => (a.whatIf.acceptable === b.whatIf.acceptable ? a.score - b.score : a.whatIf.acceptable ? -1 : 1));
@@ -286,9 +314,16 @@
       sig: { dl: +c.sig.debitLong.toFixed(2), ds: +c.sig.debitShort.toFixed(2), cs: +c.sig.creditShort.toFixed(2), w: +c.sig.wing.toFixed(2) }, factors: Object.fromEntries(Object.entries(c.factors).map(([k2, v2]) => [k2, typeof v2 === "number" ? +v2.toFixed(4) : v2])),
       baseScore: c.baseScore != null ? +c.baseScore.toFixed(4) : null, score: c.score != null ? +c.score.toFixed(4) : null, analysed: !!c.whatIf, acceptable: c.whatIf ? c.whatIf.acceptable : null, gates: c.whatIf ? c.whatIf.gates : null, pProfit: c.whatIf ? +c.whatIf.probs.profit.toFixed(4) : null }));
     common.searched.considered = cands.length;
+    const distOf = (k) => ({ strike: k, dollars: k - spot, pct: (k / spot - 1) * 100, sigmas: (k - spot) / sigma });
+    if (dband) {
+      const bestPair = new Map(); for (const c of ranked) { const k = pairKey(c); if (!bestPair.has(k)) bestPair.set(k, c); }
+      common.distanceBand = dband;
+      common.distancePairs = [...bestPair.values()].slice(0, 5).map((c) => ({ side: c.fs, variant: c.v.key, ce: distOf(c.up), pe: distOf(c.dn), exitUp: c.netUp, exitDown: c.netDn, exitUpToday: c.ev.at(c.up, 0) - cfg.mmLoss, exitDownToday: c.ev.at(c.dn, 0) - cfg.mmLoss,
+        pop: c.whatIf.probs.profit, ev: c.whatIf.probs.expectedValue, worst2Sigma: c.whatIf.tail.worst2Sigma, score: c.score, acceptable: c.whatIf.acceptable, chosen: c === ranked[0], lots: c.v.key + " × " + c.n }));
+    }
     const viewR = (f) => viewOf(f, { spot, sigma, atmIV, T, T0, cfg, hedge, dir, best, minCap, W, wa });
     if (!best.whatIf.acceptable) {
-      return { ...common, status: "NO_ACCEPTABLE_STRUCTURE", errors: ["No structure meets the target with acceptable risk. Best candidate (" + best.fs + " " + best.v.key + "): " + best.whatIf.gates.join("; ") + "."], rejected: ranked.slice(0, 4).map(viewR), variants: [], gates: GATES };
+      return { ...common, status: "NO_ACCEPTABLE_STRUCTURE", errors: ["No structure meets the target with acceptable risk. Best candidate (" + best.fs + " " + best.v.key + "): " + best.whatIf.gates.join("; ") + "." + (dband ? " Shorts were searched " + dband.minDist.toFixed(2) + "–" + dband.maxDist.toFixed(2) + " from spot (" + dband.minSigmas.toFixed(2) + "–" + dband.maxSigmas.toFixed(2) + "σ, minimum set by " + dband.binding + "); a smaller minimum short distance or a later expiry may find an acceptable structure." : "")], rejected: ranked.slice(0, 4).map(viewR), variants: [], gates: GATES };
     }
     const perVariant = []; for (const fs of dir.sides) for (const v of variants) { const c = pool.find((x) => x.fs === fs && x.v.key === v.key); perVariant.push({ fs, v, c }); }
     const alts = []; for (const c of pool.slice(1).filter((x) => x.whatIf.acceptable)) { if (alts.length >= cfg.topN) break; if (!alts.some((a) => a.ds === c.ds && a.cs === c.cs && a.v === c.v)) alts.push(c); }
@@ -308,7 +343,7 @@
     return { key: c.v.key, side: c.fs, id: c.fs + " " + c.v.key, callLotUnits: c.v.call, putLotUnits: c.v.put, status: "OK", reachable: true, callLots: b.callLots, putLots: b.putLots,
       legs: b.legs.map((l) => ({ side: l.side, type: l.type, strike: l.strike, qty: l.qty, premium: l.premium, contract: l.contract })), perpQty: b.futures.signedQty, futuresMargin: b.capital.futuresMargin,
       optionsCapital: b.capital.optionsCapital, totalCapital: b.capital.total, exits: b.exits, theta: b.theta, maxLoss: b.maxLoss, unlimitedLoss: b.unlimitedLoss, worstLossInRiskWindow: b.worstLossInRiskWindow,
-      probability: b.target.probability, score: c.score, factors: b.factors, residual: b.residual, best: b, alternatives: [],
+      probability: b.target.probability, score: c.score, distances: b.distances, factors: b.factors, residual: b.residual, best: b, alternatives: [],
       points: Object.entries(b.factors).map(([k, x]) => ({ points: -x.weighted, why: k + " " + x.value })) };
   }
   function viewOf(f, k) {
@@ -336,7 +371,7 @@
     ];
     return {
       signal: f.fs === "LONG" ? "BULLISH" : "BEARISH", futuresSide: f.fs, hedgeType: hedge.isStock ? "STOCK" : "PERP", variant: f.v.key, lotRule: f.v.call + ":" + f.v.put, lotSource: "optimizer", callLots, putLots, lots: f.n, scenarioPrices: { up: f.up, down: f.dn },
-      sigmas: f.sig, legs: f.legs.map((l) => ({ ...l, positionDelta: sgn(l.side) * l.qty * 100 * l.greeks.delta, cashFlow: -sgn(l.side) * l.qty * 100 * l.premium })),
+      sigmas: f.sig, distances: { ce: { strike: f.up, dollars: f.up - spot, pct: (f.up / spot - 1) * 100, sigmas: (f.up - spot) / sigma }, pe: { strike: f.dn, dollars: f.dn - spot, pct: (f.dn / spot - 1) * 100, sigmas: (f.dn - spot) / sigma } }, legs: f.legs.map((l) => ({ ...l, positionDelta: sgn(l.side) * l.qty * 100 * l.greeks.delta, cashFlow: -sgn(l.side) * l.qty * 100 * l.premium })),
       futures: { symbol: hedge.symbol, isStock: !!hedge.isStock, side: f.fq > 0 ? "LONG" : "SHORT", qty: Math.abs(f.fq), signedQty: f.fq, entry: f.fEntry, notional, equalisingQty: r6(f.qRaw), roundTo: cfg.futuresRound, deltaNeutralQty: r6(-ev.greeks.optionDelta), margin: ev.futuresMargin, marginDivisor: cfg.marginDivisor, leverage: cfg.leverage, venueInitialMargin: notional / cfg.leverage, minNotionalOk: notional >= 10 },
       exits, residual: { up: f.netUp - T0, down: f.netDn - T0, meanAbs: (Math.abs(f.netUp - T0) + Math.abs(f.netDn - T0)) / 2 }, theta: f.th,
       capital: { futuresNotional: notional, futuresMargin: ev.futuresMargin, marginDivisor: cfg.marginDivisor, leverage: cfg.leverage, venueInitialMargin: notional / cfg.leverage, optionsCapital: ev.optionsCapital, fees: ev.optionFees + ev.futuresEntryFee, total: ev.requiredCapital,

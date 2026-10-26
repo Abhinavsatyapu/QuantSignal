@@ -64,7 +64,7 @@
   $("bExpiry").onchange = () => Deriv.set({ expiry: $("bExpiry").value });
   const isOpt = (m) => m === "optimizer" || m === "weekly_atr"; // weekly ATR runs on the optimizer's machinery (stock hedge fallback, what-if, scaling)
   const methodLabel = { optimizer: "Optimizer", reference: "Reference σ", delta: "Delta (1:2)", weekly_atr: "Weekly ATR" };
-  const syncMethod = () => { $("bAtrFields").hidden = $("bMethod").value !== "weekly_atr"; if (expiriesData) $("bBuild").disabled = !expiriesData.perp.available && !isOpt($("bMethod").value); };
+  const syncMethod = () => { $("bAtrFields").hidden = $("bMethod").value !== "weekly_atr"; $("bBandFields").hidden = $("bMethod").value !== "optimizer"; if (expiriesData) $("bBuild").disabled = !expiriesData.perp.available && !isOpt($("bMethod").value); };
   $("bMethod").onchange = syncMethod; syncMethod();
 
   function cfg() {
@@ -73,13 +73,14 @@
     return { targetMode: v("bTargetMode"), targetPerLotSet: n("bTargetPer"), lotSets: n("bLotSets"), direction: sig === "AUTO" ? "AUTO" : sig, signal: sig === "BOTH" ? "AUTO" : sig, callLotUnits: n("bCallUnits"), putLotUnits: n("bPutUnits"), slippage: n("bSlip"), minOpenInterest: n("bMinOI"),
       marginDivisor: n("bMarginDiv"), futuresRound: n("bRound"), targetPnl: Number(v("bTarget")), capital: n("bCapital"), maxLossPct: n("bMaxLoss"), mmLoss: n("bMm"), maxSpreadPct: n("bSpread"), maxLots: n("bLots"),
       leverage: n("bLev"), commission: n("bComm"), futureFeePct: n("bFee"), debitShortSigma: v("bDebitSigma"), creditShortSigma: v("bCreditSigma"), wingSigma: v("bWingSigma"), useCalibration: $("bCal").checked,
-      deltaDirection: v("bDir"), upperMult: n("bAtrUp"), lowerMult: n("bAtrDn"), atrPeriod: n("bAtrN"), atrSource: v("bAtrSrc"), scaleToExpiry: $("bAtrScale").checked };
+      deltaDirection: v("bDir"), upperMult: n("bAtrUp"), lowerMult: n("bAtrDn"), atrPeriod: n("bAtrN"), atrSource: v("bAtrSrc"), scaleToExpiry: $("bAtrScale").checked, minShortSigma: n("bMinSig"), minShortAtr: n("bMinAtr"), maxShortSigma: n("bMaxSig") };
   }
   function validate(c) {
     const e = [], m = $("bMethod").value;
     if (c.targetMode === "fixed" ? !(c.targetPnl > 0) : !(c.targetPerLotSet > 0)) e.push("Target P&L must be positive.");
     if (c.targetMode !== "fixed" && !(Number.isInteger(c.lotSets) && c.lotSets >= 1)) e.push("Lot sets must be a whole number ≥ 1.");
     if ((c.callLotUnits == null) !== (c.putLotUnits == null)) e.push("Enter both lot-ratio numbers or neither.");
+    if (m === "optimizer" && !(c.minShortSigma >= 0 && c.minShortAtr >= 0 && c.maxShortSigma > c.minShortSigma && c.maxShortSigma <= 5)) e.push("Short-distance band: mins ≥ 0, max σ > min σ and ≤ 5.");
     if (m === "weekly_atr") { if (!(c.upperMult > 0 && c.upperMult <= 5) || !(c.lowerMult > 0 && c.lowerMult <= 5)) e.push("Upper and lower distances must be > 0 and ≤ 5 × weekly ATR."); if (!(Number.isInteger(c.atrPeriod) && c.atrPeriod >= 2 && c.atrPeriod <= 52)) e.push("ATR period N must be a whole number 2–52."); }
     if (!isOpt(m) && !(c.capital > 0)) e.push("The reference / delta methods need a capital amount (Advanced).");
     if (c.slippage != null && !(c.slippage >= 0 && c.slippage <= 1)) e.push("Haircut must be 0–1.");
@@ -101,7 +102,10 @@
     $("bTitle").textContent = `${d.ticker || $("bTicker").value} · ${d.expiry || $("bExpiry").value}` + (b ? (b.futuresSide ? ` · perp ${b.futuresSide}` : "") : "");
     $("bBadge").textContent = d.status.replace(/_/g, " "); $("bBadge").className = "label " + (okk ? (d.data.delayed ? "warn" : "ok") : "bad");
     const dl = d.data;
-    $("bDataLine").innerHTML = `Source: ${esc(dl.label)} · quotes as of ${ist(dl.quoteTime)}${dl.ageMinutes != null ? ` (<span class="${dl.ageMinutes > 20 ? "stale" : "live"}">${dl.ageMinutes > 20 ? "STALE " : ""}${dl.ageMinutes} min old</span>)` : ""} · spot ${nf(d.spot)} (${esc(d.spotSource || dl.stockSource || "")})` + (d.perp ? ` · perp ${esc(d.perp.symbol)} mid ${nf(d.perp.mid)} · basis ${nf(d.basis)}` : "") + (d.atmIV ? ` · ATM IV ${nf(d.atmIV * 100, 1)}% · 1σ to expiry ${usd(d.expectedMove, 2)}` : "") + (d.liquidity ? ` · ${d.liquidity.usable}/${d.liquidity.listed} strikes usable` : "");
+    const nyNow = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date()).reduce((o, p) => ((o[p.type] = p.value), o), {}), mins = +nyNow.hour * 60 + +nyNow.minute;
+    const usOpen = !["Sat", "Sun"].includes(nyNow.weekday) && mins >= 570 && mins < 960, age = dl.ageMinutes, ageTxt = age == null ? "" : age >= 1440 ? nf(age / 1440, 1) + " days" : age >= 120 ? nf(age / 60, 1) + " h" : age + " min";
+    const staleWhy = age != null && age > 20 ? (usOpen ? " — <b>the market is open but these quotes are old</b>; the source may be lagging, so treat prices with care." : " — <b>US options market closed</b> (" + esc(nyNow.weekday) + " " + esc(nyNow.hour + ":" + nyNow.minute) + " ET; regular hours Mon–Fri 09:30–16:00 ET), so these are the last-session closing quotes. They refresh once trading resumes; fills at the next open can differ.") : "";
+    $("bDataLine").innerHTML = `Source: ${esc(dl.label)} · quotes as of ${ist(dl.quoteTime)}${age != null ? ` (<span class="${age > 20 ? "stale" : "live"}">${age > 20 ? "STALE " : ""}${ageTxt} old</span>${staleWhy})` : ""} · spot ${nf(d.spot)} (${esc(d.spotSource || dl.stockSource || "")})` + (d.perp ? ` · perp ${esc(d.perp.symbol)} mid ${nf(d.perp.mid)} · basis ${nf(d.basis)}` : "") + (d.atmIV ? ` · ATM IV ${nf(d.atmIV * 100, 1)}% · 1σ to expiry ${usd(d.expectedMove, 2)}` : "") + (d.liquidity ? ` · ${d.liquidity.usable}/${d.liquidity.listed} strikes usable` : "");
     const errs = d.errors || [];
     const exl = d.liquidity && Object.keys(d.liquidity.excluded || {}).length ? "Excluded strikes: " + Object.entries(d.liquidity.excluded).map(([k, v]) => v + " " + k).join(", ") + "." : "";
     $("bErrors").hidden = !errs.length; $("bErrors").innerHTML = errs.map(esc).join("<br>") + (errs.length && exl ? "<br>" + esc(exl) : "");
@@ -110,7 +114,7 @@
     $("bDirection").hidden = !d.direction; if (d.direction) $("bDirection").innerHTML = "<b>Direction:</b> " + esc(d.direction.reason);
     if (!b && d.rejected && d.rejected.length) $("bErrors").innerHTML += "<br><br>Candidates rejected by the what-if gates:<br>" + d.rejected.map((r) => esc(r.futuresSide + " " + r.variant + " " + r.legs.map((l) => (l.side === "buy" ? "+" : "−") + l.qty + " " + l.strike + l.type[0].toUpperCase()).join(" ") + " → " + r.whatIf.gates.join("; "))).join("<br>");
     renderVariants(d);
-    renderAtr(d);
+    renderAtr(d); renderPairs(d);
     if (d.data && d.data.quoteTime && Deriv.quoteTime) Deriv.quoteTime(d.data.quoteTime);
     $("bBody").hidden = !b;
     $("bScale").hidden = !b || !isOpt(d.method);
@@ -206,6 +210,13 @@
     $("bWiEvents").innerHTML = ev.note && !ev.source ? `<p>${esc(ev.note)}</p>` : `<p>Earnings: <b class="${ev.earningsBeforeExpiry ? "neg" : ""}">${esc(ev.earningsDate || "unknown")}</b>${ev.earningsBeforeExpiry ? " — BEFORE expiry: expect an IV crush (see the −40% column) and a gap; consider an expiry before the report." : ""}</p><p>Last/next ex-dividend: <b class="${ev.exDividendBeforeExpiry ? "neg" : ""}">${esc(ev.exDividendDate || "unknown")}</b>${ev.exDividendBeforeExpiry ? " — before expiry: early assignment risk on short calls." : ""}</p><p class="market-note">${esc(ev.source || "")}${(ev.notes || []).length ? " · " + esc(ev.notes.join("; ")) : ""}</p>`;
     $("bWiRobust").textContent = w.robustness.note + " Worst cell: " + (w.robustness.worstCell ? w.robustness.worstCell.exit + " exit, " + w.robustness.worstCell.date + ", IV " + w.robustness.worstCell.shock + "% → " + usd(w.robustness.worstCell.pnl) : "—") + ".";
   }
+  const sgn = (v) => (v >= 0 ? "+" : "−"), fmtDist = (x) => (x ? nf(x.strike) + " (" + sgn(x.dollars) + usd(Math.abs(x.dollars), 2) + " · " + sgn(x.pct) + nf(Math.abs(x.pct), 1) + "% · " + sgn(x.sigmas) + nf(Math.abs(x.sigmas), 2) + "σ)" : "—");
+  function renderPairs(d) {
+    const ps = d.distancePairs || [], b = d.distanceBand; $("bPairsWrap").hidden = !b; if (!b) return;
+    $("bBandNote").textContent = "Band: each short " + usd(b.minDist, 2) + "–" + usd(b.maxDist, 2) + " from spot (" + nf(b.minSigmas, 2) + "–" + nf(b.maxSigmas, 2) + "σ; min = max(" + b.minShortSigma + "σ = " + usd(b.minShortSigma * b.sigma, 2) + ", " + b.minShortAtr + " × weekly ATR" + (b.weeklyAtr != null ? " " + usd(b.weeklyAtr, 2) + " = " + usd(b.minShortAtr * b.weeklyAtr, 2) : " — unavailable") + "), binding: " + b.binding + ")." + (b.fallback && b.fallback.length ? " " + b.fallback.join(" ") : "") + (b.note ? " " + b.note : "");
+    $("bPairs").innerHTML = "<thead><tr><th>Side · lots</th><th>CE short</th><th>PE short</th><th>CE exit (expiry / today)</th><th>PE exit (expiry / today)</th><th>P(profit)</th><th>EV</th><th>2σ worst</th><th>Score</th><th></th></tr></thead><tbody>" +
+      (ps.length ? ps.map((p) => `<tr${p.chosen ? ' class="on"' : ""}><td>${esc(p.side)} ${esc(p.lots)}</td><td class="mono">${esc(fmtDist(p.ce))}</td><td class="mono">${esc(fmtDist(p.pe))}</td><td class="num"><span class="${cls(p.exitUp)}">${usd(p.exitUp)}</span> / ${usd(p.exitUpToday)}</td><td class="num"><span class="${cls(p.exitDown)}">${usd(p.exitDown)}</span> / ${usd(p.exitDownToday)}</td><td class="num">${nf(p.pop * 100, 0)}%</td><td class="num ${cls(p.ev)}">${usd(p.ev)}</td><td class="num ${cls(p.worst2Sigma)}">${usd(p.worst2Sigma)}</td><td class="num">${nf(p.score, 2)}</td><td>${p.chosen ? '<span class="label ok">chosen</span>' : p.acceptable ? "" : '<span class="label bad">gated</span>'}</td></tr>`).join("") : '<tr><td colspan="10">No pair passed the search.</td></tr>') + "</tbody>";
+  }
   function renderAtr(d) {
     const w = d.weeklyAtr; $("bAtrBox").hidden = !w; if (!w) return;
     const sg = (v) => (v >= 0 ? "+" : "−"), dist = (x) => sg(x.dollars) + usd(Math.abs(x.dollars), 2) + " · " + sg(x.pct) + nf(Math.abs(x.pct), 2) + "%" + (x.sigmas != null ? " · " + sg(x.sigmas) + nf(Math.abs(x.sigmas), 2) + "σ" : "");
@@ -226,7 +237,7 @@
       <header><b>${esc(v.side)} perp · ${esc(v.key)}</b>${v.recommended ? '<span class="label ok">Recommended</span>' : ""}${v.id === d.selectedId && !v.recommended ? '<span class="label watch">Selected</span>' : ""}</header>
       ${v.reachable ? `<p class="b-var-legs">${v.legs.map((l) => (l.side === "buy" ? "+" : "−") + l.qty + " " + nf(l.strike, 1) + l.type[0].toUpperCase()).join(" ")}</p>
       <dl><dt>Lots</dt><dd>${v.callLots} calls : ${v.putLots} puts</dd><dt>Perp qty (↓5)</dt><dd>${nf(v.perpQty, 0)}</dd><dt>Futures margin</dt><dd>${usd(v.futuresMargin)}</dd><dt>Options capital</dt><dd>${usd(v.optionsCapital)}</dd><dt>Total capital</dt><dd><b>${usd(v.totalCapital)}</b></dd>
-      <dt>CE-short exit</dt><dd>${ex(v, 0)}</dd><dt>PE-short exit</dt><dd>${ex(v, 1)}</dd><dt>Net theta</dt><dd>${usd(v.theta.theta, 2)}/day · ${esc(v.theta.status)}</dd><dt>Max loss (expiry)</dt><dd>${v.unlimitedLoss ? "Unlimited (perp)" : usd(v.maxLoss)} · worst ±2σ ${usd(-v.worstLossInRiskWindow)}</dd><dt>Target</dt><dd class="pos">reachable</dd><dt>What-if</dt><dd>${v.best && v.best.whatIf ? "P(profit) " + nf(v.best.whatIf.probs.profit * 100, 0) + "% · EV " + usd(v.best.whatIf.probs.expectedValue) + " · 2σ worst " + usd(v.best.whatIf.tail.worst2Sigma) + " · " + v.best.whatIf.robustness.positive + "/" + v.best.whatIf.robustness.cells + " cells profitable" : "—"}</dd><dt>Score</dt><dd>${v.score != null ? nf(v.score, 2) : "—"} (lower is better)</dd></dl>
+      ${v.distances ? `<dt>CE short dist.</dt><dd>${esc(fmtDist(v.distances.ce))}</dd><dt>PE short dist.</dt><dd>${esc(fmtDist(v.distances.pe))}</dd>` : ""}<dt>CE-short exit</dt><dd>${ex(v, 0)}</dd><dt>PE-short exit</dt><dd>${ex(v, 1)}</dd><dt>Net theta</dt><dd>${usd(v.theta.theta, 2)}/day · ${esc(v.theta.status)}</dd><dt>Max loss (expiry)</dt><dd>${v.unlimitedLoss ? "Unlimited (perp)" : usd(v.maxLoss)} · worst ±2σ ${usd(-v.worstLossInRiskWindow)}</dd><dt>Target</dt><dd class="pos">reachable</dd><dt>What-if</dt><dd>${v.best && v.best.whatIf ? "P(profit) " + nf(v.best.whatIf.probs.profit * 100, 0) + "% · EV " + usd(v.best.whatIf.probs.expectedValue) + " · 2σ worst " + usd(v.best.whatIf.tail.worst2Sigma) + " · " + v.best.whatIf.robustness.positive + "/" + v.best.whatIf.robustness.cells + " cells profitable" : "—"}</dd><dt>Score</dt><dd>${v.score != null ? nf(v.score, 2) : "—"} (lower is better)</dd></dl>
       <button class="ghost" data-variant="${esc(v.id)}" ${v.id === shown ? "disabled" : ""}>${v.id === shown ? "Shown below" : "Select this variant"}</button>`
       : `<p class="negative">Target not reachable${v.bestAchievable != null ? " (best ≈ " + usd(v.bestAchievable) + ")" : ""}.</p><p class="market-note">${esc((v.errors || []).join(" "))}</p>`}</article>`).join("");
     const m = d.market;

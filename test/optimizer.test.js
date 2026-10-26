@@ -102,3 +102,33 @@ test('cholesky reproduces the correlation matrix', () => {
   const m = [[1, 0.5, 0.2], [0.5, 1, 0.3], [0.2, 0.3, 1]], L = S.cholesky(m);
   for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) { let v = 0; for (let k = 0; k < 3; k++) v += L[i][k] * L[j][k]; assert.ok(Math.abs(v - m[i][j]) < 1e-12); }
 });
+
+// ---- short-strike distance band (min max(minSigma·σ, minAtr·weekly ATR), max maxSigma·σ)
+const bandRun = (cfg = {}, extra = {}) => run(cfg, { bandAtr: { atr: 9, source: 'fixture' }, ...extra });
+test('distance band: every short is ≥ max(1σ, 1 × weekly ATR) and ≤ 2.5σ from spot; binding minimum reported', () => {
+  const o = bandRun(), b = o.distanceBand;
+  assert.equal(o.status, 'OK', JSON.stringify(o.errors));
+  const sigma = o.expectedMove; assert.ok(Math.abs(b.minDist - Math.max(sigma, 9)) < 1e-9); assert.ok(Math.abs(b.maxDist - 2.5 * sigma) < 1e-9);
+  assert.equal(b.binding, sigma > 9 ? 'σ' : 'weekly ATR');
+  const ok = (k) => Math.abs(k - o.spot) >= b.minDist - 1e-9 && Math.abs(k - o.spot) <= b.maxDist + 1e-9;
+  for (const v of o.variants.filter(x => x.reachable)) { assert.ok(ok(v.exits[0].price) && ok(v.exits[1].price), v.id); assert.ok(v.distances && Math.abs(v.distances.ce.dollars - (v.exits[0].price - o.spot)) < 1e-9); }
+  for (const p of o.distancePairs) assert.ok(ok(p.ce.strike) && ok(p.pe.strike));
+  assert.ok(o.distancePairs.length >= 1 && o.distancePairs.length <= 5 && o.distancePairs.filter(p => p.chosen).length === 1);
+  const ch = o.distancePairs.find(p => p.chosen); assert.deepEqual([ch.ce.strike, ch.pe.strike], [o.best.exits[0].price, o.best.exits[1].price]);
+  for (const k of ['exitFit', 'ev', 'pop']) assert.ok(k in o.best.factors, k); // what-if-based ranking factors
+  // methodology rules unchanged inside the band
+  assert.equal(Math.abs(o.best.futures.signedQty) % 5, 0); assert.ok(Math.abs(o.best.capital.futuresMargin - Math.abs(o.best.futures.signedQty) * o.best.futures.entry / 2) < 1e-6);
+  assert.deepEqual(new Set(o.variants.map(v => v.key)), new Set(['1C:2P', '2C:1P']));
+});
+test('distance band: σ-only without a weekly ATR (warned); asymmetric pairs are searched; validation', () => {
+  const o = run({ minShortSigma: 1, minShortAtr: 1 });
+  assert.equal(o.distanceBand.binding, 'σ'); assert.equal(o.distanceBand.weeklyAtr, null); assert.ok(o.warnings.some(w => /Weekly ATR not supplied/.test(w)));
+  const wide = bandRun({ minShortSigma: 0.3, minShortAtr: 0, maxShortSigma: 1.6 });
+  assert.equal(wide.status, 'OK', JSON.stringify(wide.errors));
+  assert.ok(wide.considered.some(c => Math.abs(c.sig.ds - c.sig.cs) > 0.2), 'upper and lower distances vary independently');
+  assert.equal(run({ minShortSigma: 2, maxShortSigma: 1 }).status, 'INVALID');
+});
+test('distance band: no liquid strike that far out → farthest acceptable strike used, and said so', () => {
+  const o = bandRun({ minShortSigma: 2.45, minShortAtr: 0, maxShortSigma: 2.5 }); // no listed strike falls in a 0.05σ-wide band this far out
+  assert.ok(o.distanceBand.fallback.length > 0); assert.ok(o.warnings.some(w => /No liquid .* farthest acceptable/.test(w)));
+});

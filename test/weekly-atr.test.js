@@ -133,4 +133,12 @@ test('server: weekly ATR source falls back from perp candles to stock daily OHLC
   assert.deepEqual([w.method, w.atr, w.n, w.upperMult, w.lowerMult, w.ceShort, w.peShort], ['weekly_atr', 6.3, 14, 1, 1, 107.5, 92.5]);
   assert.equal(inp.weeklyAtr.atr, 6.3); assert.equal(inp.cfg.atrPeriod, 14);
   assert.ok(strategy.exportAll().runs.some(r => r.method === 'weekly_atr' && r.weekly_atr)); // JSON backup carries it too
+  // optimizer runs store the distance-band parameters and the chosen distances
+  const opt = S.optimize({ nowMs: NOW, ticker: 'TEST', expiry: EXP, contracts: chain(100, 0.6), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { targetMode: 'fixed', targetPnl: 400 }, bandAtr: { atr: 9, source: 'fixture' }, market: { direction: 'LONG', score: 7, maxScore: 8, trend: 'UP', momentum: 'UP', rsi: 60 } });
+  assert.equal(opt.status, 'OK', JSON.stringify(opt.errors));
+  const r2 = strategy.saveRun({ out: opt, chain: { contracts: chain(100, 0.6), label: 'fixture', stock: { price: 100, source: 'fixture' } }, perp: perp(100), t: 'TEST', expiry: EXP, method: 'optimizer', cfg: { minShortSigma: 1, minShortAtr: 1, maxShortSigma: 2.5 }, market: null, source: 'builder' });
+  const db2 = db.prepare('SELECT distance_band, inputs FROM strategy_runs WHERE id=?').get(r2.id), band = JSON.parse(db2.distance_band);
+  assert.deepEqual([band.band.minShortSigma, band.band.minShortAtr, band.band.maxShortSigma, band.band.weeklyAtr], [1, 1, 2.5, 9]);
+  assert.equal(band.chosen.ce.strike, opt.best.exits[0].price); assert.ok(band.pairs.length >= 1);
+  assert.ok(JSON.parse(db2.inputs).distanceBand.band.minDist >= 9);
 });
