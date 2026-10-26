@@ -77,6 +77,9 @@ function compute() {
   });
   const by = (list, pred) => list.filter(pred).length;
   const lotSummary = {
+    bySignal: (() => { const ok = x => (x.perp === 'LONG' ? x.calls2puts1 : x.calls1puts2), m = lots.filter(x => !ok(x)), th = lots.filter(x => ok(x) && x.thetaStatus);
+      return { n: lots.length, matches: lots.length - m.length, mismatches: m.map(x => x.page + ' (' + x.perp + ' ' + x.callLots / 100 + 'c:' + x.putLots / 100 + 'p)'), longOk: by(lots, x => x.perp === 'LONG' && ok(x)), shortOk: by(lots, x => x.perp === 'SHORT' && ok(x)),
+        theta: { evaluated: th.length, credit: by(th, x => x.thetaStatus === 'CREDIT'), nearNeutral: by(th, x => x.thetaStatus === 'NEAR-NEUTRAL'), debit: by(th, x => x.thetaStatus === 'DEBIT') } }; })(),
     all: { n: lots.length, calls1puts2: by(lots, x => x.calls1puts2), calls2puts1: by(lots, x => x.calls2puts1), other: lots.filter(x => !x.calls1puts2 && !x.calls2puts1).map(x => x.page + ' (' + x.callLots + 'c/' + x.putLots + 'p)') },
     shortPerp: { n: by(lots, x => x.perp === 'SHORT'), calls1puts2: by(lots, x => x.perp === 'SHORT' && x.calls1puts2), calls2puts1: by(lots, x => x.perp === 'SHORT' && x.calls2puts1) },
     longPerp: { n: by(lots, x => x.perp === 'LONG'), calls1puts2: by(lots, x => x.perp === 'LONG' && x.calls1puts2), calls2puts1: by(lots, x => x.perp === 'LONG' && x.calls2puts1), calls1puts2Pages: lots.filter(x => x.perp === 'LONG' && x.calls1puts2).map(x => x.page) },

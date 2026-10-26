@@ -1,5 +1,5 @@
-// Shared derivatives state: the selected underlying / perp / expiry and leg hand-offs flow between Options Studio,
-// Gamma Book, Live Hedge Compare, 1:2 Options + Futures, the Manual Four-Leg Lab and the Sheet Scenario Lab.
+// Shared derivatives state: the selected underlying / expiry and leg hand-offs between the Strategy Builder,
+// Weekly Plan, the Manual Four-Leg Lab and the Sheet Scenario Lab.
 // Stored in localStorage (this browser only). No credentials are ever stored here: Alpaca keys live on the server.
 (function (root) {
   const KEY = "quantsignal.deriv.v1";

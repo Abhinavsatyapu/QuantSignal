@@ -9,8 +9,8 @@ const express = require('express');
 const hl = require('./hl');
 const alpaca = require('./alpaca');
 const { INTERVALS } = require('./config');
-for (const f of ['finance', 'indicators', 'paper-engine', 'sheet-math', 'live-hedge-engine']) require('../public/' + f + '.js');
-const { Finance, Technicals, Paper, SheetMath, LiveHedge } = globalThis;
+for (const f of ['finance', 'indicators', 'paper-engine', 'sheet-math']) require('../public/' + f + '.js');
+const { Finance, Technicals, Paper, SheetMath } = globalThis;
 const { httpErr } = alpaca;
 
 const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => res.status(e.status || (e instanceof TypeError ? 500 : 400)).json({ error: e.message }));
@@ -282,14 +282,16 @@ function sheetAudit() {
     // Owner's rules (26 Oct 2026) checked against this page.
     const floor5 = dayQty == null ? null : Math.sign(dayQty) * Math.floor(Math.abs(dayQty) / 5 + 1e-9) * 5, callU = Math.abs(r.units[0]), putU = Math.abs(r.units[2]);
     const ruleChecks = { floor5DayQty: floor5, floor5Matches: floor5 === q, floor5ErrorPct: floor5 ? round((Math.abs(q) - Math.abs(floor5)) / Math.abs(floor5) * 100, 2) : null, multipleOf5: q % 5 === 0,
-      lots: callU && putU ? (callU === putU * 2 ? '2:1' : putU === callU * 2 ? '1:2' : callU / 100 + ':' + putU / 100) : null, followsLotRule: putU === callU * 2,
+      lots: callU && putU ? (callU === putU * 2 ? '2:1' : putU === callU * 2 ? '1:2' : callU / 100 + ':' + putU / 100) : null, variant: putU === callU * 2 ? '1C:2P' : callU === putU * 2 ? '2C:1P' : 'other', followsLotRule: putU === callU * 2 || callU === putU * 2,
       perpSide: q > 0 ? 'LONG' : q < 0 ? 'SHORT' : 'NONE', ownerMargin: Math.abs(q) * r.futureEntry / 2 };
     return { page: r.page, symbol: r.symbol, confidence: r.confidence, sourceInputs: { futureEntry: r.futureEntry, futureQty: q, up: r.up, down: r.down, mmLoss: r.mmLoss, strikes: r.strikes, units: r.units, premiums: r.premiums },
       sourceScenarioOptions: o, printedNet: r.printedNet, closedSummary: r.closedSummary || null, legs, issues, nets, netDifferences, expiry,
       balances: dayQty == null ? null : { dayQty, recordedQty: q, quantityDifference: q - dayQty }, ruleChecks, status: issues.length ? 'REVIEW' : 'REPRODUCES',
       formula: 'Net = supplied options P&L + signed future units × scenario move − basket loss. No fee/funding data is provided here.' };
   });
-  auditCache = { source: '78-page scanned PDF transcription; not original workbook formulas', sizingNote: 'Scenario equalization is a reconstruction benchmark. The PDF does not contain Greeks or a visible sizing formula; original quantities cannot be proven delta-derived.', rows };
+  // Owner (26 Oct 2026): both 1C:2P and 2C:1P are valid for LONG and SHORT perps → match rate per variant and direction.
+  const lotVariants = {}; for (const r of rows) { const k = r.ruleChecks.perpSide, v = r.ruleChecks.variant; (lotVariants[k] ||= { '1C:2P': 0, '2C:1P': 0, other: 0, n: 0 }); lotVariants[k][v]++; lotVariants[k].n++; }
+  auditCache = { lotVariants, lotRuleMatches: rows.filter(r => r.ruleChecks.followsLotRule).length, source: '78-page scanned PDF transcription; not original workbook formulas', sizingNote: 'Scenario equalization is a reconstruction benchmark. The PDF does not contain Greeks or a visible sizing formula; original quantities cannot be proven delta-derived.', rows };
   return auditCache;
 }
 
@@ -345,81 +347,17 @@ async function positionPnl(b) {
 }
 
 // ------------------------------------------------------------------ 1:2 Options + Futures (ratio setup)
-async function ratioSetup(b, stockSymbols) {
-  const symbol = String(b.symbol || '').trim();
-  const universe = await stockSymbols();
-  if (!universe.includes(symbol)) throw httpErr(400, 'Select a verified Hyperliquid US stock perp');
-  const interval = INTERVALS[b.interval] ? b.interval : '15m';
-  const debitLots = fin(b.callLots, 'Debit-spread lots', { min: 1, max: 10, int: true }); let callLots = debitLots, putLots = debitLots * 2;
-  const equity = fin(b.equity, 'Account equity', { min: 1 }), capital = fin(b.capital, 'Allocation', { min: 1, max: equity }), maxLoss = fin(b.maxLoss, 'Maximum planned loss', { min: 0.01 });
-  const riskPct = maxLoss / equity * 100; if (riskPct > 5) throw httpErr(400, 'Maximum planned loss cannot exceed 5% of equity');
-  const cfg = { equity, capital, riskPct, maxLots: Math.min(20, debitLots * 2), callLots, putLots, directionalPct: fin(b.directionalPct, 'Directional increment', { min: 0, max: 100 }),
-    maxSpreadPct: fin(b.maxSpreadPct, 'Maximum bid/ask width', { min: 0.1, max: 100 }), commission: fin(b.commission, 'Commission', { min: 0, max: 100 }), futureFeePct: fin(b.feePct, 'Futures fee', { min: 0, max: 5 }),
-    slippagePct: fin(b.slippagePct, 'Slippage', { min: 0, max: 5 }), targetR: fin(b.targetR, 'Target R', { min: 1, max: 20 }), minStopPct: fin(b.minStopPct, 'Minimum stop', { min: 0.1, max: 10 }),
-    strategy: b.strategy === 'condor' ? 'condor' : 'directional', maxQuoteAgeMs: b.allowStale === false ? 120000 : MAX_STALE_MS };
-  const near = b.near, far = b.far || b.near;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(near || '') || near <= new Date().toISOString().slice(0, 10)) throw httpErr(400, 'Choose an unexpired option expiry');
-  const ticker = symbol.split(':')[1];
-  const [candles, meta, book, chainData] = await Promise.all([hl.candles('mainnet', symbol, interval), perpMeta(symbol), perpBook(symbol), getChain({ symbol: ticker, near, far })]);
-  const now = Date.now(), analysis = Technicals.analyze(candles, now, { minStopPct: cfg.minStopPct });
-  const reference = { perpBid: book.bid, perpAsk: book.ask, perpMid: book.mid, bookTime: book.time, stock: chainData.stock?.price ?? null, stockTime: chainData.stock?.time ?? null, basis: chainData.stock ? book.mid - chainData.stock.price : null, provider: chainData.label };
-  if (analysis.direction === 'WAIT') return { status: 'WAIT', symbol, reason: analysis.reason, analysis, reference };
-  // Owner's rule (26 Oct 2026): calls 1 lot : puts 2 lots for every direction, to keep theta near-neutral or a credit.
-  // (The reference sheets use 1:2 in 50/78 pages; most LONG-perp sheets used 2 calls : 1 put instead; see docs/four-leg-methodology.md.)
-  cfg.callLots = callLots; cfg.putLots = putLots;
-  const [c] = LiveHedge.optimize({ symbol, chain: chainData, analysis, meta, price: book.mid, now, cfg, interval, duration: INTERVALS[interval] });
-  const long = c.signedFutureQty > 0, slip = cfg.slippagePct / 100, limit = long ? book.ask * (1 + slip) : book.bid * (1 - slip);
-  const depth = (long ? book.asks.filter(l => l.px <= limit) : book.bids.filter(l => l.px >= limit)).reduce((n, l) => n + l.sz, 0);
-  const future = { qty: c.signedFutureQty, entry: limit }, basis = book.mid - c.stock;
-  const legs = c.legs.map(l => { const sign = l.side === 'buy' ? 1 : -1; return { ...l, signedUnits: sign * l.qty * 100, premiumCash: -sign * l.qty * 100 * l.premium, deltaContribution: sign * l.qty * 100 * l.quote.greeks.delta }; });
-  const spreads = ['call', 'put'].map(type => { const p = legs.filter(l => l.type === type), buy = p.find(l => l.side === 'buy'), sell = p.find(l => l.side === 'sell'), cash = p.reduce((n, l) => n + l.premiumCash, 0);
-    const cls = type === 'call' ? (buy.strike < sell.strike ? 'bull call debit spread' : 'bear call credit spread') : (buy.strike > sell.strike ? 'bear put debit spread' : 'bull put credit spread');
-    return { type, classification: cls, lots: buy.qty, width: Math.abs(buy.strike - sell.strike), cash }; });
-  const netPremium = legs.reduce((n, l) => n + l.premiumCash, 0), entryCommission = cfg.commission * legs.reduce((n, l) => n + l.qty, 0);
-  const costs = { commission: cfg.commission, futureFeePct: cfg.futureFeePct, funding: 0, mmLoss: 0 };
-  const model = [-10, -5, -2.5, 0, 2.5, 5, 10].map(shockPct => {
-    const stock = c.stock * (1 + shockPct / 100), perp = Math.max(0, stock + basis), t = SheetMath.totals(legs, future, stock, perp, costs);
-    let cur = null; try { cur = Finance.pnl(legs, { timeMillis: now, shock: shockPct, ivShift: 0, rate: 4, dividend: 0 }, cfg.commission) + t.futureGross - t.futureFees; } catch {}
-    return { shockPct, stock, perp, options: t.optionPnl, futureGross: t.futureGross, futureFees: t.futureFees, combined: t.net, currentTimeModel: cur };
-  });
-  const bounds = SheetMath.bounds(legs, future, basis, costs);
-  const curve = Array.from({ length: 121 }, (_, i) => { const stock = Math.max(Math.max(0, -basis), c.stock * (0.85 + 0.3 * i / 120)); return { stock, combined: bounds.value(stock) }; });
-  const oldest = Math.min(...legs.map(l => Date.parse(l.quote.quoteTime)).filter(Number.isFinite));
-  const stale = !Number.isFinite(oldest) || now - oldest > 120000;
-  return {
-    status: 'CALCULATED', symbol, expiry: c.expiry, direction: analysis.direction, analysis, szDecimals: meta.szDecimals, strategy: cfg.strategy, callLots, putLots,
-    neutralFutureQty: c.neutralFutureQty, directionalIncrement: c.directionalIncrement, netDelta: c.netDelta, optionDelta: c.optionDelta, margin: c.margin,
-    plannedCombinedRisk: c.plannedRisk, optionRisk: c.optionRisk, futureStopRisk: c.futureRisk, budget: maxLoss, stop: c.stop, target: c.target, netFutureRR: c.netRR,
-    reference: { ...reference, stock: c.stock, stockTime: c.stockTime, basis }, availableFuturesDepth: depth, future, legs, spreads,
-    netPremiumBeforeCommission: netPremium, entryCommission, openingCash: netPremium - entryCommission,
-    formula: { 'neutral futures': '−Σ(side sign × lots × 100 × provider delta)', 'directional futures': 'neutral × (1 + increment%) rounded to 10^−szDecimals', 'lots': 'credit-spread lots = 2 × debit-spread lots (1:2, per the reference sheets)', 'risk gate': 'option max loss + futures stop risk ≤ maximum planned loss', 'futures limit': 'best ' + (long ? 'ask × (1 + slippage)' : 'bid × (1 − slippage)') },
-    model, bounds: { maxProfit: bounds.maxProfit === Infinity ? null : bounds.maxProfit, maxLoss: bounds.maxLoss === Infinity ? null : bounds.maxLoss, profitUnbounded: bounds.maxProfit === Infinity, lossUnbounded: bounds.maxLoss === Infinity, breakEvens: bounds.breakEvens, tailSlope: bounds.tailSlope }, curve,
-    orderPreview: { note: 'Manual preview only. No orders were sent.', futures: { venue: 'Hyperliquid', symbol, side: long ? 'BUY' : 'SELL', quantity: Math.abs(c.signedFutureQty), limitPrice: limit }, options: legs.map(l => ({ contract: l.contract, side: l.side.toUpperCase(), contracts: l.qty, limitPrice: l.premium })) },
-    quoteState: stale ? 'STALE / last available quotes' : 'fresh', provider: chainData.label, quoteExpiresAt: now + 60000,
-    assumptions: [c.explanation, 'Options data: ' + chainData.label + '. ' + (stale ? 'Quotes are older than 2 minutes (market closed or indicative feed); use only for analysis.' : 'Quotes are under 2 minutes old.'),
-      'Expiry payoff holds the observed perp-minus-stock basis constant; funding, assignment, early exercise and liquidation are not modeled.', 'Credit-spread lots are twice the debit-spread lots (the 1:2 structure of the reference sheets): ' + callLots + ' call / ' + putLots + ' put lots.', 'Futures quantity is a Greek delta hedge plus your directional increment; it must be rechecked as delta changes.'],
-  };
-}
-
 // ------------------------------------------------------------------ router
 function router({ stockSymbols }) {
   const r = express.Router();
   r.get('/derivatives/status', (req, res) => res.json({ alpaca: alpaca.status(), fallback: fallbackEnabled() ? 'cboe-delayed' : null, analysisMaxQuoteAgeMs: MAX_STALE_MS, liveMaxQuoteAgeMs: 120000,
     message: alpaca.configured() ? 'Alpaca connected on the server · options feed ' + alpaca.status().optionsFeed.toUpperCase() : fallbackEnabled() ? 'Alpaca keys not configured · using Cboe public DELAYED quotes (set ALPACA_KEY_ID / ALPACA_SECRET_KEY for Alpaca; OPTIONS_FALLBACK=off disables Cboe)' : alpaca.NO_KEYS }));
-  r.get('/option-universe', wrap(async (req, res) => res.json(await symbolDirectory())));
-  r.post('/options', wrap(async (req, res) => {
-    const b = req.body || {};
-    if (b.action === 'universe') return res.json(alpaca.configured() ? await alpaca.optionableAssets() : { ...(await symbolDirectory()), note: 'Alpaca keys not configured: US-listed symbol directory, optionability not verified (the fetched chain confirms it)' });
-    if (b.action === 'legs') return res.json(await getLegs((b.contracts || []).map(s => String(s).toUpperCase())));
-    res.json(await getChain({ symbol: b.symbol, near: b.near, far: b.far, pageToken: b.pageToken || null }));
-  }));
   r.post('/manual-four-leg', wrap(async (req, res) => res.json(await manualFourLeg(req.body || {}))));
   r.post('/sheet-scenarios', wrap(async (req, res) => res.json(sheetScenarios(req.body || {}))));
   r.get('/sheet-scenarios', (req, res) => res.status(405).json({ error: 'Use POST' }));
   r.get('/sheet-audit', wrap(async (req, res) => res.json(sheetAudit())));
   r.post('/position-pnl', wrap(async (req, res) => res.json(await positionPnl(req.body || {}))));
-  r.post('/ratio-setup', wrap(async (req, res) => res.json(await ratioSetup(req.body || {}, stockSymbols))));
   return r;
 }
 
-module.exports = { getChain, getExpiries, providerInfo, perpBook, perpMeta, nyToUtc, router, manualFourLeg, sheetScenarios, sheetAudit, positionPnl, ratioSetup, piecewiseBounds, symbolDirectory };
+module.exports = { getChain, getExpiries, providerInfo, perpBook, perpMeta, nyToUtc, router, manualFourLeg, sheetScenarios, sheetAudit, positionPnl, piecewiseBounds, symbolDirectory };

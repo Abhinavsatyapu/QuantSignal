@@ -12,6 +12,7 @@ COPY scripts ./scripts
 COPY data/reference ./data/reference
 COPY docs ./docs
 COPY config.json ./config.json
+RUN date -u +%Y-%m-%dT%H:%M:%SZ > /app/BUILD_TIME
 # Mount a persistent volume here (Render persistent disk at /var/data)
 ENV DATA_DIR=/var/data
 RUN mkdir -p /var/data

@@ -1,0 +1,52 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QuantSignal weekly plan: split the weekly P&L target across diversified four-leg + perp structures with combined what-if, risk caps and realistic odds."><meta name="theme-color" content="#0b0f17"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><title>Weekly Plan · QuantSignal</title>
+<link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/deriv-pages.css"><link rel="stylesheet" href="/builder.css"></head>
+<body class="deriv-page">
+<header class="deriv-top"><a class="deriv-brand" href="/"><span class="logo">Q</span><span>QuantSignal<small>DERIVATIVES</small></span></a><nav class="deriv-nav" aria-label="Derivatives"><a href="/builder">Strategy Builder</a><a href="/weekly" class="active" aria-current="page">Weekly Plan</a><a href="/builder#history">History</a><a href="/manual">Labs</a></nav><span id="derivShared" class="deriv-shared"></span></header>
+<main class="deriv-main">
+<div class="b-head"><div><p class="eyebrow">DERIVATIVES · WEEKLY PLAN</p><h1>Weekly Plan</h1><p class="market-note">Splits your weekly target across several uncorrelated four-leg + perp structures (≤ 2 per sector), each sized at $<span id="wPerLot">400</span> per lot set, inside your capital, per-trade and weekly loss caps. Every ticker's run is saved to History as training data.</p></div></div>
+
+<section class="panel b-panel" id="wHonest" aria-live="polite"><h2>Realistic odds</h2><div id="wHonestBody"><div class="skel h40"></div></div></section>
+
+<section class="panel b-panel"><h2>Account &amp; risk limits <small class="market-note">saved on the server</small></h2>
+<form id="wAcct" class="b-grid">
+<label><span data-tip="Your own account size. Return on capital and the deployment cap use this.">Account capital ($)</span><input name="capital" type="number" min="1000" step="1000"></label>
+<label><span data-tip="Lower end of the weekly P&L target range.">Weekly target min ($)</span><input name="weeklyTargetMin" type="number" min="0" step="100"></label>
+<label><span data-tip="Upper end of the weekly P&L target range.">Weekly target max ($)</span><input name="weeklyTargetMax" type="number" min="0" step="100"></label>
+<label><span data-tip="Target P&L per ticker for ONE lot set (1C:2P or 2C:1P base unit). It scales with the lot sets: 2 lot sets → 2 × this.">Target per lot set ($)</span><input name="targetPerLotSet" type="number" min="1" step="50"></label>
+<label><span data-tip="Per-lot-set: target = per-lot-set target × lot sets (default). Fixed total: the target is a total and the optimizer sizes the lots.">Target mode</span><select name="targetMode"><option value="perLotSet">Per lot set (scales with lots)</option><option value="fixed">Fixed total</option></select></label>
+<label><span data-tip="Lot sets the Builder starts with. Raise it once results justify scaling (see History → performance by lot size).">Default lot sets</span><input name="defaultLotSets" type="number" min="1" step="1"></label>
+<label><span data-tip="Worst P&L inside ±riskSigma (today or at expiry) must stay within this, or the structure is rejected.">Max loss per trade ($)</span><input name="maxLossPerTrade" type="number" min="0" step="100"></label>
+<label><span data-tip="The sum of the plan's per-trade max losses must stay within this; realised losses this week reduce it.">Max weekly loss ($)</span><input name="maxWeeklyLoss" type="number" min="0" step="100"></label>
+<label><span data-tip="Margin + options capital of a single structure as % of the account.">Max capital per trade (%)</span><input name="maxDeployPct" type="number" min="1" max="100" step="1"></label>
+<label><span data-tip="Maximum number of structures open at once.">Max concurrent structures</span><input name="maxConcurrent" type="number" min="1" max="10" step="1"></label>
+<label><span data-tip="Two tickers whose return correlation is above this are not both selected.">Max pair correlation</span><input name="maxPairCorrelation" type="number" min="0" max="1" step="0.05"></label>
+<label><span data-tip="Tickers per sector in one plan.">Max per sector</span><input name="maxPerSector" type="number" min="1" max="5" step="1"></label>
+<label><span data-tip="Risk window used for 'max loss' on open-ended (hedged) structures.">Risk window (σ)</span><input name="riskSigma" type="number" min="1" max="4" step="0.5"></label>
+<label class="wide"><span data-tip="Optional per-ticker overrides of the per-lot-set target, e.g. NVDA=500, SPY=300">Per-ticker targets</span><input name="tickerTargets" placeholder="e.g. NVDA=500, SPY=300"></label>
+</form>
+<div class="row"><button id="wSave" class="secondary">Save settings</button><button id="wReset" class="ghost" type="button">Restore defaults</button><span id="wAcctMsg" class="market-note" role="status"></span></div></section>
+
+<section class="panel b-panel"><h2>Universe <small class="market-note">add or remove tickers; sector caps apply</small></h2>
+<div id="wUniverse" class="w-chips"></div>
+<div class="row"><input id="wAdd" placeholder="Add ticker, e.g. NFLX" maxlength="10" aria-label="Add ticker"><button id="wAddBtn" class="ghost">Add</button>
+<label>Size multipliers <input id="wMult" value="1,2,3" aria-label="Lot multipliers to compare" style="width:90px"></label>
+<button id="wRun">Build weekly plan</button><span id="wStatus" class="market-note" role="status"></span></div></section>
+
+<section id="wResult" hidden>
+<section class="panel b-panel"><h2>Plans by size</h2><div id="wTabs" class="w-tabs" role="tablist"></div><p id="wSummary" class="b-rec"></p><div id="wTotals" class="b-metrics"></div>
+<h3>Structures</h3><div class="market-scroll"><table class="b-table" id="wStructs"></table></div>
+<h3>Combined P&amp;L if every underlying moves the same % (stress, correlation 1)</h3><div class="market-scroll"><table class="b-heat" id="wGrid"></table></div>
+<h3>Correlations used</h3><div id="wPairs" class="market-note"></div>
+<h3>Not selected</h3><div class="market-scroll"><table class="b-table" id="wSkipped"></table></div>
+</section>
+<section class="panel b-panel"><h2>Ticker status</h2><div class="market-scroll"><table class="b-table" id="wTickers"></table></div></section>
+</section>
+
+<section class="panel b-panel"><h2>Actual weekly P&amp;L vs target <small class="market-note">from History (realised P&amp;L of closed trades)</small></h2><div class="market-scroll"><table class="b-table" id="wWeeks"><tbody><tr><td><div class="skel"></div></td></tr></tbody></table></div><p id="wWeeksNote" class="market-note"></p></section>
+
+<section class="panel b-panel"><h2>Data &amp; storage</h2><p id="wStorage" class="market-note">Checking storage…</p>
+<div class="row"><a class="button ghost" href="/api/strategy/export" download>Export JSON (History + settings + model versions)</a><a class="button ghost" href="/api/strategy/export.csv" download>Export CSV (all runs)</a>
+<label class="button ghost" for="wImport">Import JSON…</label><input id="wImport" type="file" accept="application/json,.json" hidden><span id="wImportMsg" class="market-note" role="status"></span></div></section>
+</main>
+<script src="/deriv-shared.js"></script><script src="/weekly.js"></script><script src="/deriv-nav.js"></script>
+</body></html>

@@ -14,9 +14,30 @@ const { Finance } = globalThis;
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', true);
+const log = require('./log');
+const helmet = require('helmet'), compression = require('compression');
+const fs = require('fs');
+// ---- version (commit sha + build time) — Render exposes RENDER_GIT_COMMIT; the Docker build writes BUILD_TIME
+const VERSION = (() => {
+  let commit = process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || null, builtAt = null;
+  try { builtAt = fs.readFileSync(path.join(__dirname, '..', 'BUILD_TIME'), 'utf8').trim(); } catch {}
+  if (!commit) try { commit = require('child_process').execSync('git rev-parse HEAD', { cwd: path.join(__dirname, '..'), stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch {}
+  return { name: 'quantsignal', version: require('../package.json').version, commit: commit || 'unknown', builtAt: builtAt || null, startedAt: new Date().toISOString(), node: process.version };
+})();
+app.use(helmet({
+  contentSecurityPolicy: { useDefaults: true, directives: {
+    'default-src': ["'self'"], 'script-src': ["'self'"], 'style-src': ["'self'", "'unsafe-inline'"], 'img-src': ["'self'", 'data:', 'blob:'],
+    'connect-src': ["'self'", 'https://api.hyperliquid.xyz', 'https://api.hyperliquid-testnet.xyz', 'wss://api.hyperliquid.xyz', 'https://data-api.binance.vision'],
+    'font-src': ["'self'", 'data:'], 'object-src': ["'none'"], 'frame-ancestors': ["'none'"], 'base-uri': ["'self'"], 'form-action': ["'self'"], 'upgrade-insecure-requests': null } },
+  crossOriginEmbedderPolicy: false, referrerPolicy: { policy: 'same-origin' } }));
+app.use(compression());
+// structured request log (one JSON line per API request; static assets are not logged)
+app.use((req, res, next) => { const t0 = Date.now(); res.on('finish', () => { if (req.path.startsWith('/api/') || res.statusCode >= 500) log.info('http', { method: req.method, path: req.path, status: res.statusCode, ms: Date.now() - t0 }); }); next(); });
+app.get('/version', (req, res) => res.json(VERSION));
+app.use('/api/strategy/import', express.json({ limit: '50mb' }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.text({ type: ['text/plain'], limit: '1mb' }));
-app.use((req, res, next) => { res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('Referrer-Policy', 'same-origin'); next(); });
+
 
 const safeEq = (a, b) => { const x = Buffer.from(String(a || '')), y = Buffer.from(String(b || '')); return x.length === y.length && x.length > 0 && crypto.timingSafeEqual(x, y); };
 const ADMIN = () => process.env.ADMIN_TOKEN || '';
@@ -173,17 +194,31 @@ app.all(/^\/api\/.*/, (req, res) => res.status(404).json({ error: 'Unknown API e
 
 // ------------------------------------------------------------------ frontend
 const PUB = path.join(config.ROOT, 'public');
-app.use(express.static(PUB, { extensions: ['html'], maxAge: '5m', index: 'index.html' }));
-for (const p of ['/signals', '/news', '/webhook', '/risk', '/paper', '/hedge', '/autotrader', '/options', '/gamma', '/ratio']) app.get(p, (req, res) => res.sendFile(path.join(PUB, 'index.html')));
+// static assets: HTML revalidated every time (no stale UI after a deploy); JS/CSS/images cached 1 h with ETag revalidation
+app.use(express.static(PUB, { extensions: ['html'], index: 'index.html', etag: true, setHeaders: (res, file) => res.setHeader('Cache-Control', /\.html$/.test(file) ? 'no-cache' : /sheet-data\.js$/.test(file) ? 'public, max-age=86400' : 'public, max-age=3600, must-revalidate') }));
+for (const p of ['/options', '/gamma', '/hedge', '/ratio', '/live-hedge', '/options-studio', '/gamma-book']) app.get(p, (req, res) => res.redirect(301, '/builder'));
+for (const p of ['/signals', '/news', '/webhook', '/risk', '/paper', '/autotrader']) app.get(p, (req, res) => res.sendFile(path.join(PUB, 'index.html')));
 app.get('/manual', (req, res) => res.sendFile(path.join(PUB, 'manual.html')));
 app.get('/builder', (req, res) => res.sendFile(path.join(PUB, 'builder.html')));
 app.get('/docs/four-leg-methodology.md', (req, res) => res.type('text/markdown; charset=utf-8').sendFile(path.join(__dirname, '..', 'docs', 'four-leg-methodology.md')));
 app.get('/sheet-lab', (req, res) => res.sendFile(path.join(PUB, 'sheet-lab.html')));
+app.get('/weekly', (req, res) => res.sendFile(path.join(PUB, 'weekly.html')));
+app.get('/lab', (req, res) => res.redirect(302, '/manual'));
+app.get('/derivatives', (req, res) => res.redirect(302, '/builder'));
+// friendly 404 / 500 pages (JSON for API callers)
+app.use((req, res) => { res.status(404); if (req.accepts('html')) return res.sendFile(path.join(PUB, '404.html')); res.json({ error: 'Not found' }); });
+app.use((err, req, res, next) => { log.error('http.error', { path: req.path, error: err.message }); if (res.headersSent) return next(err); res.status(err.status || 500); if (req.path.startsWith('/api/') || !req.accepts('html')) return res.json({ error: err.status && err.status < 500 ? err.message : 'Internal error' }); res.sendFile(path.join(PUB, '500.html')); });
 
 const cfg = config.get();
 const port = Number(process.env.PORT) || cfg.port;
-app.listen(port, cfg.host, () => {
-  store.log('info', `QuantSignal server listening on http://${cfg.host}:${port}`);
-  engine.start();
+const strategyMod = require('./strategy');
+strategyMod.initPersistence().catch(e => log.error('persist.init_crash', { error: e.message })).finally(() => {
+  const server = app.listen(port, cfg.host, () => {
+    store.log('info', `QuantSignal server listening on http://${cfg.host}:${port}`);
+    log.info('server.start', { port, commit: VERSION.commit, storage: require('./persist').backend() });
+    engine.start();
+  });
+  const stop = (sig) => { log.info('server.stop', { signal: sig }); server.close(); require('./persist').close().finally(() => process.exit(0)); setTimeout(() => process.exit(0), 8000).unref(); };
+  process.on('SIGTERM', () => stop('SIGTERM')); process.on('SIGINT', () => stop('SIGINT'));
 });
 process.on('unhandledRejection', e => store.log('error', 'unhandledRejection: ' + (e?.message || e)));

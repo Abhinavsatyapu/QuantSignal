@@ -8,9 +8,9 @@ services:
     region: singapore
     numInstances: 1          # SQLite + one execution engine: never scale >1
     healthCheckPath: /health
-    autoDeploy: true
-    # Free plan has no persistent disk: DATA_DIR is ephemeral (SQLite + config reset on each deploy/restart).
-    # On a paid plan add:  disk: {name: quantsignal-data, mountPath: /var/data, sizeGB: 1}  and DATA_DIR=/var/data
+    autoDeployTrigger: checksPass   # deploy main only after GitHub CI (tests + Docker build) passes
+    # Free plan has no persistent disk: DATA_DIR is ephemeral. Strategy History / plans / model versions / settings are
+    # mirrored to Postgres when DATABASE_URL is set (Neon free tier) and restored on boot — see server/persist.js.
     envVars:
       - key: DATA_DIR
         value: /tmp/data
@@ -30,5 +30,7 @@ services:
         sync: false          # secret, set in the Render dashboard
       - key: ALPACA_SECRET_KEY
         sync: false          # secret, set in the Render dashboard
+      - key: DATABASE_URL
+        sync: false          # Neon pooled connection string (secret, set in the dashboard / via API)
       - key: ALPACA_OPTIONS_FEED
         value: indicative

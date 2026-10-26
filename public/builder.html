@@ -1,7 +1,7 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Strategy Builder · QuantSignal</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234c8dff'/%3E%3Cpath d='M9 20l5-6 4 4 5-8' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="QuantSignal derivatives: auto-selected four-leg option + perp structures with full what-if analysis, weekly planning and run history."><meta name="theme-color" content="#0b0f17"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><title>Strategy Builder · QuantSignal</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234c8dff'/%3E%3Cpath d='M9 20l5-6 4 4 5-8' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/deriv-pages.css"><link rel="stylesheet" href="/builder.css"></head>
 <body class="deriv-page">
-<header class="deriv-top"><a class="deriv-brand" href="/"><span class="logo">Q</span><span>QuantSignal<small>DERIVATIVES</small></span></a><nav class="deriv-nav"><a href="/builder" class="active">Strategy Builder</a><a href="/options">Options Studio</a><a href="/gamma">Gamma Book</a><a href="/hedge">Live Hedge Compare</a><a href="/ratio">1:2 Options + Futures</a><a href="/manual">Manual Four-Leg Lab</a><a href="/sheet-lab">Sheet Scenario Lab</a></nav><span id="derivShared" class="deriv-shared"></span></header>
+<header class="deriv-top"><a class="deriv-brand" href="/"><span class="logo">Q</span><span>QuantSignal<small>DERIVATIVES</small></span></a><nav class="deriv-nav" aria-label="Derivatives"><a href="/builder" class="active" aria-current="page">Strategy Builder</a><a href="/weekly">Weekly Plan</a><a href="/builder#history">History</a><a href="/manual">Labs</a></nav><span id="derivShared" class="deriv-shared"></span></header>
 <main class="deriv-main">
 <div class="b-head"><div><p class="eyebrow">DERIVATIVES · FOUR-LEG + PERP</p><h1>Strategy Builder</h1><p class="market-note">Pick any US ticker, an expiry from its real option chain and a target P&amp;L. The builder applies the reference-sheet methodology (<a href="/docs/four-leg-methodology.md" target="_blank">rules &amp; accuracy</a>) to the live chain and sizes the Hyperliquid US-stock perp leg. Analysis only: no orders are sent.</p></div><span class="label watch">ANALYSIS · NO ORDERS</span></div>
 <p id="providerLine" class="b-provider">Checking options data source…</p>
@@ -15,40 +15,60 @@
 <p id="bPerp" class="market-note"></p><p id="bExpiryNote" class="market-note"></p>
 </section>
 
-<section class="panel b-panel"><h2>2 · Target &amp; risk</h2>
+<section class="panel b-panel"><h2>2 · Target</h2>
 <div class="b-grid">
-<label>Target P&amp;L at the scenario prices ($)<input id="bTarget" type="number" min="1" step="50" value="1000"></label>
-<label>Capital available ($)<input id="bCapital" type="number" min="100" step="500" value="20000"></label>
-<label>Max loss within ±2σ (% of capital)<input id="bMaxLoss" type="number" min="1" max="100" step="1" value="50"></label>
-<label>Signal (sets the perp side)<select id="bSignal"><option value="BULLISH">Bullish → LONG perp (bearish option hedge)</option><option value="BEARISH">Bearish → SHORT perp (bullish option hedge)</option><option value="AUTO">Auto (compare both)</option></select></label>
-<label>Lot ratio · calls : puts<span class="b-ratio"><input id="bCallUnits" type="number" min="1" max="10" step="1" value="1" aria-label="Call lots"> : <input id="bPutUnits" type="number" min="1" max="10" step="1" value="2" aria-label="Put lots"></span><small>Default 1 : 2 keeps theta near-neutral or a credit.</small></label>
-<label>Futures margin divisor<input id="bMarginDiv" type="number" min="1" max="50" step="0.5" value="2"><small>Futures margin = FQ × entry ÷ this (default 2).</small></label>
+<label><span data-tip="Target P&amp;L for one lot set (the 1C:2P or 2C:1P base unit) at both exits. Default from Weekly Plan → account settings (per-ticker overrides apply)." tabindex="0">Target per lot set ($)</span><input id="bTargetPer" type="number" min="1" step="50" value="400"></label>
+<label><span data-tip="Number of lot sets. Total target = target per lot set × lot sets; legs and the perp scale with it." tabindex="0">Lot sets</span><input id="bLotSets" type="number" min="1" max="60" step="1" value="1"></label>
+<div class="b-total"><span>Total target</span><b id="bTotalTarget">$400</b><small id="bTotalNote">= $400 × 1 lot set</small></div>
 </div>
-<details class="b-adv"><summary>Advanced</summary><div class="b-grid">
-<label>Method<select id="bMethod"><option value="reference">Reference sheets (default)</option><option value="delta">Live Hedge delta method (original 1:2 code)</option></select></label>
-<label>Basket / MM allowance ($)<input id="bMm" type="number" min="0" step="5" value="50"></label>
+<p class="market-note">Everything else is decided automatically: perp direction from the app's indicators, the four strikes and both lot ratios (1C:2P and 2C:1P) from a search of the live chain, the lots and the perp quantity (rounded down to 5), followed by a full what-if analysis. Use Advanced only to override.</p>
+<details class="b-adv"><summary>Advanced overrides</summary><div class="b-grid">
+<label><span data-tip="Per lot set (default): target scales with the lots. Fixed total: the optimizer sizes the lots to reach the total below." tabindex="0">Target mode</span><select id="bTargetMode"><option value="perLotSet">Per lot set (scales with lots)</option><option value="fixed">Fixed total</option></select></label>
+<label>Fixed total target ($, fixed mode only)<input id="bTarget" type="number" min="1" step="50" value="400"></label>
+<label>Method<select id="bMethod"><option value="optimizer">Optimizer + what-if (default)</option><option value="reference">Reference-sheet rules (fixed σ distances)</option><option value="delta">Live Hedge delta method (original 1:2 code)</option></select></label>
+<label>Direction<select id="bSignal"><option value="AUTO">Auto from indicators (default)</option><option value="BULLISH">Bullish → LONG perp</option><option value="BEARISH">Bearish → SHORT perp</option><option value="BOTH">Compare both sides</option></select></label>
+<label>Fixed lot ratio · calls : puts (blank = compare both)<span class="b-ratio"><input id="bCallUnits" type="number" min="1" max="10" step="1" placeholder="auto" aria-label="Call lots"> : <input id="bPutUnits" type="number" min="1" max="10" step="1" placeholder="auto" aria-label="Put lots"></span></label>
+<label>Bid/ask haircut (0 = mid, 1 = full spread)<input id="bSlip" type="number" min="0" max="1" step="0.05" value="0.5"></label>
+<label>Capital limit ($, optional)<input id="bCapital" type="number" min="100" step="500" placeholder="no limit"></label>
+<label>Max loss within ±2σ (% of capital, optional)<input id="bMaxLoss" type="number" min="1" max="100" step="1" placeholder="none"></label>
+<label>Min open interest per leg<input id="bMinOI" type="number" min="0" step="1" value="10"></label>
 <label>Max bid/ask spread (% of mid)<input id="bSpread" type="number" min="1" max="100" step="1" value="25"></label>
-<label>Max debit-spread lots<input id="bLots" type="number" min="1" max="200" step="1" value="30"></label>
-<label>Perp leverage (×)<input id="bLev" type="number" min="1" max="50" step="1" value="5"><small>Venue initial margin = notional ÷ leverage (shown for reference).</small></label>
-<label>Futures qty rounded down to a multiple of<input id="bRound" type="number" min="1" step="1" value="5"></label>
+<label>Max lots (base units)<input id="bLots" type="number" min="1" max="200" step="1" value="60"></label>
+<label>Basket / MM allowance ($)<input id="bMm" type="number" min="0" step="5" value="50"></label>
+<label>Futures margin divisor<input id="bMarginDiv" type="number" min="1" max="50" step="0.5" value="2"></label>
+<label>Perp leverage (×)<input id="bLev" type="number" min="1" max="50" step="1" value="5"></label>
+<label>Hedge qty rounded down to a multiple of<input id="bRound" type="number" min="1" step="1" value="5"></label>
 <label>Option commission ($/contract)<input id="bComm" type="number" min="0" step="0.05" value="0.65"></label>
 <label>Perp fee (% per side)<input id="bFee" type="number" min="0" step="0.005" value="0.045"></label>
-<label>Debit short strike (σ) · blank = calibrated<input id="bDebitSigma" type="number" min="0.2" max="3" step="0.05" placeholder="calibrated"></label><label>Credit short strike (σ) · blank = calibrated<input id="bCreditSigma" type="number" min="0.2" max="3" step="0.05" placeholder="calibrated"></label>
-<label>Credit wing (σ) · blank = calibrated<input id="bWingSigma" type="number" min="0.1" max="3" step="0.05" placeholder="calibrated"></label>
-<label class="check-label"><input id="bCal" type="checkbox" checked> Use per-ticker calibration (reference sheets + recorded outcomes)</label>
+<label>Reference method: debit short (σ)<input id="bDebitSigma" type="number" min="0.2" max="3" step="0.05" placeholder="calibrated"></label><label>Reference method: credit short (σ)<input id="bCreditSigma" type="number" min="0.2" max="3" step="0.05" placeholder="calibrated"></label>
+<label>Reference method: credit wing (σ)<input id="bWingSigma" type="number" min="0.1" max="3" step="0.05" placeholder="calibrated"></label>
+<label class="check-label"><input id="bCal" type="checkbox" checked> Reference method: per-ticker calibration</label>
 <label>Delta method: direction<select id="bDir"><option value="LONG">LONG perp</option><option value="SHORT">SHORT perp</option><option value="NEUTRAL">NEUTRAL (condor)</option></select></label>
-</div><p id="bCalNote" class="market-note"></p></details>
-<div class="row"><button id="bBuild" disabled>Build recommendation</button><span id="bStatus" class="market-note" role="status"></span></div>
+</div><p id="bCalNote" class="market-note"></p><p id="bWeights" class="market-note"></p></details>
+<div class="row"><button id="bBuild" disabled>Analyse &amp; recommend</button><span id="bStatus" class="market-note" role="status"></span></div>
 </section>
 
 <section id="bResult" class="panel b-panel" hidden>
 <div class="b-res-head"><h2 id="bTitle">Recommendation</h2><span id="bBadge" class="label"></span></div>
 <p id="bDataLine" class="b-provider"></p>
 <div id="bErrors" class="b-errors" hidden></div>
+<div id="bWarnings" class="b-warn" hidden></div><p id="bDirection" class="b-rec" hidden></p>
+<div id="bVariantsWrap" hidden><h3>Lot-ratio variants · 1 call : 2 puts vs 2 calls : 1 put</h3><p id="bRecReason" class="b-rec"></p><div id="bVariants" class="b-variants"></div><p id="bMarket" class="market-note"></p></div>
 <div id="bBody">
 <div id="bMetrics" class="b-metrics"></div>
 <h3>Legs</h3><div class="market-scroll"><table class="b-table" id="bLegs"></table></div>
 <p id="bThin" class="market-note negative"></p>
+<section id="bScale" class="b-scale" hidden><h3>Scale the size <small class="market-note">instant re-calculation on the same quotes</small></h3>
+<div class="row"><button class="ghost" data-mult="0.5" type="button">½×</button><button class="ghost" data-mult="1" type="button">1×</button><button class="ghost" data-mult="2" type="button">2×</button><button class="ghost" data-mult="3" type="button">3×</button><button class="ghost" data-mult="5" type="button">5×</button>
+<label>Lot sets <input id="bScaleLots" type="number" min="1" max="60" step="1" style="width:80px"></label><button id="bScaleSave" class="secondary" type="button">Save a run at this size</button></div>
+<div id="bScaleOut"></div></section>
+<section id="bWhatIf" class="b-whatif" hidden><h3>What-if analysis (done before the recommendation)</h3>
+<div id="bWiSummary" class="b-metrics small"></div>
+<h4>Price-move scenarios · P&amp;L by date</h4><div class="market-scroll"><table class="b-table" id="bWiGrid"></table></div>
+<h4 id="bWiHeatTitle">IV shock × price heatmap · today</h4><div class="row"><label>Date <select id="bWiHeatDate"><option value="today">Today</option><option value="midLife">Mid-life</option></select></label></div><div class="market-scroll"><table class="b-heat" id="bWiHeat"></table></div>
+<h4>Time decay · P&amp;L if the price stays flat</h4><canvas id="bWiFlat" width="1200" height="220" aria-label="Flat-price P&amp;L path"></canvas>
+<div class="b-wi-cols"><div><h4>Tail &amp; probability</h4><div id="bWiTail"></div></div><div><h4>Execution realism</h4><div id="bWiExec"></div></div><div><h4>Events before expiry</h4><div id="bWiEvents"></div></div></div>
+<p id="bWiRobust" class="market-note"></p></section>
 <h3>Capital</h3><div id="bCapitalBox" class="b-metrics small"></div><p id="bCapitalNote" class="market-note"></p>
 <h3>Exit / target levels</h3><div class="market-scroll"><table class="b-table" id="bExits"></table></div><p id="bTheta" class="market-note"></p>
 <h3>How the target is reached</h3><div id="bTargetBox" class="b-target"></div>
@@ -63,9 +83,18 @@
 </div>
 </section>
 
-<section class="panel b-panel"><div class="b-res-head"><h2>History</h2><div class="row"><label class="check-label"><input id="hOnlyTicker" type="checkbox"> Only this ticker</label><button id="hRefresh" class="ghost">Refresh</button></div></div>
-<p class="market-note">Every recommendation is saved with its inputs, chain summary, legs and expected P&amp;L. Record the realised P&amp;L after you close a trade; closed results feed the per-ticker calibration.</p>
+<section class="panel b-panel"><details id="bChainBox"><summary><b>Option chain, greeks &amp; gamma exposure</b> <small class="market-note">for the selected expiry</small></summary><p id="bChainNote" class="market-note"></p><div class="market-scroll"><table class="b-table" id="bChain"></table></div></details></section>
+
+<section class="panel b-panel" id="history"><div class="b-res-head"><h2>History</h2><div class="row"><label class="check-label"><input id="hOnlyTicker" type="checkbox"> Only this ticker</label><button id="hRefresh" class="ghost">Refresh</button></div></div>
+<p class="market-note">Every run (Builder and Weekly Plan) is saved automatically with its inputs, market snapshot, all candidates and scores, the chosen and recommended structure, the what-if summary and the size. Mark a run Taken, enter your fills, then close it with exit fills and the realised P&amp;L. After expiry, untaken runs are scored automatically against the market path (hypothetical) so they train the model too.</p>
+<p id="hModel" class="b-rec">Model: loading…</p>
+<details><summary>Performance by lot size</summary><div class="market-scroll"><table class="b-table" id="hByLots"></table></div><p id="hByLotsNote" class="market-note"></p></details>
+<div class="row"><a class="button ghost" href="/api/strategy/export.csv" download>Export CSV</a><a class="button ghost" href="/api/strategy/export" download>Export JSON</a><button id="hLearn" class="ghost" type="button">Run learning pass now</button><span id="hLearnMsg" class="market-note" role="status"></span></div>
+<dialog id="hTrade" class="b-dialog"><form method="dialog" id="hTradeForm"><h3 id="hTradeTitle">Trade</h3><div id="hTradeLegs" class="b-grid"></div>
+<label>Realised P&amp;L ($, when closing)<input name="pnl" type="number" step="1"></label><label>Notes<input name="notes" maxlength="300"></label>
+<div class="row"><button value="entry" class="secondary">Save entry fills (Taken)</button><button value="close">Close with exit fills + P&amp;L</button><button value="cancel" class="ghost" formnovalidate>Cancel</button></div></form></dialog>
 <div class="market-scroll"><table class="b-table" id="hTable"></table></div></section>
 </main>
-<script src="/deriv-shared.js"></script><script src="/strategy-engine.js"></script><script src="/builder.js"></script><script src="/deriv-nav.js"></script>
+<script src="/deriv-shared.js"></script><script src="/strategy-engine.js"></script>
+<script src="/strategy-optimizer.js"></script><script src="/builder.js"></script><script src="/deriv-nav.js"></script>
 </body></html>

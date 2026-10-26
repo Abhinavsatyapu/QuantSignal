@@ -90,7 +90,7 @@ q('#renderTop').onclick=()=>document.querySelector('[data-view="autotrader"]').c
 q('#menuBtn').onclick=()=>document.body.classList.toggle('nav-open');q('#scrim').onclick=()=>document.body.classList.remove('nav-open');
 document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>document.body.classList.remove('nav-open')));
 window.addEventListener('viewchange',e=>{at.visible=e.detail==='autotrader';if(at.visible)refresh();});
-const paths={'/autotrader':'autotrader','/options':'options','/gamma':'gamma','/ratio':'ratio','/hedge':'hedge'};
+const paths={'/autotrader':'autotrader'};
 if(paths[location.pathname])document.querySelector(`[data-view="${paths[location.pathname]}"]`).click();
 setInterval(()=>{if(!document.hidden)refresh();},5000);refresh();
 })();

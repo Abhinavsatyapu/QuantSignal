@@ -482,7 +482,7 @@ function auditRender() {
         units(r.ruleChecks.floor5DayQty) +
         (r.ruleChecks.floor5Matches ? " (matches the sheet)" : " (sheet " + units(r.balances.recordedQty) + ")") +
         " · lots calls:puts " + esc(r.ruleChecks.lots || "—") +
-        (r.ruleChecks.followsLotRule ? " (follows 1:2)" : " (not the 1:2 rule)") +
+        (r.ruleChecks.followsLotRule ? " (" + r.ruleChecks.variant + " variant, " + r.ruleChecks.perpSide + " perp)" : " (neither 1C:2P nor 2C:1P)") +
         " · futures margin FQ × entry / 2 = " + money(r.ruleChecks.ownerMargin) + ".</p>"
       : "") +
     '<ul class="note">' +
@@ -546,7 +546,12 @@ api("/api/sheet-audit")
       " have review flags. Missing per-leg premiums block exact option audits on pages 60 and 73. Source: " +
       d.source +
       ". " +
-      d.sizingNote;
+      d.sizingNote +
+      (d.lotVariants
+        ? " Lot-ratio variants (both valid for either direction): " +
+          Object.entries(d.lotVariants).map(([k, v]) => k + " perp " + v["1C:2P"] + "/" + v.n + " 1C:2P, " + v["2C:1P"] + "/" + v.n + " 2C:1P" + (v.other ? ", " + v.other + " other" : "")).join(" · ") +
+          "; " + d.lotRuleMatches + "/" + d.rows.length + " pages use one of the two."
+        : "");
     S("auditPage").replaceChildren(
       ...d.rows.map(
         (r) =>

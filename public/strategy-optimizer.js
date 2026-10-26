@@ -1,0 +1,407 @@
+// QuantSignal Strategy Optimizer: the user gives ticker + expiry + target P&L; everything else is decided here from the
+// live chain and the app's own indicators. Pure functions (no network); loaded after strategy-engine.js in the browser and
+// on the server. Extends globalThis.Strategy with { optimize, decideDirection, OPT_DEFAULTS, DEFAULT_WEIGHTS, hedgeFromStock }.
+//
+// Search: for each perp side (from the signal, or both when the signal is neutral) and both lot ratios (1C:2P, 2C:1P),
+// enumerate debit-spread long/short strikes and credit-spread short/wing strikes inside expected-move bands, drop illiquid
+// strikes (no bid, wide spread, low open interest), price every leg at mid ± a bid/ask haircut, size the perp to equalise
+// today's P&L at the two short strikes (the CE-short / PE-short exits) rounded down to 5, size the lots so the projected
+// expiry P&L at both exits reaches the target with the smallest residual, then rank by transparent weighted penalties.
+(function (root) {
+  "use strict";
+  const S = root.Strategy;
+  const fin = (x) => typeof x === "number" && Number.isFinite(x);
+  const r6 = (x) => Math.round(x * 1e6) / 1e6;
+  const sgn = (side) => (side === "buy" ? 1 : -1);
+  const usd = (x) => (x < 0 ? "−$" : "$") + Math.round(Math.abs(x)).toLocaleString("en-US");
+  const OPT_DEFAULTS = { mmLoss: 50, maxLots: 60, maxSpreadPct: 25, minOpenInterest: 10, slippage: 0.5, commission: 0.65, futureFeePct: 0.045, marginDivisor: 2, leverage: 5, futuresRound: 5,
+    thetaTolerancePct: 15, maxPriceGapPct: 5, riskSigma: 2, r: 0.04, capital: null, maxLossPct: null, topN: 3 };
+  // Penalty weights (lower total = better). Stored server-side; tuned from recorded outcomes once enough runs are closed.
+  const DEFAULT_WEIGHTS = { fit: 3, capital: 1, risk: 1, theta: 1, liquidity: 1.5, reference: 0.5, skew: 0.5, probability: 1, robustness: 2, tail: 1 };
+  const REF = { debitLongSigma: 0.1, debitShortSigma: 0.9, creditShortSigma: 0.63, wingSigma: 0.47 }; // reference-sheet medians
+  const VARIANTS = [{ key: "1C:2P", call: 1, put: 2 }, { key: "2C:1P", call: 2, put: 1 }];
+  const MOVES = [-10, -7, -5, -3, -2, -1, 0, 1, 2, 3, 5, 7, 10], IV_SHOCKS = [-20, -10, 0, 10, 20];
+  const GATES = { minProbProfit: 0.35, maxTail2SigmaX: 4, minRobustHit: 0.25, minEvX: -0.5 }; // acceptable-risk gates (× target)
+  const npdf = (x) => Math.exp(-x * x / 2) / Math.sqrt(2 * Math.PI);
+
+  // ---------------------------------------------------------------- WHAT-IF analysis for one structure
+  // c: { legs, fq, fEntry, up, dn } · k: { spot, sigma, atmIV, T, basis, cfg, now, expiryMs, T0, events, funding }
+  function whatIf(c, k) {
+    const { spot, atmIV, T, basis, cfg, now, expiryMs, T0 } = k, days = T * 365, sd = spot * atmIV * Math.sqrt(T);
+    const mkEv = (legs) => S.evaluate({ legs, future: { qty: c.fq, entry: c.fEntry, basis }, commission: cfg.commission, futureFeePct: cfg.futureFeePct, leverage: cfg.marginDivisor, r: cfg.r, nowMs: now, expiryMs });
+    const ev = mkEv(c.legs), mm = cfg.mmLoss;
+    const ivEv = (shock) => (shock === 0 ? ev : mkEv(c.legs.map((l) => ({ ...l, iv: Math.max(0.01, l.iv * (1 + shock / 100)) }))));
+    const dates = [{ label: "Today", daysAhead: 0 }];
+    if (days > 2) dates.push({ label: "Mid-life (" + (days / 2).toFixed(1) + "d)", daysAhead: days / 2 });
+    if (days > 1.5) dates.push({ label: "1 day before expiry", daysAhead: days - 1 });
+    dates.push({ label: "Expiry", daysAhead: null });
+    const pnlAt = (e, x, d) => (d == null ? e.expiry(x) : e.at(x, d)) - mm;
+    const pts = [...MOVES.map((m) => ({ label: (m > 0 ? "+" : "") + m + "%", kind: "move", pct: m, stock: spot * (1 + m / 100) })),
+      ...c.legs.map((l) => ({ label: (l.side === "buy" ? "Long " : "Short ") + l.type + " strike " + l.strike, kind: "strike", stock: l.strike })),
+      { label: "CE-short exit", kind: "exit", stock: c.up }, { label: "PE-short exit", kind: "exit", stock: c.dn },
+      ...ev.breakevens.filter((b) => b > 0).map((b) => ({ label: "Breakeven (expiry, before MM)", kind: "breakeven", stock: b }))];
+    const seen = new Set(), priceGrid = pts.filter((p) => { const key = p.label + p.stock; if (seen.has(key)) return false; seen.add(key); return true; }).sort((a, b) => a.stock - b.stock)
+      .map((p) => ({ ...p, pct: (p.stock / spot - 1) * 100, perp: ev.perpAt(p.stock), pnl: dates.map((d) => pnlAt(ev, p.stock, d.daysAhead)) }));
+    // IV shock × price heatmaps (today and mid-life), plus an IV-crush scenario (−40%) for earnings
+    const shocks = [...IV_SHOCKS, -40], evs = shocks.map(ivEv), hm = (d) => MOVES.map((m) => evs.map((e) => pnlAt(e, spot * (1 + m / 100), d)));
+    const midD = dates.find((d) => /Mid/.test(d.label)), ivGrid = { shocks, shockLabels: shocks.map((x) => (x === -40 ? "IV crush −40%" : (x > 0 ? "+" : "") + x + "%")), moves: MOVES, today: hm(0), midLife: midD ? hm(midD.daysAhead) : null, midLifeLabel: midD ? midD.label : null };
+    // time decay: flat-price path
+    const steps = Math.max(1, Math.min(60, Math.ceil(days))), flatPath = Array.from({ length: steps + 1 }, (_, i) => { const d = i === steps ? null : (days * i) / steps; return { day: i === steps ? days : d, pnl: pnlAt(ev, spot, d) }; });
+    const optTheta = ev.greeks.theta;
+    // tail risk
+    let maxLoss = ev.unlimitedLoss ? null : ev.maxLoss, at = null;
+    if (!ev.unlimitedLoss) { const vals = ev.kinks.map((x) => [x, ev.expiry(x)]); at = vals.reduce((m, v) => (v[1] < m[1] ? v : m))[0]; }
+    const sig = (n) => ({ up: { stock: spot + n * sd, today: pnlAt(ev, spot + n * sd, 0), expiry: pnlAt(ev, spot + n * sd, null) }, down: { stock: Math.max(0.01, spot - n * sd), today: pnlAt(ev, Math.max(0.01, spot - n * sd), 0), expiry: pnlAt(ev, Math.max(0.01, spot - n * sd), null) } });
+    const tail = { maxLossExpiry: maxLoss, maxLossAt: at, unlimitedLoss: ev.unlimitedLoss, unlimitedSide: ev.unlimitedLoss ? (ev.tailSlope < 0 ? "upside" : "downside") : null, sigma1: sd, sigma2: sig(2), sigma3: sig(3) };
+    tail.worst2Sigma = Math.min(tail.sigma2.up.expiry, tail.sigma2.down.expiry, tail.sigma2.up.today, tail.sigma2.down.today);
+    // probabilities (lognormal, ATM IV, risk-neutral drift) and expected value at expiry
+    const pAbove = (x) => (x <= 0 ? 1 : S.cdf((Math.log(spot / x) + (cfg.r - atmIV * atmIV / 2) * T) / (atmIV * Math.sqrt(T))));
+    let evSum = 0, pProfit = 0, pTarget = 0;
+    for (let z = -6; z <= 6 + 1e-9; z += 0.01) { const x = spot * Math.exp((cfg.r - atmIV * atmIV / 2) * T + atmIV * Math.sqrt(T) * z), w = npdf(z) * 0.01, v = pnlAt(ev, x, null); evSum += w * v; if (v > 0) pProfit += w; if (v >= T0) pTarget += w; }
+    const probs = { finishAboveCE: pAbove(c.up), finishBelowPE: 1 - pAbove(c.dn), touchCE: Math.min(1, 2 * pAbove(c.up)), touchPE: Math.min(1, 2 * (1 - pAbove(c.dn))), profit: pProfit, target: pTarget, expectedValue: evSum, model: "lognormal, ATM IV " + (atmIV * 100).toFixed(1) + "%, risk-neutral drift; 'touch' ≈ 2 × finish probability (reflection)" };
+    // execution realism: mids vs the haircut fills, fees, margin, funding
+    const midEv = mkEv(c.legs.map((l) => ({ ...l, premium: l.mid }))), fullEv = mkEv(c.legs.map((l) => ({ ...l, premium: l.side === "buy" ? l.ask : l.bid })));
+    const fundingHours = Math.max(0, (expiryMs - now) / 36e5), notional = Math.abs(c.fq) * c.fEntry;
+    const execution = { fillModel: "mid ± " + Math.round(cfg.slippage * 100) + "% of half-spread",
+      exitsAtMid: { up: midEv.expiry(c.up) - mm, down: midEv.expiry(c.dn) - mm }, exitsAtHaircut: { up: ev.expiry(c.up) - mm, down: ev.expiry(c.dn) - mm }, exitsAtFullSpread: { up: fullEv.expiry(c.up) - mm, down: fullEv.expiry(c.dn) - mm },
+      slippageCost: (midEv.expiry(c.up) - ev.expiry(c.up)), fees: { options: ev.optionFees, hedgeEntry: ev.futuresEntryFee, hedgeExitEst: notional * cfg.futureFeePct / 100 }, capital: ev.requiredCapital, futuresMargin: ev.futuresMargin, optionsCapital: ev.optionsCapital,
+      funding: k.funding != null && fin(k.funding) ? { hourlyRate: k.funding, hours: fundingHours, estCost: Math.sign(c.fq) * notional * k.funding * fundingHours, note: "Hyperliquid funding at the current hourly rate held to expiry (positive = the position pays); rates change hourly." } : { note: k.isStock ? "Stock hedge: no funding (borrow cost for shorts not modelled)." : "Funding rate unavailable." } };
+    // robustness: exits at mid-life / 1 day before × IV shocks −20…+20
+    const cells = []; for (const d of dates.filter((x) => x.daysAhead != null && x.daysAhead > 0)) for (const [i, sh] of shocks.entries()) { if (sh === -40) continue; for (const [lab, x] of [["CE", c.up], ["PE", c.dn]]) cells.push({ date: d.label, shock: sh, exit: lab, pnl: pnlAt(evs[i], x, d.daysAhead) }); }
+    const baseHit = ev.expiry(c.up) - mm >= T0 && ev.expiry(c.dn) - mm >= T0;
+    const robustness = { baseCaseHitsTarget: baseHit, cells: cells.length, hitTarget: cells.filter((x) => x.pnl >= T0).length, hit80: cells.filter((x) => x.pnl >= 0.8 * T0).length, positive: cells.filter((x) => x.pnl > 0).length,
+      worstCell: cells.length ? cells.reduce((m, x) => (x.pnl < m.pnl ? x : m)) : null, note: "Cells = {CE, PE exit} × {" + dates.filter((x) => x.daysAhead > 0).map((x) => x.label).join(", ") + "} × IV shock {−20, −10, 0, +10, +20}%. Exits reached before expiry still carry time value, so early exits usually pay less than the expiry projection." };
+    robustness.hitRate = cells.length ? (robustness.hit80 + robustness.positive) / (2 * cells.length) : baseHit ? 1 : 0;
+    robustness.positiveRate = cells.length ? robustness.positive / cells.length : baseHit ? 1 : 0;
+    const ev_ = k.events || null, inWindow = (dd) => dd && dd >= new Date(now).toISOString().slice(0, 10) && dd <= k.expiry;
+    const events = ev_ ? { ...ev_, earningsBeforeExpiry: inWindow(ev_.earningsDate), exDividendBeforeExpiry: inWindow(ev_.exDividendDate) } : { note: "Event calendar unavailable." };
+    const gates = [];
+    if (!baseHit) gates.push("base case misses the target at an exit");
+    if (pProfit < GATES.minProbProfit) gates.push("probability of profit " + (pProfit * 100).toFixed(0) + "% < " + GATES.minProbProfit * 100 + "%");
+    if (-tail.worst2Sigma > GATES.maxTail2SigmaX * T0) gates.push("loss on a 2σ move " + usd(tail.worst2Sigma) + " exceeds " + GATES.maxTail2SigmaX + "× the target");
+    if (evSum < GATES.minEvX * T0) gates.push("expected value " + usd(evSum) + " below −" + (-GATES.minEvX * 100) + "% of target");
+    if (cells.length && robustness.positiveRate < GATES.minRobustHit) gates.push("only " + robustness.positive + "/" + cells.length + " pre-expiry what-if cells (exits × dates × IV shocks) are profitable");
+    // account-level risk limits (the user's own capital): breaches reject the candidate even if it hits the target
+    const acct = cfg.account || null, minExit = Math.min(ev.expiry(c.up), ev.expiry(c.dn)) - mm;
+    // risk = worst P&L anywhere inside ±kσ (k = account.riskSigma, default 2), today or at expiry. The perp/stock hedge makes the
+    // loss open-ended beyond that window (a long perp's "max loss" is the price going to 0), so a stop is still needed outside it.
+    const kS = (acct && acct.riskSigma) || cfg.riskSigma || 2, lo = Math.max(0.01, spot - kS * sd), hi = spot + kS * sd;
+    let worstIn = 0, worstAt = spot, worstWhen = "expiry";
+    for (let i = 0; i <= 80; i++) { const x = lo + (hi - lo) * i / 80; for (const [w, d] of [["today", 0], ["expiry", null]]) { const v = pnlAt(ev, x, d); if (v < worstIn) { worstIn = v; worstAt = x; worstWhen = w; } } }
+    const riskLoss = -worstIn;
+    const account = { riskLoss, riskSigma: kS, riskWindow: { lo, hi }, worstAt, worstWhen, riskLossBasis: "worst P&L inside ±" + kS + "σ (" + lo.toFixed(2) + "–" + hi.toFixed(2) + "), today or at expiry; outside that window the " + (k.isStock ? "stock" : "perp") + " hedge keeps losing, so use a stop at the limit",
+      rewardToRisk: riskLoss > 0 ? minExit / riskLoss : null, returnOnMargin: ev.futuresMargin > 0 ? minExit / ev.futuresMargin : null, returnOnStructureCapital: ev.requiredCapital > 0 ? minExit / ev.requiredCapital : null };
+    if (acct && acct.capital > 0) {
+      Object.assign(account, { capital: acct.capital, returnOnAccount: minExit / acct.capital, maxLossPctAccount: riskLoss / acct.capital * 100, deployedPct: ev.requiredCapital / acct.capital * 100 });
+      if (acct.maxLossPct > 0 && riskLoss > acct.capital * acct.maxLossPct / 100) gates.push("RISK LIMIT: max loss " + usd(-riskLoss) + " (" + account.maxLossPctAccount.toFixed(1) + "% of account) exceeds the " + acct.maxLossPct + "% per-structure limit (" + usd(-acct.capital * acct.maxLossPct / 100) + ")");
+      if (acct.maxDeployPct > 0 && ev.requiredCapital > acct.capital * acct.maxDeployPct / 100) gates.push("RISK LIMIT: capital " + usd(ev.requiredCapital) + " (" + account.deployedPct.toFixed(0) + "% of account) exceeds the " + acct.maxDeployPct + "% max deployed per trade");
+      if (acct.weeklyLossRemaining != null && riskLoss > acct.weeklyLossRemaining) gates.push("RISK LIMIT: max loss " + usd(-riskLoss) + " exceeds the remaining weekly loss budget " + usd(-acct.weeklyLossRemaining));
+    }
+    return { dates, priceGrid, ivGrid, theta: { optionsPerDay: optTheta, flatPath }, tail, probs, execution, robustness, events, account, gates, acceptable: gates.length === 0 };
+  }
+
+  // Direction from the app's indicator engine (Technicals.analyze output on the perp's candles).
+  function decideDirection(m, override) {
+    if (override === "BULLISH" || override === "LONG") return { sides: ["LONG"], side: "LONG", source: "manual", reason: "Manual override: bullish → LONG perp." };
+    if (override === "BEARISH" || override === "SHORT") return { sides: ["SHORT"], side: "SHORT", source: "manual", reason: "Manual override: bearish → SHORT perp." };
+    if (override === "BOTH") return { sides: ["LONG", "SHORT"], side: null, source: "manual", reason: "Manual: compare both perp sides." };
+    if (!m || m.error) return { sides: ["LONG", "SHORT"], side: null, source: "none", reason: "Indicators unavailable" + (m && m.error ? " (" + m.error + ")" : "") + ": both perp sides compared, best score wins." };
+    const desc = `${m.interval || ""} signal ${m.direction} ${m.score}/${m.maxScore}, trend ${m.trend} (EMA20 ${fin(m.ema20) ? m.ema20.toFixed(2) : "—"} vs EMA50 ${fin(m.ema50) ? m.ema50.toFixed(2) : "—"}), MACD momentum ${m.momentum}, RSI ${fin(m.rsi) ? m.rsi.toFixed(1) : "—"}`;
+    if (m.direction === "LONG" || m.direction === "SHORT") return { sides: [m.direction], side: m.direction, source: "signal", strength: m.score / (m.maxScore || 8), reason: "Indicator signal " + m.direction + " → " + m.direction + " perp. " + desc + "." };
+    const t = (m.trend === "UP" ? 1 : m.trend === "DOWN" ? -1 : 0) + (m.momentum === "UP" ? 1 : m.momentum === "DOWN" ? -1 : 0) + (m.rsi > 55 ? 1 : m.rsi < 45 ? -1 : 0);
+    if (t >= 2) return { sides: ["LONG"], side: "LONG", source: "trend", reason: "No qualified signal, but trend/momentum/RSI lean up (" + t + "/3) → LONG perp. " + desc + "." };
+    if (t <= -2) return { sides: ["SHORT"], side: "SHORT", source: "trend", reason: "No qualified signal, but trend/momentum/RSI lean down (" + t + "/3) → SHORT perp. " + desc + "." };
+    return { sides: ["LONG", "SHORT"], side: null, source: "neutral", reason: "No clear direction (lean " + t + "/3): both perp sides compared, best score wins. " + desc + "." };
+  }
+  // When the ticker has no Hyperliquid perp, hedge with shares (real stock quote; Reg-T 50% margin ≈ the same /2 rule).
+  function hedgeFromStock(ticker, stock) {
+    if (!stock || !(stock.price > 0)) return null;
+    return { available: true, isStock: true, symbol: ticker + " shares", bid: stock.bid > 0 ? stock.bid : stock.price, ask: stock.ask > 0 ? stock.ask : stock.price, mid: stock.price, szDecimals: 0, maxLeverage: 2, time: stock.time };
+  }
+  const evenPick = (list, k) => (list.length <= k ? list : Array.from({ length: k }, (_, i) => list[Math.round(i * (list.length - 1) / (k - 1))]));
+
+  // Per-lot-set target mode: if no strike set pays the per-lot-set target at 1× lots, fall back to sizing the lots so the
+  // TOTAL reaches that target, and say so (the per-lot-set P&L actually achievable is shown).
+  function optimize(input) {
+    const out = optimizeCore(input), c = input.cfg || {};
+    if (out.status !== "TARGET_NOT_REACHABLE" || c.targetMode === "fixed") return out;
+    const want = out.cfg.targetPnl, L = out.cfg.lotSets || 1;
+    const alt = optimizeCore({ ...input, cfg: { ...c, targetMode: "fixed", targetPnl: want } });
+    if (alt.status === "TARGET_NOT_REACHABLE") return out;
+    const b = alt.best || (alt.rejected && alt.rejected[0]), per = b ? Math.min(b.exits[0].pnlExpiry, b.exits[1].pnlExpiry) / b.lotSets : null;
+    alt.targetAdjusted = { requestedPerLotSet: want / L, requestedLotSets: L, lotSets: b ? b.lotSets : null, achievablePerLotSet: per };
+    alt.warnings = ["No strike set on " + input.expiry + " pays $" + Math.round(want / L).toLocaleString("en-US") + " per lot set at " + L + " lot set" + (L > 1 ? "s" : "") + (out.bestAchievable != null ? "" : "") + ". Sized instead to reach $" + Math.round(want).toLocaleString("en-US") + " in total" + (b ? " with " + b.lotSets + " lot sets (≈ " + usd(per) + " per lot set)" : "") + ". Use a later expiry for more per lot set.", ...(alt.warnings || [])];
+    return alt;
+  }
+  function optimizeCore(input) {
+    const cfg = { ...OPT_DEFAULTS, ...input.cfg }, W = { ...DEFAULT_WEIGHTS, ...(input.weights || {}) }, errs = [], warnings = [];
+    // target mode: "perLotSet" (default) → target = targetPerLotSet × lotSets, the lots are fixed at lotSets base units
+    // (1 lot set = 1C:2P or 2C:1P); "fixed" → targetPnl is a total and the optimizer sizes the lots to reach it.
+    const perLot = cfg.targetMode !== "fixed", L = Math.round(Number(cfg.lotSets) || 1);
+    if (perLot && !(Number.isInteger(L) && L >= 1 && L <= cfg.maxLots)) errs.push("Lot sets must be a whole number 1–" + cfg.maxLots);
+    const T0 = perLot ? Number(cfg.targetPerLotSet ?? 400) * L : cfg.targetPnl;
+    cfg.targetPnl = T0; cfg.lotSets = perLot ? L : null; cfg.targetMode = perLot ? "perLotSet" : "fixed";
+    if (!(fin(T0) && T0 > 0)) errs.push("Target P&L must be a positive dollar amount");
+    if (cfg.callLotUnits != null || cfg.putLotUnits != null) if (![cfg.callLotUnits, cfg.putLotUnits].every((x) => Number.isInteger(x) && x >= 1 && x <= 10)) errs.push("Fixed lot ratio needs two whole numbers 1–10");
+    if (!(cfg.slippage >= 0 && cfg.slippage <= 1)) errs.push("Bid/ask haircut must be 0–1 (0 = mid, 1 = full bid/ask)");
+    if (!(cfg.marginDivisor >= 1 && cfg.marginDivisor <= 50)) errs.push("Futures margin divisor must be 1–50");
+    if (!(cfg.futuresRound > 0)) errs.push("Futures rounding must be > 0");
+    if (errs.length) return { status: "INVALID", errors: errs };
+    const now = input.nowMs ?? Date.now(), expiryMs = S.expiryCloseMs(input.expiry), T = (expiryMs - now) / (365 * 864e5);
+    if (!(T > 0)) return { status: "INVALID", errors: ["Expiry " + input.expiry + " has passed"] };
+    let hedge = input.perp && input.perp.available ? input.perp : null;
+    if (!hedge) {
+      hedge = hedgeFromStock(input.ticker, input.stock);
+      if (!hedge) return { status: "NO_PERP", errors: [(input.perp && input.perp.reason) || "No Hyperliquid perp", "No stock quote either, so no hedge can be sized."] };
+      warnings.push(((input.perp && input.perp.reason) || "No Hyperliquid US-stock perp for " + input.ticker) + " → hedging with " + input.ticker + " SHARES at the stock quote instead (Reg-T ≈ 50% margin). Stock hedges trade only in US market hours.");
+    }
+    const spot = input.stock && input.stock.price > 0 ? input.stock.price : hedge.mid;
+    if (!(spot > 0)) return { status: "NO_DATA", errors: ["No underlying price"] };
+    const priceGapPct = !hedge.isStock && input.stock && input.stock.price > 0 ? Math.abs(hedge.mid - input.stock.price) / input.stock.price * 100 : null;
+    if (priceGapPct != null && priceGapPct > cfg.maxPriceGapPct) return { status: "PRICE_MISMATCH", errors: ["Hyperliquid " + hedge.symbol + " mid " + hedge.mid + " differs from the " + input.ticker + " stock price " + input.stock.price + " by " + priceGapPct.toFixed(1) + "% (limit " + cfg.maxPriceGapPct + "%): the perp may not track this stock, or a quote is stale."], spot, priceGapPct };
+    const basis = hedge.isStock ? 0 : hedge.mid - spot;
+    // ---- liquidity filter
+    const ctx = { spot, T, r: cfg.r, maxSpreadPct: cfg.maxSpreadPct }, group = input.contracts.filter((c) => c.expiry === input.expiry), excluded = {}, quotes = [];
+    const ex = (k) => (excluded[k] = (excluded[k] || 0) + 1);
+    for (const c of group) {
+      const k = S.classify(c, ctx); if (!k.ok) { ex(k.reason); continue; }
+      if (fin(c.openInterest) && c.openInterest < cfg.minOpenInterest) { ex("open interest below " + cfg.minOpenInterest); continue; }
+      quotes.push(k.q);
+    }
+    const liquidity = { listed: group.length, usable: quotes.length, excluded };
+    if (!group.length) return { status: "NO_DATA", errors: ["No contracts listed for " + input.expiry], liquidity };
+    const calls = quotes.filter((q) => q.type === "call").sort((a, b) => a.strike - b.strike), puts = quotes.filter((q) => q.type === "put").sort((a, b) => a.strike - b.strike);
+    if (calls.length < 3 || puts.length < 3) return { status: "NO_LIQUIDITY", errors: ["Chain too illiquid for " + input.expiry + ": " + calls.length + " calls / " + puts.length + " puts pass the filters (bid > 0, spread ≤ " + cfg.maxSpreadPct + "%, open interest ≥ " + cfg.minOpenInterest + "). Try a later expiry or loosen the filters."], liquidity };
+    const medSpread = quotes.map((q) => q.spreadPct).sort((a, b) => a - b)[quotes.length >> 1];
+    if (medSpread > 10) warnings.push("Wide market: median bid/ask spread of usable strikes is " + medSpread.toFixed(1) + "%; fills may differ from the modelled price.");
+    const days = T * 365; if (days < 1) warnings.push("Expiry is less than a day away: gamma risk is extreme and the 'today' model is very sensitive.");
+    const atm = quotes.slice().sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot)).slice(0, 4), atmIV = atm.reduce((n, q) => n + q.iv, 0) / atm.length, sigma = spot * atmIV * Math.sqrt(T);
+    const band = (list, lo, hi) => { const g = list.filter((q) => q.strike >= lo && q.strike <= hi); return g.length ? g.reduce((n, q) => n + q.iv, 0) / g.length : null; };
+    const putIV = band(puts, spot - sigma, spot - 0.25 * sigma), callIV = band(calls, spot + 0.25 * sigma, spot + sigma), skewPts = putIV != null && callIV != null ? (putIV - callIV) * 100 : null;
+    const dir = decideDirection(input.market, cfg.direction);
+    const step = 10 ** -(hedge.szDecimals || 0), unit = Math.max(step, cfg.futuresRound), floorQ = (x) => Math.sign(x) * Math.floor(Math.abs(x) / unit + 1e-9) * unit;
+    const price = (q, side) => (side === "buy" ? q.mid + cfg.slippage * (q.ask - q.mid) : q.mid - cfg.slippage * (q.mid - q.bid));
+    const mk = (q, side, qty) => ({ type: q.type, side, strike: q.strike, qty, premium: r6(price(q, side)), iv: q.iv, greeks: q.greeks, multiplier: 100, contract: q.symbol, expiry: q.expiry, bid: q.bid, ask: q.ask, mid: q.mid, spreadPct: q.spreadPct, bidSize: q.bidSize, askSize: q.askSize, openInterest: q.openInterest, volume: q.volume, quoteTime: q.quoteTime, ivSource: q.ivSource, greeksSource: q.greeksSource, provider: q.provider });
+    const variants = cfg.callLotUnits != null ? [{ key: cfg.callLotUnits + "C:" + cfg.putLotUnits + "P", call: cfg.callLotUnits, put: cfg.putLotUnits }] : VARIANTS;
+    const riskLo = Math.max(0, spot - cfg.riskSigma * sigma), riskHi = spot + cfg.riskSigma * sigma, cands = [], misses = { notReachable: 0, overLots: 0, wrongSign: 0, overCapital: 0, overRisk: 0 };
+    let best1 = -Infinity;
+    for (const fs of dir.sides) {
+      const D = fs === "SHORT" ? calls : puts, C = fs === "SHORT" ? puts : calls, d = fs === "SHORT" ? 1 : -1;
+      const sd = (K) => d * (K - spot) / sigma; // signed σ distance on the debit side
+      const dLongs = evenPick(D.filter((q) => sd(q.strike) >= -0.15 && sd(q.strike) <= 0.4).sort((a, b) => Math.abs(sd(a.strike) - 0.1) - Math.abs(sd(b.strike) - 0.1)).slice(0, 3), 3);
+      const cShorts = evenPick(C.filter((q) => -sd(q.strike) >= 0.3 && -sd(q.strike) <= 1.3), 5);
+      for (const dl of dLongs) for (const ds of evenPick(D.filter((q) => d * (q.strike - dl.strike) > 0 && sd(q.strike) >= 0.4 && sd(q.strike) <= 1.5), 5))
+        for (const cs of cShorts) for (const cw of evenPick(C.filter((q) => d * (cs.strike - q.strike) / sigma >= 0.2 && d * (cs.strike - q.strike) / sigma <= 1.0), 4))
+          for (const v of variants) {
+            const dU = fs === "SHORT" ? v.call : v.put, cU = fs === "SHORT" ? v.put : v.call;
+            const up = fs === "SHORT" ? ds.strike : cs.strike, dn = fs === "SHORT" ? cs.strike : ds.strike;
+            const legsFor = (n) => [mk(dl, "buy", n * dU), mk(ds, "sell", n * dU), mk(cs, "sell", n * cU), mk(cw, "buy", n * cU)].sort((x, y) => (x.type === y.type ? x.strike - y.strike : x.type === "call" ? -1 : 1));
+            const sized = (n) => {
+              const legs = legsFor(n), probe = S.evaluate({ legs, future: { qty: 0, entry: 0, basis }, commission: 0, r: cfg.r, nowMs: now, expiryMs });
+              const qRaw = (probe.at(dn, 0) - probe.at(up, 0)) / (up - dn), fq = r6(floorQ(qRaw));
+              const fEntry = fq > 0 ? hedge.ask : fq < 0 ? hedge.bid : hedge.mid;
+              const ev = S.evaluate({ legs, future: { qty: fq, entry: fEntry, basis }, commission: cfg.commission, futureFeePct: cfg.futureFeePct, leverage: cfg.marginDivisor, r: cfg.r, nowMs: now, expiryMs });
+              return { n, legs, qRaw, fq, fEntry, ev, netUp: ev.expiry(up) - cfg.mmLoss, netDn: ev.expiry(dn) - cfg.mmLoss };
+            };
+            // per-lot exit P&L (unrounded perp) → first guess for n, then exact checks around it
+            const one = sized(1), q1 = one.qRaw;
+            if (fs === "LONG" ? !(q1 > 0) : !(q1 < 0)) { misses.wrongSign++; continue; }
+            const ev1 = S.evaluate({ legs: one.legs, future: { qty: q1, entry: one.fEntry || hedge.mid, basis }, commission: cfg.commission, futureFeePct: cfg.futureFeePct, r: cfg.r, nowMs: now, expiryMs });
+            const e1 = Math.min(ev1.expiry(up), ev1.expiry(dn));
+            if (!(e1 > 0)) { misses.notReachable++; continue; }
+            best1 = Math.max(best1, e1 * cfg.maxLots - cfg.mmLoss);
+            const n0 = perLot ? L : Math.ceil((T0 + cfg.mmLoss) / e1);
+            if (n0 > cfg.maxLots + 1) { misses.overLots++; continue; }
+            let pick = null;
+            for (let n = perLot ? L : Math.max(1, n0 - 1); n <= (perLot ? L : Math.min(cfg.maxLots, n0 + 2)); n++) {
+              const s = sized(n); if (!(Math.abs(s.fq) >= unit) || Math.sign(s.fq) !== (fs === "LONG" ? 1 : -1)) continue;
+              if (Math.min(s.netUp, s.netDn) >= T0) { pick = s; break; }
+            }
+            if (!pick) { misses.notReachable++; continue; }
+            const ev = pick.ev, capitalTotal = ev.requiredCapital;
+            const worstRisk = -Math.min(...[riskLo, riskHi, spot, ...ev.kinks.filter((x) => x > riskLo && x < riskHi)].map(ev.expiry)) + cfg.mmLoss;
+            if (cfg.capital && capitalTotal > cfg.capital) { misses.overCapital++; continue; }
+            if (cfg.capital && cfg.maxLossPct && worstRisk > cfg.capital * cfg.maxLossPct / 100) { misses.overRisk++; continue; }
+            const th = S.thetaCheck(pick.legs, cfg.thetaTolerancePct);
+            const doubled = v.put > v.call ? "put" : v.call > v.put ? "call" : null, doubledIsCredit = doubled && (fs === "SHORT") === (doubled === "put");
+            const rich = skewPts != null && Math.abs(skewPts) >= 2 ? (skewPts > 0 ? "put" : "call") : null;
+            const liq = pick.legs.reduce((m, l) => m + l.spreadPct / 100 + (fin(l.openInterest) ? (l.openInterest < 100 ? 0.15 : 0) : 0.25) + (fin(l.volume) && l.volume === 0 ? 0.1 : 0), 0) / 4;
+            const sig = { debitLong: sd(dl.strike), debitShort: sd(ds.strike), creditShort: -sd(cs.strike), wing: Math.abs(cw.strike - cs.strike) / sigma };
+            const factors = {
+              fit: (Math.abs(pick.netUp - T0) + Math.abs(pick.netDn - T0)) / (2 * T0),
+              capital: capitalTotal, // normalised below
+              risk: worstRisk / Math.max(1, capitalTotal),
+              theta: th.status === "DEBIT" ? 1 : th.status === "NEAR-NEUTRAL" ? 0.3 : 0,
+              liquidity: liq,
+              reference: (Math.abs(sig.debitShort - REF.debitShortSigma) + Math.abs(sig.creditShort - REF.creditShortSigma) + Math.abs(sig.wing - REF.wingSigma)) / 3,
+              skew: rich && doubled === rich ? (doubledIsCredit ? -0.5 : 1) : 0,
+              probability: 0,
+            };
+            cands.push({ fs, v, dl, ds, cs, cw, up, dn, ...pick, worstRisk, th, factors, sig, capitalTotal, doubled, doubledIsCredit, rich });
+          }
+    }
+    const common = { method: "optimizer", ticker: input.ticker, expiry: input.expiry, expiryCloseUtc: new Date(expiryMs).toISOString(), days, spot, spotSource: input.stock && input.stock.price > 0 ? input.stock.source : "hedge mid", basis, atmIV, expectedMove: sigma, ivSkew: { putIV, callIV, diffPts: skewPts },
+      liquidity, cfg, weights: W, direction: dir, warnings, priceGapPct, hedgeType: hedge.isStock ? "STOCK" : "PERP",
+      perp: { symbol: hedge.symbol, bid: hedge.bid, ask: hedge.ask, mid: hedge.mid, szDecimals: hedge.szDecimals, maxLeverage: hedge.maxLeverage, time: hedge.time, isStock: !!hedge.isStock }, searched: { candidates: cands.length, misses } };
+    if (!cands.length) {
+      const why = misses.wrongSign && !misses.notReachable && !misses.overLots ? "the equalising hedge has the wrong sign for every strike set" : "no strike set reaches $" + T0.toLocaleString("en-US") + " at both exits within " + cfg.maxLots + " lots" + (best1 > -Infinity ? " (best ≈ " + usd(best1) + ")" : "") + (misses.overCapital ? "; " + misses.overCapital + " exceeded your capital limit" : "") + (misses.overRisk ? "; " + misses.overRisk + " exceeded your max-loss limit" : "");
+      return { ...common, status: "TARGET_NOT_REACHABLE", errors: ["Target not reachable: " + why + ". Lower the target or pick a later expiry."], bestAchievable: best1 > -Infinity ? best1 : null, variants: [] };
+    }
+    // ---- score: normalise capital, then shortlist and add probability
+    const minCap = Math.min(...cands.map((c) => c.capitalTotal));
+    const scoreOf = (c) => Object.entries(W).reduce((m, [k, w]) => m + w * (k === "capital" ? c.capitalTotal / minCap - 1 : c.factors[k] || 0), 0);
+    for (const c of cands) c.score = scoreOf(c);
+    cands.sort((a, b) => a.score - b.score);
+    const short = cands.slice(0, 40);
+    for (const c of short) {
+      const lo = Math.max(0, spot - 3 * sigma), hi = spot + 3 * sigma, reg = S.regionAtLeast((x) => c.ev.expiry(x) - cfg.mmLoss, T0, lo, hi, c.ev.kinks, 240);
+      c.region = reg; c.prob = reg.reduce((m, [x, y]) => m + S.probIn(spot, x, y >= hi - 1e-9 ? 1e12 : y, atmIV, T, cfg.r), 0); c.factors.probability = 1 - c.prob; c.score = scoreOf(c);
+    }
+    short.sort((a, b) => a.score - b.score);
+    // ---- what-if on the top candidates (and the best of every side/variant), then rank by robustness
+    const wk = { spot, sigma, atmIV, T, basis, cfg, now, expiryMs, T0, events: input.events || null, funding: hedge.isStock ? null : hedge.funding, isStock: !!hedge.isStock, expiry: input.expiry };
+    const analysed = new Set(short.slice(0, 12)); for (const fs of dir.sides) for (const v of variants) { const c = short.find((x) => x.fs === fs && x.v.key === v.key) || cands.find((x) => x.fs === fs && x.v.key === v.key); if (c) analysed.add(c); }
+    for (const c of analysed) {
+      c.whatIf = whatIf(c, wk);
+      c.factors.robustness = 1 - c.whatIf.robustness.hitRate;
+      c.factors.tail = Math.max(0, -c.whatIf.tail.worst2Sigma / T0 - 1) / 2;
+      c.baseScore = c.score; c.score = scoreOf(c);
+    }
+    const ranked = [...analysed].sort((a, b) => (a.whatIf.acceptable === b.whatIf.acceptable ? a.score - b.score : a.whatIf.acceptable ? -1 : 1));
+    const pool = ranked;
+    const best = pool[0];
+    // every candidate considered (compact) — saved with the run as training data
+    const strikesOf = (c) => c.legs.map((l) => (l.side === "buy" ? "+" : "-") + l.qty + " " + l.strike + (l.type === "call" ? "C" : "P")).join(" ");
+    common.considered = cands.slice(0, 60).map((c) => ({ side: c.fs, variant: c.v.key, legs: strikesOf(c), perpQty: c.fq, exits: [Math.round(c.netUp), Math.round(c.netDn)], capital: Math.round(c.capitalTotal),
+      sig: { dl: +c.sig.debitLong.toFixed(2), ds: +c.sig.debitShort.toFixed(2), cs: +c.sig.creditShort.toFixed(2), w: +c.sig.wing.toFixed(2) }, factors: Object.fromEntries(Object.entries(c.factors).map(([k2, v2]) => [k2, typeof v2 === "number" ? +v2.toFixed(4) : v2])),
+      baseScore: c.baseScore != null ? +c.baseScore.toFixed(4) : null, score: c.score != null ? +c.score.toFixed(4) : null, analysed: !!c.whatIf, acceptable: c.whatIf ? c.whatIf.acceptable : null, gates: c.whatIf ? c.whatIf.gates : null, pProfit: c.whatIf ? +c.whatIf.probs.profit.toFixed(4) : null }));
+    common.searched.considered = cands.length;
+    const viewR = (f) => viewOf(f, { spot, sigma, atmIV, T, T0, cfg, hedge, dir, best, minCap, W });
+    if (!best.whatIf.acceptable) {
+      return { ...common, status: "NO_ACCEPTABLE_STRUCTURE", errors: ["No structure meets the target with acceptable risk. Best candidate (" + best.fs + " " + best.v.key + "): " + best.whatIf.gates.join("; ") + "."], rejected: ranked.slice(0, 4).map(viewR), variants: [], gates: GATES };
+    }
+    const perVariant = []; for (const fs of dir.sides) for (const v of variants) { const c = pool.find((x) => x.fs === fs && x.v.key === v.key); perVariant.push({ fs, v, c }); }
+    const alts = []; for (const c of pool.slice(1).filter((x) => x.whatIf.acceptable)) { if (alts.length >= cfg.topN) break; if (!alts.some((a) => a.ds === c.ds && a.cs === c.cs && a.v === c.v)) alts.push(c); }
+    const view = (f) => viewOf(f, { spot, sigma, atmIV, T, T0, cfg, hedge, dir, best, minCap, W });
+    const vs = perVariant.map(({ fs, v, c }) => c ? summarise(c, view(c), true) : { id: fs + " " + v.key, key: v.key, side: fs, reachable: false, errors: ["No " + v.key + " strike set reaches the target for a " + fs + " hedge"] });
+    for (const x of vs) x.recommended = x.id === best.fs + " " + best.v.key;
+    const fmtF = (c) => Object.entries(W).map(([k, w]) => k + " " + (w * (k === "capital" ? c.capitalTotal / minCap - 1 : c.factors[k] || 0)).toFixed(2)).join(", ");
+    const runner = perVariant.map((p) => p.c).filter((c) => c && c !== best).sort((a, b) => a.score - b.score)[0];
+    const wf = (c) => c.whatIf ? "P(profit) " + (c.whatIf.probs.profit * 100).toFixed(0) + "%, EV " + usd(c.whatIf.probs.expectedValue) + ", " + c.whatIf.robustness.positive + "/" + c.whatIf.robustness.cells + " pre-expiry what-if cells profitable (" + c.whatIf.robustness.hit80 + " ≥80% of target), 2σ worst " + usd(c.whatIf.tail.worst2Sigma) + ", capital " + usd(c.capitalTotal) + ", theta " + c.th.status.toLowerCase() : "";
+    const altBest = ranked.find((c) => c !== best);
+    const reason = best.fs + " " + (hedge.isStock ? "shares" : "perp") + " · " + best.v.key + " recommended — robustness-ranked score " + best.score.toFixed(2) + " (lower is better): " + wf(best) + ". Factor breakdown: " + fmtF(best) + "." +
+      (runner ? " Best other variant " + runner.fs + " " + runner.v.key + " scores " + runner.score.toFixed(2) + ": " + wf(runner) + (runner.whatIf && !runner.whatIf.acceptable ? " — fails: " + runner.whatIf.gates.join("; ") : "") + "." : "") +
+      (altBest && altBest !== runner ? " Next candidate overall scores " + altBest.score.toFixed(2) + "." : "") + " Direction: " + dir.reason;
+    return { ...common, status: "OK", best: view(best), alternatives: alts.map(view), variants: vs, recommendation: { mode: "optimizer", id: best.fs + " " + best.v.key, key: best.v.key, side: best.fs, score: best.score, reason } };
+  }
+  function summarise(c, b) {
+    return { key: c.v.key, side: c.fs, id: c.fs + " " + c.v.key, callLotUnits: c.v.call, putLotUnits: c.v.put, status: "OK", reachable: true, callLots: b.callLots, putLots: b.putLots,
+      legs: b.legs.map((l) => ({ side: l.side, type: l.type, strike: l.strike, qty: l.qty, premium: l.premium, contract: l.contract })), perpQty: b.futures.signedQty, futuresMargin: b.capital.futuresMargin,
+      optionsCapital: b.capital.optionsCapital, totalCapital: b.capital.total, exits: b.exits, theta: b.theta, maxLoss: b.maxLoss, unlimitedLoss: b.unlimitedLoss, worstLossInRiskWindow: b.worstLossInRiskWindow,
+      probability: b.target.probability, score: c.score, factors: b.factors, residual: b.residual, best: b, alternatives: [],
+      points: Object.entries(b.factors).map(([k, x]) => ({ points: -x.weighted, why: k + " " + x.value })) };
+  }
+  function viewOf(f, k) {
+    const { spot, sigma, atmIV, T, T0, cfg, hedge, dir, minCap, W } = k, ev = f.ev;
+    const gl = Math.max(0, spot - 2.5 * sigma), gh = spot + 2.5 * sigma;
+    const xs = [...new Set([...Array.from({ length: 121 }, (_, i) => gl + (gh - gl) * i / 120), ...ev.kinks.filter((x) => x > gl && x < gh), spot, f.up, f.dn])].sort((a, b) => a - b);
+    const callLots = f.legs.find((l) => l.type === "call").qty, putLots = f.legs.find((l) => l.type === "put").qty;
+    const notional = Math.abs(f.fq) * f.fEntry;
+    const factors = Object.fromEntries(Object.entries(W).map(([key, w]) => { const raw = key === "capital" ? f.capitalTotal / minCap - 1 : f.factors[key] || 0; return [key, { weight: w, value: +raw.toFixed(3), weighted: +(w * raw).toFixed(3) }]; }));
+    const exits = [{ label: "CE short (upside exit / target)", price: f.up, perp: ev.perpAt(f.up), pnlToday: ev.at(f.up, 0) - cfg.mmLoss, pnlExpiry: f.netUp, residual: f.netUp - T0 },
+      { label: "PE short (downside exit / target)", price: f.dn, perp: ev.perpAt(f.dn), pnlToday: ev.at(f.dn, 0) - cfg.mmLoss, pnlExpiry: f.netDn, residual: f.netDn - T0 }];
+    const hedgeWord = hedge.isStock ? "shares" : "perp";
+    const why = [
+      "Direction: " + dir.reason + (dir.sides.length > 1 ? " Chosen side: " + f.fs + " (better score)." : ""),
+      "Debit " + (f.fs === "SHORT" ? "call" : "put") + " spread " + f.dl.strike + "/" + f.ds.strike + " (" + f.sig.debitLong.toFixed(2) + "σ / " + f.sig.debitShort.toFixed(2) + "σ), credit " + (f.fs === "SHORT" ? "put" : "call") + " spread " + f.cs.strike + "/" + f.cw.strike + " (short " + f.sig.creditShort.toFixed(2) + "σ, wing " + f.sig.wing.toFixed(2) + "σ beyond); σ = $" + sigma.toFixed(2) + " from ATM IV " + (atmIV * 100).toFixed(1) + "% over " + (T * 365).toFixed(1) + " days. Reference-sheet medians: 0.1σ / 0.9σ / 0.63σ / 0.47σ.",
+      cfg.targetMode === "perLotSet" ? "Lots " + f.v.key + ": " + callLots + " calls : " + putLots + " puts = " + Math.round(callLots / f.v.call) + " lot set(s); target $" + (T0 / Math.round(callLots / f.v.call)).toLocaleString("en-US") + " per lot set → $" + T0.toLocaleString("en-US") + " total (upside " + usd(f.netUp) + ", downside " + usd(f.netDn) + ")." :
+      "Lots " + f.v.key + ": " + callLots + " calls : " + putLots + " puts — the smallest size whose projected expiry P&L at both exits reaches $" + T0.toLocaleString("en-US") + " (upside " + usd(f.netUp) + ", downside " + usd(f.netDn) + "; residual " + usd(f.netUp - T0) + " / " + usd(f.netDn - T0) + ").",
+      (hedge.isStock ? "Stock hedge " : "Perp ") + hedge.symbol + ": " + Math.abs(f.fq) + " units " + (f.fq > 0 ? "LONG" : "SHORT") + " = today's-P&L equalising quantity at the PE short " + f.dn + " and CE short " + f.up + " (" + Math.abs(f.qRaw).toFixed(2) + ") rounded down to a multiple of " + cfg.futuresRound + ".",
+      "Fill model: mid ± " + Math.round(cfg.slippage * 100) + "% of the half-spread (long legs pay above mid, short legs receive below mid); MM/basket allowance " + usd(cfg.mmLoss) + ".",
+      "Theta " + f.th.theta.toFixed(2) + " $/day → " + f.th.status + ". Score " + f.score.toFixed(2) + " = " + Object.entries(factors).map(([kk, x]) => kk + " " + x.weighted).join(" + ") + ".",
+    ];
+    return {
+      signal: f.fs === "LONG" ? "BULLISH" : "BEARISH", futuresSide: f.fs, hedgeType: hedge.isStock ? "STOCK" : "PERP", variant: f.v.key, lotRule: f.v.call + ":" + f.v.put, lotSource: "optimizer", callLots, putLots, lots: f.n, scenarioPrices: { up: f.up, down: f.dn },
+      sigmas: f.sig, legs: f.legs.map((l) => ({ ...l, positionDelta: sgn(l.side) * l.qty * 100 * l.greeks.delta, cashFlow: -sgn(l.side) * l.qty * 100 * l.premium })),
+      futures: { symbol: hedge.symbol, isStock: !!hedge.isStock, side: f.fq > 0 ? "LONG" : "SHORT", qty: Math.abs(f.fq), signedQty: f.fq, entry: f.fEntry, notional, equalisingQty: r6(f.qRaw), roundTo: cfg.futuresRound, deltaNeutralQty: r6(-ev.greeks.optionDelta), margin: ev.futuresMargin, marginDivisor: cfg.marginDivisor, leverage: cfg.leverage, venueInitialMargin: notional / cfg.leverage, minNotionalOk: notional >= 10 },
+      exits, residual: { up: f.netUp - T0, down: f.netDn - T0, meanAbs: (Math.abs(f.netUp - T0) + Math.abs(f.netDn - T0)) / 2 }, theta: f.th,
+      capital: { futuresNotional: notional, futuresMargin: ev.futuresMargin, marginDivisor: cfg.marginDivisor, leverage: cfg.leverage, venueInitialMargin: notional / cfg.leverage, optionsCapital: ev.optionsCapital, fees: ev.optionFees + ev.futuresEntryFee, total: ev.requiredCapital,
+        formula: "Total = " + (hedge.isStock ? "stock" : "futures") + " margin (qty × entry / " + cfg.marginDivisor + ") + options capital (max loss of each defined-risk spread) + entry fees. Venue initial margin at " + cfg.leverage + "× = qty × entry / " + cfg.leverage + "." },
+      netCreditDebit: ev.netCreditDebit, maxProfit: ev.maxProfit, maxLoss: ev.maxLoss, unlimitedProfit: ev.unlimitedProfit, unlimitedLoss: ev.unlimitedLoss, breakevens: ev.breakevens,
+      worstLossInRiskWindow: f.worstRisk, riskWindow: [Math.max(0, spot - cfg.riskSigma * sigma), spot + cfg.riskSigma * sigma], greeks: ev.greeks, optionsCapital: ev.optionsCapital, futuresMargin: ev.futuresMargin, requiredCapital: ev.requiredCapital,
+      fees: { options: ev.optionFees, futuresEntry: ev.futuresEntryFee }, mmLoss: cfg.mmLoss,
+      expected: { upExpiry: f.netUp, downExpiry: f.netDn, upToday: ev.at(f.up, 0) - cfg.mmLoss, downToday: ev.at(f.dn, 0) - cfg.mmLoss, unchangedExpiry: ev.expiry(spot) - cfg.mmLoss },
+      target: { pnl: T0, prices: [f.dn, f.up], regions: (f.region || []).map(([a, b]) => [a, b >= spot + 3 * sigma - 1e-9 ? null : b]), probability: f.prob ?? null },
+      scenarios: [["Today · up to CE short", f.up, 0], ["Today · down to PE short", f.dn, 0], ["Expiry · up at " + f.up, f.up, null], ["Expiry · down at " + f.dn, f.dn, null]].map(([name, x, d]) => ({ name, stock: x, perp: ev.perpAt(x), pnl: (d == null ? ev.expiry(x) : ev.at(x, d)) - cfg.mmLoss })),
+      thinSize: f.legs.filter((l) => !fin(l.side === "buy" ? l.askSize : l.bidSize) || (l.side === "buy" ? l.askSize : l.bidSize) < l.qty).map((l) => l.contract),
+      lotSets: Math.round(callLots / f.v.call), targetMode: cfg.targetMode, perLotSet: { target: T0 / Math.round(callLots / f.v.call), up: f.netUp / Math.round(callLots / f.v.call), down: f.netDn / Math.round(callLots / f.v.call) },
+      liquidityCheck: sizeCheck(f.legs), whatIf: f.whatIf || null, baseScore: f.baseScore ?? f.score, factors, score: f.score, why, friction: f.legs.reduce((m, l) => m + (l.ask - l.bid) * l.qty * 100, 0),
+      curve: xs.map((x) => ({ stock: x, expiry: ev.expiry(x) - cfg.mmLoss, today: ev.at(x, 0) - cfg.mmLoss })),
+    };
+  }
+  // ---- size checks and instant rescaling (browser + server share this)
+  // liquidity at the chosen strikes vs order size: flag > 10% of open interest, > today's volume, or > displayed size
+  function sizeCheck(legs) {
+    const flags = [], blocking = [];
+    for (const l of legs) {
+      const tag = (l.side === "buy" ? "+" : "−") + l.qty + " " + l.strike + (l.type === "call" ? "C" : "P"), shown = l.side === "buy" ? l.askSize : l.bidSize;
+      if (fin(l.openInterest) && l.qty > 0.1 * l.openInterest) { const m = tag + ": order is " + Math.round(l.qty / Math.max(1, l.openInterest) * 100) + "% of open interest (" + l.openInterest + ")"; flags.push(m); if (l.qty > 0.25 * l.openInterest) blocking.push("LIQUIDITY: " + m); }
+      if (fin(l.volume) && l.volume > 0 && l.qty > l.volume) flags.push(tag + ": order exceeds today's volume (" + l.volume + ")");
+      if (fin(l.volume) && l.volume === 0) flags.push(tag + ": no volume today");
+      if (fin(shown) && shown > 0 && l.qty > shown) flags.push(tag + ": order exceeds displayed " + (l.side === "buy" ? "ask" : "bid") + " size (" + shown + ") — expect partial fills / worse prices");
+    }
+    return { ok: !flags.length, flags, blocking }; // blocking: order > 25% of open interest (the market cannot absorb it)
+  }
+  // Rescale a built structure to `lotSets` lot sets: legs × factor, perp re-equalised then floored to the rounding unit,
+  // target = per-lot-set target × lotSets, and the full what-if re-run on the same quotes.
+  function rescale(out, best, lotSets) {
+    const L0 = best.lotSets || 1, f = lotSets / L0, cfg = out.cfg, unit = cfg.futuresRound || 5;
+    if (!(Number.isInteger(lotSets) && lotSets >= 1)) throw Error("Lot sets must be a whole number ≥ 1");
+    const legs = best.legs.map((l) => ({ ...l, qty: Math.round(l.qty * f) }));
+    const qRaw = best.futures.equalisingQty * f, fq = Math.sign(qRaw) * Math.floor(Math.abs(qRaw) / unit + 1e-9) * unit;
+    const up = best.exits[0].price, dn = best.exits[1].price, perLotT = best.perLotSet ? best.perLotSet.target : cfg.targetPnl / L0;
+    const T0 = perLotT * lotSets, expiryMs = Date.parse(out.expiryCloseUtc), now = Date.now();
+    const ev = S.evaluate({ legs, future: { qty: fq, entry: best.futures.entry, basis: out.basis || 0 }, commission: cfg.commission, futureFeePct: cfg.futureFeePct, leverage: cfg.marginDivisor, r: cfg.r, nowMs: now, expiryMs });
+    const w = best.whatIf;
+    const wi = whatIf({ legs, fq, fEntry: best.futures.entry, up, dn }, { spot: out.spot, sigma: out.expectedMove, atmIV: out.atmIV, T: Math.max(1e-6, (expiryMs - now) / (365 * 864e5)), basis: out.basis || 0, cfg, now, expiryMs, T0,
+      events: w && w.events && w.events.source ? w.events : null, funding: w && w.execution.funding ? w.execution.funding.hourlyRate : null, isStock: !!best.futures.isStock, expiry: out.expiry });
+    const netUp = ev.expiry(up) - cfg.mmLoss, netDn = ev.expiry(dn) - cfg.mmLoss, liq = sizeCheck(legs);
+    const flags = [...wi.gates.filter((g) => /RISK LIMIT/.test(g)), ...liq.blocking];
+    if (Math.min(netUp, netDn) < T0) flags.unshift("At " + lotSets + " lot sets the exits pay " + usd(netUp) + " / " + usd(netDn) + ", below the " + usd(T0) + " target (perp rounding / fixed costs).");
+    return { lotSets, factor: f, legs, perpQty: fq, equalisingQty: qRaw, target: T0, perLotTarget: perLotT, exits: { up: netUp, down: netDn }, perLotSet: { up: netUp / lotSets, down: netDn / lotSets },
+      capital: ev.requiredCapital, futuresMargin: ev.futuresMargin, optionsCapital: ev.optionsCapital, whatIf: wi, liquidity: liq, warnings: liq.flags.filter((f) => !liq.blocking.some((b) => b.endsWith(f))), flags, ok: !flags.length };
+  }
+
+  // ---- weekly plan: combine 1–3 structures under correlated lognormal moves (Monte Carlo, seeded → reproducible)
+  function cholesky(m) {
+    const n = m.length, L = m.map(() => Array(n).fill(0));
+    for (let i = 0; i < n; i++) for (let j = 0; j <= i; j++) {
+      let s = m[i][j]; for (let k = 0; k < j; k++) s -= L[i][k] * L[j][k];
+      L[i][j] = i === j ? Math.sqrt(Math.max(s, 1e-12)) : s / L[j][j];
+    }
+    return L;
+  }
+  function rng(seed) { let x = seed >>> 0 || 1; return () => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; }; }
+  // legs: [{ spot, atmIV, T, pnl(S) → expiry P&L incl. MM allowance, riskLoss, capital }]; corr: n×n; opts { targetMin, targetMax, weeklyLossLimit, sims, seed, r }
+  function combine(legs, corr, opts = {}) {
+    const n = legs.length, sims = opts.sims || 20000, r = opts.r ?? 0.04, L = cholesky(corr), u = rng(opts.seed || 12345);
+    const gauss = () => { let a = 0; while (a === 0) a = u(); return Math.sqrt(-2 * Math.log(a)) * Math.cos(2 * Math.PI * u()); };
+    const tot = new Float64Array(sims);
+    for (let s = 0; s < sims; s++) {
+      const z = Array.from({ length: n }, gauss); let sum = 0;
+      for (let i = 0; i < n; i++) { let e = 0; for (let k = 0; k <= i; k++) e += L[i][k] * z[k]; const g = legs[i], sg = g.atmIV * Math.sqrt(g.T); sum += g.pnl(g.spot * Math.exp((r - g.atmIV * g.atmIV / 2) * g.T + sg * e)); }
+      tot[s] = sum;
+    }
+    const sorted = Array.from(tot).sort((a, b) => a - b), q = (p) => sorted[Math.min(sims - 1, Math.max(0, Math.floor(p * sims)))];
+    const frac = (f) => sorted.filter(f).length / sims, mean = sorted.reduce((a, b) => a + b, 0) / sims;
+    const lim = opts.weeklyLossLimit;
+    // common-move scenarios: every underlying moves by the same % (correlation 1 — the stress case for a "diversified" plan)
+    const grid = MOVES.map((m) => ({ move: m, pnl: legs.reduce((t, g) => t + g.pnl(g.spot * (1 + m / 100)), 0), each: legs.map((g) => g.pnl(g.spot * (1 + m / 100))) }));
+    return { sims, model: "correlated lognormal at each underlying's ATM IV to expiry, risk-neutral drift, " + sims + " seeded simulations; P&L at expiry incl. MM allowance",
+      probHitMin: opts.targetMin != null ? frac((x) => x >= opts.targetMin) : null, probHitMax: opts.targetMax != null ? frac((x) => x >= opts.targetMax) : null,
+      probProfit: frac((x) => x > 0), expectedValue: mean, p5: q(0.05), p25: q(0.25), median: q(0.5), p95: q(0.95), worstSim: sorted[0],
+      probLossOverLimit: lim != null ? frac((x) => x <= -lim) : null, combinedMaxLoss: legs.reduce((t, g) => t + g.riskLoss, 0), capitalUsed: legs.reduce((t, g) => t + g.capital, 0), commonMoveGrid: grid };
+  }
+
+  Object.assign(S, { sizeCheck, rescale, combine, cholesky, optimize, whatIf, decideDirection, hedgeFromStock, OPT_DEFAULTS, DEFAULT_WEIGHTS, GATES, MOVES, IV_SHOCKS });
+})(typeof globalThis !== "undefined" ? globalThis : window);

@@ -40,7 +40,7 @@ test('evaluate: greeks, capital and tails', () => {
 
 test('buildReference: structure follows the reference rules and reaches the target', () => {
   for (const side of ['SHORT', 'LONG']) {
-    const out = Strategy.buildReference({ ticker: 'TEST', expiry: EXP, nowMs: NOW, contracts: chain(100, 0.6), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { futuresSide: side, targetPnl: 500, capital: side === 'LONG' ? 200000 : 50000 } });
+    const out = Strategy.buildReferenceOne({ ticker: 'TEST', expiry: EXP, nowMs: NOW, contracts: chain(100, 0.6), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { futuresSide: side, targetPnl: 500, capital: side === 'LONG' ? 200000 : 50000 } });
     assert.equal(out.status, 'OK', JSON.stringify(out.errors));
     const b = out.best, debit = side === 'SHORT' ? 'call' : 'put';
     const d = b.legs.filter(l => l.type === debit), callQ = b.legs.find(l => l.type === 'call').qty, putQ = b.legs.find(l => l.type === 'put').qty;
@@ -103,7 +103,7 @@ test('owner rules: signal sets the perp side (bullish → LONG, bearish → SHOR
   // bullish signal → bearish option hedge: put debit (long put above short put) + call credit (short call below long call)
   const lp = bull.best.legs.find(l => l.type === 'put' && l.side === 'buy'), sp = bull.best.legs.find(l => l.type === 'put' && l.side === 'sell');
   assert.ok(lp.strike > sp.strike);
-  assert.equal(ruleBase({ signal: 'SIDEWAYS' }).status, 'INVALID');
+  assert.equal(Strategy.buildReferenceOne({ ticker: 'TEST', expiry: EXP, nowMs: NOW, contracts: chain(100, 0.6), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { targetPnl: 500, capital: 200000, signal: 'SIDEWAYS' } }).status, 'INVALID');
 });
 
 test('owner rules: futures qty rounded DOWN to a multiple of 5', () => {
