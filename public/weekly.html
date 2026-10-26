@@ -30,7 +30,9 @@
 <div id="wUniverse" class="w-chips"></div>
 <div class="row"><input id="wAdd" placeholder="Add ticker, e.g. NFLX" maxlength="10" aria-label="Add ticker"><button id="wAddBtn" class="ghost">Add</button>
 <label>Size multipliers <input id="wMult" value="1,2,3" aria-label="Lot multipliers to compare" style="width:90px"></label>
-<button id="wRun">Build weekly plan</button><span id="wStatus" class="market-note" role="status"></span></div></section>
+<button id="wRun">Build weekly plan</button><span id="wStatus" class="market-note" role="status"></span></div>
+<div id="wProg" class="w-prog" hidden><div class="w-prog-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Weekly plan progress"><i id="wProgFill"></i></div><p id="wProgText" class="market-note"></p>
+<details class="b-more"><summary>Show per-ticker progress</summary><div id="wProgList" class="w-prog-list"></div></details></div></section>
 
 <section id="wResult" hidden>
 <section class="panel b-panel"><h2>Plans by size</h2><div id="wTabs" class="w-tabs" role="tablist"></div><p id="wSummary" class="b-rec"></p><div id="wTotals" class="b-metrics"></div>

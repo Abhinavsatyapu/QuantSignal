@@ -1,3 +1,5 @@
+// fixture chains are priced at the model's own risk-neutral fair value (no real edge): the liquidity / positive-EV gates are
+// switched off here and tested on purpose in test/liquidity.test.js
 // "Weekly ATR distances" strike selection: ATR maths, weekly bars, strike snapping, trading days, the end-to-end method on
 // a synthetic Black-Scholes chain (fixture: exercises the maths only), the price-history fallback and run persistence.
 const test = require('node:test');
@@ -18,7 +20,7 @@ function chain(spot, iv, { oi = 500 } = {}) {
 }
 const perp = (x) => ({ available: true, symbol: 'xyz:TEST', bid: x - 0.01, ask: x + 0.01, mid: x, szDecimals: 2, maxLeverage: 10, funding: 0.00001 });
 const WA = { atr: 6.3, n: 14, upperMult: 1, lowerMult: 1, scaleToExpiry: false, tradingDays: 5, source: 'fixture weekly bars', sourceKind: 'fixture' };
-const run = (cfg = {}, wa = {}, extra = {}) => S.optimize({ nowMs: NOW, ticker: 'TEST', expiry: EXP, contracts: chain(100, 0.6), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { targetMode: 'fixed', targetPnl: 400, ...cfg },
+const run = (cfg = {}, wa = {}, extra = {}) => S.optimize({ nowMs: NOW, ticker: 'TEST', expiry: EXP, contracts: chain(100, 0.6), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { requirePositiveEv: false, rejectIlliquidLegs: false, rejectTooIlliquid: false, targetMode: 'fixed', targetPnl: 400, ...cfg },
   market: { direction: 'LONG', score: 7, maxScore: 8, trend: 'UP', momentum: 'UP', rsi: 60 }, weeklyAtr: { ...WA, ...wa }, ...extra });
 
 test('weekly ATR: Wilder smoothing of weekly true ranges matches a hand calculation (gaps use the previous close)', () => {
@@ -138,7 +140,7 @@ test('server: weekly ATR source falls back from perp candles to stock daily OHLC
   assert.deepEqual([g2.debitShortSigma, g2.creditShortSigma, g2.wingSigma, g2.debitLongSigma], [0.79, 0.61, 0.33, 0.09]); assert.match(g2.source, /HOOD reference sheets/);
   assert.match(strategy.sheetAnchor('ZZZZ').groups.credit2.source, /all reference sheets/); // no sheet rows → pooled
   assert.equal(strategy.currentWeights().weights.reference, 1.5); // untuned defaults refreshed to the sheet-weighted defaults
-  const opt = S.optimize({ nowMs: NOW, ticker: 'TEST', expiry: EXP, contracts: chain(100, 0.6), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { targetMode: 'fixed', targetPnl: 400 }, bandAtr: { atr: 9, source: 'fixture' }, sheetAnchor: anchor, market: { direction: 'LONG', score: 7, maxScore: 8, trend: 'UP', momentum: 'UP', rsi: 60 } });
+  const opt = S.optimize({ nowMs: NOW, ticker: 'TEST', expiry: EXP, contracts: chain(100, 0.6), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { requirePositiveEv: false, rejectIlliquidLegs: false, rejectTooIlliquid: false, targetMode: 'fixed', targetPnl: 400 }, bandAtr: { atr: 9, source: 'fixture' }, sheetAnchor: anchor, market: { direction: 'LONG', score: 7, maxScore: 8, trend: 'UP', momentum: 'UP', rsi: 60 } });
   assert.equal(opt.status, 'OK', JSON.stringify(opt.errors));
   const r2 = strategy.saveRun({ out: opt, chain: { contracts: chain(100, 0.6), label: 'fixture', stock: { price: 100, source: 'fixture' } }, perp: perp(100), t: 'TEST', expiry: EXP, method: 'optimizer', cfg: { sheetBandLow: 0.8, sheetBandHigh: 1.3, minShortSigma: 0.7, maxShortSigma: 1.2 }, market: null, source: 'builder' });
   const db2 = db.prepare('SELECT distance_band, inputs FROM strategy_runs WHERE id=?').get(r2.id), band = JSON.parse(db2.distance_band);

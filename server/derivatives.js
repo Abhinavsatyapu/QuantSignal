@@ -36,18 +36,26 @@ function nyToUtc(local) {
   for (const off of [4, 5]) { const t = guess + off * 3600e3; const hh = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hourCycle: 'h23' }).format(new Date(t)); if (Number(hh) === Number(local.slice(11, 13))) return new Date(t).toISOString(); }
   return new Date(guess + 4 * 3600e3).toISOString();
 }
-const cboeCache = new Map();
+// Cboe delayed-quote files are large (SPY / QQQ: tens of MB of JSON with every expiry). Keep only the fields the app reads,
+// share one in-flight fetch per ticker, and cap the cache, so a 30-ticker Weekly Plan fits a 512 MB instance.
+const cboeCache = new Map(), cboeInflight = new Map(), CBOE_KEYS = ['option', 'bid', 'ask', 'bid_size', 'ask_size', 'iv', 'delta', 'gamma', 'theta', 'vega', 'rho', 'last_trade_price', 'last_trade_time', 'open_interest', 'volume'];
+function slimCboe(j) { const d = (j && j.data) || {}; return { data: { current_price: d.current_price, bid: d.bid, ask: d.ask, last_trade_time: d.last_trade_time, options: (d.options || []).map((o) => { const x = {}; for (const k of CBOE_KEYS) if (o[k] !== undefined && o[k] !== null) x[k] = o[k]; return x; }) } }; }
 async function cboeRaw(t) {
-  let c = cboeCache.get(t);
-  if (!c || Date.now() - c.at > 60e3) {
+  const c = cboeCache.get(t);
+  if (c && Date.now() - c.at <= 60e3) return c;
+  if (cboeInflight.has(t)) return cboeInflight.get(t);
+  const p = (async () => {
     const r = await fetch('https://cdn.cboe.com/api/global/delayed_quotes/options/' + encodeURIComponent(t) + '.json', { headers: { 'User-Agent': 'Mozilla/5.0 QuantSignal' }, redirect: 'follow', signal: AbortSignal.timeout(20000) });
     if (r.status === 403 || r.status === 404) throw httpErr(404, 'No listed options found for ' + t + ' (Cboe)');
+    if (r.status === 429) throw httpErr(429, 'Cboe is rate-limiting requests (HTTP 429)');
     if (!r.ok) throw httpErr(502, 'Cboe delayed quotes HTTP ' + r.status);
-    c = { at: Date.now(), data: await r.json(), modified: r.headers.get('last-modified') };
-    cboeCache.set(t, c);
-    if (cboeCache.size > 60) cboeCache.delete(cboeCache.keys().next().value);
-  }
-  return c;
+    const v = { at: Date.now(), data: slimCboe(await r.json()), modified: r.headers.get('last-modified') };
+    cboeCache.delete(t); cboeCache.set(t, v);
+    while (cboeCache.size > 40) cboeCache.delete(cboeCache.keys().next().value);
+    return v;
+  })();
+  cboeInflight.set(t, p);
+  try { return await p; } finally { cboeInflight.delete(t); }
 }
 async function cboeChain({ symbol, near, far }) {
   const t = String(symbol || '').trim().toUpperCase();

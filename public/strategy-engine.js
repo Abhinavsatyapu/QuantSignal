@@ -298,7 +298,16 @@
     const unit = Math.max(step, cfg.futuresRound), toward0 = (x) => Math.sign(x) * Math.floor(Math.abs(x) / unit + 1e-9) * unit; // rounded DOWN to a multiple of 5
     const priceGapPct = input.stock && input.stock.price > 0 && perp.mid > 0 ? Math.abs(perp.mid - input.stock.price) / input.stock.price * 100 : null;
     if (priceGapPct != null && priceGapPct > cfg.maxPriceGapPct) return { status: "PRICE_MISMATCH", errors: ["Hyperliquid " + perp.symbol + " mid " + perp.mid + " differs from the options provider's " + input.ticker + " price " + input.stock.price + " by " + priceGapPct.toFixed(1) + "% (limit " + cfg.maxPriceGapPct + "%). The perp may not track this stock (or a quote is stale), so no recommendation is made."], perp: { symbol: perp.symbol, mid: perp.mid }, spot: input.stock.price };
-    const nearest = (list, x, pred = () => true) => list.filter(pred).sort((a, b) => Math.abs(a.strike - x) - Math.abs(b.strike - x))[0];
+    // nearest listed strike, liquidity-aware (same rule as the optimizer): among the 3 nearest, cost = strikes away + liquidity
+    // penalty (Good 0 / Thin 0.6 / Illiquid 1.5) − 0.15 for a round strike; moves away from the plain nearest are reported
+    const liqMoves = [], LQ = root.Strategy && root.Strategy.legLiquidity, RS = root.Strategy && root.Strategy.roundStrike;
+    const nearest = (list, x, pred = () => true, leg) => { const L2 = list.filter(pred).sort((a, b) => Math.abs(a.strike - x) - Math.abs(b.strike - x)); if (!L2.length || !LQ || cfg.liquidityAware === false) return L2[0];
+      const c3 = L2.slice(0, 3), gap = c3.length > 1 ? Math.max(1e-9, Math.abs(c3[1].strike - c3[0].strike)) : 1, lq = (q) => LQ(q, cfg, spot);
+      const cost = (q) => Math.abs(q.strike - x) / gap + { Good: 0, Thin: 0.6, Illiquid: 1.5 }[lq(q).grade] - (RS && RS(q.strike, spot) ? 0.15 : 0);
+      const pick = c3.reduce((m, q) => (cost(q) < cost(m) - 1e-9 ? q : m), c3[0]);
+      const RK = { Good: 0, Thin: 1, Illiquid: 2 };
+      if (leg && pick !== c3[0] && RK[lq(pick).grade] < RK[lq(c3[0]).grade]) { const a = lq(c3[0]), b2 = lq(pick), msg = leg + " " + pick.type + ": rule strike " + c3[0].strike + " is " + a.grade + " (" + a.why + ") → moved to " + pick.strike + " (" + b2.grade + (b2.spreadPct != null ? ", spread " + b2.spreadPct.toFixed(1) + "%" : "") + (b2.openInterest != null ? ", OI " + b2.openInterest : "") + ")"; if (!liqMoves.some((m) => m.msg === msg)) liqMoves.push({ type: pick.type, from: c3[0].strike, to: pick.strike, msg }); }
+      return pick; };
     const sides = cfg.futuresSide === "AUTO" ? ["SHORT", "LONG"] : [cfg.futuresSide];
     const dsig = [...new Set([cfg.debitShortSigma, 0.75, 0.9, 1.05].map(r6))], csig = [...new Set([cfg.creditShortSigma, 0.55, 0.65, 0.8].map(r6))], wings = [...new Set([cfg.wingSigma, 0.35, 0.47, 0.6].map(r6))];
     const combos = []; for (const a of dsig) for (const c of csig) combos.push([a, c]);
@@ -309,11 +318,11 @@
       // SHORT perp → bullish options: call DEBIT (long ≈ATM, short +aσ) + put CREDIT (short −aσ, wing −wσ further).
       // LONG perp  → bearish options: put DEBIT (long ≈ATM, short −aσ) + call CREDIT (short +aσ, wing +wσ further).
       const debitList = fs === "SHORT" ? calls : puts, creditList = fs === "SHORT" ? puts : calls, dir = fs === "SHORT" ? 1 : -1;
-      const dLong = nearest(debitList, spot + dir * cfg.debitLongSigma * sigma, (q) => dir * (q.strike - spot) >= 0) || nearest(debitList, spot); if (!dLong) continue;
-      const dShort = nearest(debitList, spot + dir * a * sigma, (q) => dir * (q.strike - dLong.strike) > 0);
-      const cShort = nearest(creditList, spot - dir * ac * sigma, (q) => dir * (spot - q.strike) > 0);
+      const dLong = nearest(debitList, spot + dir * cfg.debitLongSigma * sigma, (q) => dir * (q.strike - spot) >= 0, "debit long") || nearest(debitList, spot); if (!dLong) continue;
+      const dShort = nearest(debitList, spot + dir * a * sigma, (q) => dir * (q.strike - dLong.strike) > 0, "debit short");
+      const cShort = nearest(creditList, spot - dir * ac * sigma, (q) => dir * (spot - q.strike) > 0, "credit short");
       if (!dShort || !cShort) continue;
-      const cWing = nearest(creditList, cShort.strike - dir * w * sigma, (q) => dir * (cShort.strike - q.strike) > 0);
+      const cWing = nearest(creditList, cShort.strike - dir * w * sigma, (q) => dir * (cShort.strike - q.strike) > 0, "wing");
       if (!cWing) continue;
       const key = [fs, dLong.symbol, dShort.symbol, cShort.symbol, cWing.symbol].join("|"); if (seen.has(key)) continue; seen.add(key);
       const up = fs === "SHORT" ? dShort.strike : cShort.strike, dn = fs === "SHORT" ? cShort.strike : dShort.strike; // scenario prices = the two short strikes
@@ -346,7 +355,7 @@
     const band = (list, lo, hi) => { const g = list.filter((q) => q.strike >= lo && q.strike <= hi); return g.length ? g.reduce((n, q) => n + q.iv, 0) / g.length : null; };
     const putIV = band(puts, spot - sigma, spot - 0.25 * sigma), callIV = band(calls, spot + 0.25 * sigma, spot + sigma);
     const ivSkew = { putIV, callIV, diffPts: putIV != null && callIV != null ? (putIV - callIV) * 100 : null };
-    const common = { method: "reference", priceGapPct, ivSkew, ticker: input.ticker, expiry: input.expiry, expiryCloseUtc: new Date(expiryMs).toISOString(), days: T * 365, spot, spotSource: input.stock && input.stock.price > 0 ? input.stock.source : "Hyperliquid perp mid (proxy: no stock quote)", basis, atmIV, expectedMove: sigma, liquidity, cfg, calibration: input.calibration || null,
+    const common = { method: "reference", priceGapPct, ivSkew, ticker: input.ticker, expiry: input.expiry, expiryCloseUtc: new Date(expiryMs).toISOString(), days: T * 365, spot, spotSource: input.stock && input.stock.price > 0 ? input.stock.source : "Hyperliquid perp mid (proxy: no stock quote)", basis, atmIV, expectedMove: sigma, liquidity, liquidityMoveList: liqMoves, cfg, calibration: input.calibration || null,
       perp: perp ? { symbol: perp.symbol, bid: perp.bid, ask: perp.ask, mid: perp.mid, szDecimals: perp.szDecimals, maxLeverage: perp.maxLeverage, time: perp.time } : null };
     if (!found.length) {
       const ok = misses.filter((m) => fin(m.achieved)).sort((x, y) => y.achieved - x.achieved)[0];
@@ -454,5 +463,5 @@
     return { order_class: "mleg", qty: String(g), type: "limit", limit_price: (Math.round(net * 100) / 100).toFixed(2), time_in_force: "day",
       legs: legs.map((l) => ({ symbol: l.contract, ratio_qty: String(l.qty / g), side: l.side, position_intent: l.side === "buy" ? "buy_to_open" : "sell_to_open" })) };
   }
-  root.Strategy = { build, buildReference, buildReferenceOne, recommendVariant, VARIANTS, REFERENCE_DEFAULTS, thetaCheck, SIGNAL_SIDE, evaluate, classify, pairs, regionAtLeast, probIn, bs, bsGreeks, impliedVol, expiryCloseMs, alpacaOrderPreview, cdf };
+  root.Strategy = Object.assign(root.Strategy || {}, { build, buildReference, buildReferenceOne, recommendVariant, VARIANTS, REFERENCE_DEFAULTS, thetaCheck, SIGNAL_SIDE, evaluate, classify, pairs, regionAtLeast, probIn, bs, bsGreeks, impliedVol, expiryCloseMs, alpacaOrderPreview, cdf });
 })(typeof globalThis !== "undefined" ? globalThis : window);

@@ -1,3 +1,5 @@
+// fixture chains are priced at the model's own risk-neutral fair value (no real edge): the liquidity / positive-EV gates are
+// switched off here and tested on purpose in test/liquidity.test.js
 // Optimizer, what-if, sizing and plan maths. Chains are synthetic Black-Scholes fixtures (exercise the math only).
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -16,7 +18,7 @@ function chain(spot, iv, { oi = 500 } = {}) {
 }
 const perp = (x) => ({ available: true, symbol: 'xyz:TEST', bid: x - 0.01, ask: x + 0.01, mid: x, szDecimals: 2, maxLeverage: 10, funding: 0.00001 });
 const WIDE = { selection: 'band', minShortSigma: null, maxShortSigma: 2.5, sheetBandHigh: 2 }; // band selection (no two-stage rerun), sheet band only, wider: the flat-IV fixture needs farther shorts for $150 per lot set
-const run = (cfg = {}, extra = {}) => S.optimize({ nowMs: NOW, ticker: 'TEST', expiry: EXP, contracts: chain(100, 0.6), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { targetMode: 'fixed', targetPnl: 400, ...cfg }, market: { direction: 'LONG', score: 7, maxScore: 8, trend: 'UP', momentum: 'UP', rsi: 60 }, ...extra });
+const run = (cfg = {}, extra = {}) => S.optimize({ nowMs: NOW, ticker: 'TEST', expiry: EXP, contracts: chain(100, 0.6), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { requirePositiveEv: false, rejectIlliquidLegs: false, rejectTooIlliquid: false, targetMode: 'fixed', targetPnl: 400, ...cfg }, market: { direction: 'LONG', score: 7, maxScore: 8, trend: 'UP', momentum: 'UP', rsi: 60 }, ...extra });
 
 test('decideDirection: signal, lean and override', () => {
   assert.deepEqual(S.decideDirection({ direction: 'LONG', score: 7, maxScore: 8, trend: 'UP', momentum: 'UP', rsi: 60 }).sides, ['LONG']);
@@ -53,7 +55,7 @@ test('optimize: per-lot-set target scales with the lots (lot sets fixed, target 
 });
 
 test('optimize: refuses an illiquid chain and falls back to a stock hedge without a perp', () => {
-  const thin = S.optimize({ nowMs: NOW, ticker: 'TEST', expiry: EXP, contracts: chain(100, 0.6, { oi: 1 }), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { targetMode: 'fixed', targetPnl: 400 } });
+  const thin = S.optimize({ nowMs: NOW, ticker: 'TEST', expiry: EXP, contracts: chain(100, 0.6, { oi: 1 }), stock: { price: 100, source: 'fixture' }, perp: perp(100), cfg: { requirePositiveEv: false, rejectIlliquidLegs: false, rejectTooIlliquid: false, targetMode: 'fixed', targetPnl: 400 } });
   assert.notEqual(thin.status, 'OK');
   const st = run({}, { perp: { available: false, reason: 'no perp' } });
   assert.equal(st.hedgeType, 'STOCK'); assert.ok(st.warnings.some(w => /stock/i.test(w)));

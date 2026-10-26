@@ -77,7 +77,9 @@ function runEngine(t, method, extra = {}) {
   const contracts = chainFor(t), perp = { available: true, symbol: 'xyz:' + t.symbol, bid: t.S - 0.01, ask: t.S + 0.01, mid: t.S, szDecimals: 2, maxLeverage: 10, funding: 0 };
   const base = { weights: extra.weights, nowMs: nowFor(t), ticker: t.symbol, expiry: t.expiry, contracts, stock: { price: t.S, source: 'sheet' }, perp, market: null, sheetAnchor: extra.sheetAnchor, bandAtr: t.atr ? { atr: t.atr, source: 'nasdaq at open' } : null };
   const target = Math.max(50, 0.9 * Math.min(t.exits.upExpiry, t.exits.downExpiry)), sets = t.lots.sets;
-  const cfg = { targetMode: 'perLotSet', lotSets: sets, targetPerLotSet: target / sets, mmLoss: t.mm, direction: t.side === 'LONG' ? 'BULLISH' : 'BEARISH', maxLots: 200, ...(extra.cfg || {}) };
+  const cfg = { targetMode: 'perLotSet', lotSets: sets, targetPerLotSet: target / sets, mmLoss: t.mm, direction: t.side === 'LONG' ? 'BULLISH' : 'BEARISH', maxLots: 200,
+    // reconstructed chains (sheet IVs, synthetic spreads): this audit measures strike geometry, so the live liquidity / EV gates are off
+    requirePositiveEv: false, rejectIlliquidLegs: false, rejectTooIlliquid: false, ...(extra.cfg || {}) };
   if (method === 'optimizer') return S_.optimize({ ...base, cfg });
   if (method === 'weekly_atr') return t.atr ? S_.optimize({ ...base, cfg, weeklyAtr: { atr: t.atr, n: 14, upperMult: (extra.sheetAnchor && extra.sheetAnchor.atrMultiples && extra.sheetAnchor.atrMultiples.ce) || 0.42, lowerMult: (extra.sheetAnchor && extra.sheetAnchor.atrMultiples && extra.sheetAnchor.atrMultiples.pe) || 0.41, zoneMinSigma: 0.7, zoneMaxSigma: 1.2, scaleToExpiry: false, tradingDays: S_.tradingDaysTo(t.expiry, nowFor(t)), debitLongSigma: 0.1, wingSigma: 0.47, ...(extra.wa || {}) } }) : { status: 'NO_ATR' };
   if (method === 'reference') return S_.buildReference({ ...base, cfg: { signal: t.side === 'LONG' ? 'BULLISH' : 'BEARISH', futuresSide: t.side, targetPnl: target, mmLoss: t.mm, maxLots: 200, capital: 1e6, ...(extra.refCfg || {}) }, calibration: extra.calibration });
