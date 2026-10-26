@@ -253,4 +253,4 @@ The final pick is by design less sheet-like than the baseline. It departs from t
 
 **Sizing:** neither HOOD nor SPY pays $400 per lot set at 2 lot sets on the 30 Oct expiry. Both were sized to $800 in total with 3 lot sets.
 
-**Overrides:** across all live decisions (side × ratio), the optimizer won 2 of 4 decisions on HOOD and 3 of 4 on SPY. The *recommended* override rate is 1 of 2 tickers.
+**Overrides:** across all live decisions (side × ratio), the optimizer won 2 of 2 decisions on HOOD (both SHORT ratios; the signal allows only SHORT) and 2 of 4 on SPY. In both SPY wins the baseline could not reach the target for that ratio. The *recommended* override rate is 1 of 2 tickers (HOOD).
