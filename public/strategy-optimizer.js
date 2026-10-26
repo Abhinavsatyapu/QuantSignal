@@ -23,7 +23,8 @@
     // and used as the scoring anchor. Blank minShortSigma → the sheet band itself is searched (capped at maxShortSigma).
     sheetBandLow: 0.8, sheetBandHigh: 1.3, minShortSigma: 0.7, minShortAtr: null, maxShortSigma: 1.2 };
   // Penalty weights (lower total = better). Stored server-side; tuned from recorded outcomes once enough runs are closed.
-  const DEFAULT_WEIGHTS = { fit: 3, capital: 1, risk: 1, theta: 1, liquidity: 1.5, reference: 1.5, skew: 0.5, probability: 1, robustness: 2, tail: 1, exitFit: 2, ev: 1.5, pop: 1.5 };
+  const DEFAULT_WEIGHTS = { fit: 3, capital: 1, risk: 1, theta: 1, liquidity: 1.5, reference: 1.5, skew: 0.5, probability: 1, robustness: 2, tail: 1, exitFit: 2, ev: 1.5, pop: 1.5, shortAnchor: 8 };
+  // shortAnchor = mean |σ distance − anchor| of the CE and PE shorts (anchor = max(sheet, zone midpoint) in the middle zone)
   // exitFit = shortfall of the P&L if an exit (CE / PE short) is hit TODAY vs the target; ev = −EV/target; pop = 1 − P(profit) (what-if, analysed candidates)
   const REF = { debitLongSigma: 0.1, debitShortSigma: 0.9, creditShortSigma: 0.63, wingSigma: 0.47 }; // pooled reference-sheet medians (fallback)
   // Sheet anchor per lot-ratio group: "credit2" = credit spread carries 2× the debit lots (the sheets' usual 1C:2P on a SHORT
@@ -322,6 +323,7 @@
               risk: worstRisk / Math.max(1, capitalTotal),
               theta: th.status === "DEBIT" ? 1 : th.status === "NEAR-NEUTRAL" ? 0.3 : 0,
               liquidity: liq,
+              shortAnchor: vb ? (Math.abs(sig.debitShort - g.debitShortSigma) + Math.abs(sig.creditShort - g.creditShortSigma)) / 2 : 0,
               reference: (Math.abs(sig.debitShort - g.debitShortSigma) + Math.abs(sig.creditShort - g.creditShortSigma) + Math.abs(sig.wing - g.wingSigma)) / 3, // vs the sheet geometry for this ticker / ratio
               skew: rich && doubled === rich ? (doubledIsCredit ? -0.5 : 1) : 0,
               probability: 0,
@@ -381,7 +383,7 @@
     }
     const viewR = (f) => viewOf(f, { spot, sigma, atmIV, T, T0, cfg, hedge, dir, best, minCap, W, wa, bAtr });
     if (!best.whatIf.acceptable) {
-      return { ...common, status: "NO_ACCEPTABLE_STRUCTURE", errors: ["No structure meets the target with acceptable risk. Best candidate (" + best.fs + " " + best.v.key + "): " + best.whatIf.gates.join("; ") + "." + (dband ? " Shorts were searched inside the reference-sheet band (" + dband.sheetBandLow + "–" + dband.sheetBandHigh + "× the sheet distance: " + dband.variants.map((x) => x.side + " " + x.variant + " CE " + x.ce.loSigmas.toFixed(2) + "–" + x.ce.hiSigmas.toFixed(2) + "σ / PE " + x.pe.loSigmas.toFixed(2) + "–" + x.pe.hiSigmas.toFixed(2) + "σ").join(", ") + "); widening the band or a later expiry may find an acceptable structure." : "")], rejected: ranked.slice(0, 4).map(viewR), variants: [], gates: GATES };
+      return { ...common, status: "NO_ACCEPTABLE_STRUCTURE", errors: ["No structure meets the target with acceptable risk. Best candidate (" + best.fs + " " + best.v.key + "): " + best.whatIf.gates.join("; ") + "." + (dband ? " Shorts were searched " + (dband.minShortSigma != null ? "in the middle zone " + dband.minShortSigma + "–" + dband.maxShortSigma + "σ (" : "inside the reference-sheet band (" + dband.sheetBandLow + "–" + dband.sheetBandHigh + "× the sheet distance: ") + dband.variants.map((x) => x.side + " " + x.variant + " CE " + x.ce.loSigmas.toFixed(2) + "–" + x.ce.hiSigmas.toFixed(2) + "σ / PE " + x.pe.loSigmas.toFixed(2) + "–" + x.pe.hiSigmas.toFixed(2) + "σ").join(", ") + "); a later expiry, fewer lot sets or a wider zone may find an acceptable structure." : "")], rejected: ranked.slice(0, 4).map(viewR), variants: [], gates: GATES };
     }
     const perVariant = []; for (const fs of dir.sides) for (const v of variants) { const c = pool.find((x) => x.fs === fs && x.v.key === v.key); perVariant.push({ fs, v, c }); }
     const alts = []; for (const c of pool.slice(1).filter((x) => x.whatIf.acceptable)) { if (alts.length >= cfg.topN) break; if (!alts.some((a) => a.ds === c.ds && a.cs === c.cs && a.v === c.v)) alts.push(c); }

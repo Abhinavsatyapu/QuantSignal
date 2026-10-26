@@ -174,4 +174,5 @@ test('middle zone (default 0.7–1.2σ): both shorts searched in the zone, sheet
   for (const v of o.variants.filter(x => x.reachable)) { const e = b.variants.find(x => x.variant === v.key); if (e.fallback) continue;
     assert.ok(v.distances.ce.sigmas >= 0.7 - 1e-9 && v.distances.ce.sigmas <= 1.2 + 1e-9, v.id + ' CE ' + v.distances.ce.sigmas); assert.ok(-v.distances.pe.sigmas >= 0.7 - 1e-9 && -v.distances.pe.sigmas <= 1.2 + 1e-9, v.id + ' PE'); }
   assert.ok(Math.abs(o.best.distances.ce.sheet.sigmas) >= 0.7 - 1e-9); // the deviation is measured against the clamped anchor
+  assert.equal(o.weights.shortAnchor, 8); const bs = o.best.sigmas, ga = o.best.sheetAnchor; assert.ok(Math.abs(o.best.factors.shortAnchor.value - (Math.abs(bs.debitShort - ga.debitShortSigma) + Math.abs(bs.creditShort - ga.creditShortSigma)) / 2) < 2e-3);
 });
