@@ -211,3 +211,46 @@ CE/PE short distances are $ · % · σ · × weekly ATR from spot. Engine = CE l
 | 76 | BE | 2026-09-14 → 2026-09-18 (4) | 254 | LONG · 1C:2P | 290 / 275 | 230 / 250 | +21.00 · +8.3% · 0.86σ · 0.40× | -24.00 · -9.4% · -0.99σ · -0.45× | 15 / 20 | 90 | 1500 / 1460 | 285/267.5/230/252.5 2C:1P FQ 120 | 3 |
 | 77 | HOOD | 2026-09-03 → 2026-09-11 (8) | 121.54 | SHORT · 1C:2P | 124 / 133 | 115 / 110 | +11.46 · +9.4% · 0.82σ · 0.85× | -6.54 · -5.4% · -0.47σ · -0.49× | 9 / 5 | -200 | 2330 / 1305 | 122/131/113/107 1C:2P FQ -230 | 3 |
 | 78 | MSTR | 2026-09-03 → 2026-09-11 (8) | 139.92 | SHORT · 1C:2P | 141 / 153.5 | 131 / 127 | +13.58 · +9.7% · 0.94σ · 0.66× | -8.92 · -6.4% · -0.62σ · -0.43× | 12.5 / 4 | -180 | 2800 / 928 | 140/150/130/124 1C:2P FQ -215 | 3.5 |
+
+## 8. Two-stage selection: sheet baseline + optimizer (deploy e30947a, 26 Oct 2026)
+
+**Stage A, sheet baseline:** the 4 rule strikes from section 2, always given the full what-if.
+
+**Stage B, optimizer:**
+* Each short is searched from −0.35σ to +0.5σ of its sheet distance.
+* The debit long and the wing width are searched ±2 listed strikes.
+* Both ratios are tried, with a hard ceiling of 1.5σ.
+* The 0.7–1.2σ zone clamp is now optional and **off by default**.
+* The top 6 picks per side and ratio, plus every baseline, get the full what-if. The score includes a sheet-similarity prior: `geometry` 4 × the mean σ distance from the baseline.
+
+**Override rule:** the optimizer pick wins only if all of these hold:
+* its score is ≥ 5% better;
+* its EV is not worse;
+* its P(profit) is no more than 3 points lower;
+* it passes every gate and risk cap.
+
+A baseline that fails a gate, or cannot reach the target, loses to an acceptable pick.
+
+**Per-lot-set mode:** when the baseline (or everything) cannot pay the per-lot target at the requested lot sets, or nothing passes the risk checks, the run is redone sized to the same **total** target. Both stages are then compared on an equal footing.
+
+### Backtest (78 pages, reconstructed chains)
+
+| Mode | Baseline ≤ 1 strike | Baseline ≤ 2 | Final pick ≤ 1 | Final pick ≤ 2 | Override rate (clear win / baseline gated / baseline unreachable) |
+|---|---|---|---|---|---|
+| Leave-one-trade-out | 73.1% | 88.0% | 66.6% | 84.4% | 37.3% (28 of 75: 19 / 5 / 4) |
+| Leave-one-out | 74.7% | 89.9% | 66.9% | 84.4% | 30.7% (23 of 75: 16 / 5 / 2) |
+| In-sample | 78.2% | 90.3% | 70.8% | 86.0% | 28.0% (21 of 75: 14 / 5 / 2) |
+
+The final pick is by design less sheet-like than the baseline. It departs from the sheet only where the what-if shows a clearly better structure.
+
+### Live (26 Oct 2026, expiry 30 Oct, $800 target = 2 lot sets × $400, Cboe delayed quotes from the 23 Oct close)
+
+| Ticker | Recommended | Sheet baseline | Optimized | Why |
+|---|---|---|---|---|
+| HOOD (run 123) | **Optimized**, SHORT 1C:2P | +5 95C −5 103C +10 85P −10 89P, perp −245; CE +8.5% / PE −6.2%; exits $1,478 / $909; POP 52.0%, EV −$81, 2σ worst −$1,628, max loss −$2,063, capital $15,997. **Fails the 2% risk cap.** | +3 96C −3 100C +6 87P −6 92P, perp −140; CE +5.4% / PE −3.1%; exits $907 / $828; POP 57.6%, EV −$51, 2σ worst −$1,185, max loss −$1,434, capital $9,106 | The baseline fails the risk cap; the pick passes every gate. |
+| SPY (run 124) | **Sheet baseline**, LONG 2C:1P | −6 767C +6 772C −3 750P +3 759P, +135 shares; CE +0.9% / PE −1.3%; exits $874 / $1,280; POP 63.5%, EV $141, 2σ worst −$1,295, max loss −$1,418, capital $54,198 | −4 765C +4 772C −2 752P +2 758P, +100 shares; exits $949 / $849; POP 65.5%, EV $134, 2σ worst −$1,182, max loss −$1,182, capital $40,211 | The pick has a better score but a lower EV ($134 < $141), so the baseline is kept. |
+| AAPL | none (NO_LIQUIDITY) | — | — | Cboe refreshed AAPL (and HOOD) at 15:32 IST on 26 Oct with every bid and ask at 0 before the open; no quotes, so no structure. |
+
+**Sizing:** neither HOOD nor SPY pays $400 per lot set at 2 lot sets on the 30 Oct expiry. Both were sized to $800 in total with 3 lot sets.
+
+**Overrides:** across all live decisions (side × ratio), the optimizer won 2 of 4 decisions on HOOD and 3 of 4 on SPY. The *recommended* override rate is 1 of 2 tickers.
