@@ -1,0 +1,91 @@
+/* QuantSignal institutional design system — Bloomberg/prime-broker terminal feel */
+:root {
+  --bg: #070b12;
+  --bg-elev: #0c1220;
+  --panel: #101827;
+  --panel2: #141e30;
+  --line: #1c2940;
+  --line2: #243552;
+  --text: #e8eefc;
+  --text2: #b6c2dc;
+  --muted: #7f8eab;
+  --green: #3dd68c;
+  --green-dim: rgba(61,214,140,.14);
+  --red: #ff6b7a;
+  --red-dim: rgba(255,107,122,.14);
+  --amber: #f5c15a;
+  --amber-dim: rgba(245,193,90,.14);
+  --blue: #5b9dff;
+  --blue-dim: rgba(91,157,255,.14);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --font: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  --nav-w: 220px;
+  --top-h: 48px;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px; --space-6: 32px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
+.num,.mono,td.num,th.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.pos{color:var(--green)}.neg{color:var(--red)}.muted{color:var(--muted)}
+.app-shell{display:grid;grid-template-columns:var(--nav-w) 1fr;grid-template-rows:var(--top-h) 1fr;min-height:100vh}
+.app-top{grid-column:1/-1;display:flex;align-items:center;gap:var(--space-4);padding:0 var(--space-4);background:var(--bg-elev);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:40}
+.app-brand{font-weight:700;letter-spacing:.04em;font-size:13px;white-space:nowrap}
+.app-brand span{color:var(--muted);font-weight:500;margin-left:6px}
+.app-status{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;font-size:12px;color:var(--text2);margin-left:auto}
+.app-status .pill{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:999px;border:1px solid var(--line2);background:var(--panel);font-family:var(--mono);font-size:11px}
+.pill.live{border-color:rgba(61,214,140,.35);color:var(--green);background:var(--green-dim)}
+.pill.dry{border-color:rgba(91,157,255,.35);color:var(--blue);background:var(--blue-dim)}
+.pill.stale{border-color:rgba(245,193,90,.4);color:var(--amber);background:var(--amber-dim)}
+.app-nav{background:var(--bg-elev);border-right:1px solid var(--line);padding:var(--space-4) var(--space-3);position:sticky;top:var(--top-h);height:calc(100vh - var(--top-h));overflow:auto}
+.app-nav .nav-group{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:var(--space-4) var(--space-2) var(--space-2)}
+.app-nav a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--radius-sm);color:var(--text2);text-decoration:none;font-size:13px;margin-bottom:2px}
+.app-nav a:hover{background:var(--panel);color:var(--text);text-decoration:none}
+.app-nav a.active{background:var(--blue-dim);color:var(--text);box-shadow:inset 3px 0 0 var(--blue)}
+.app-main{padding:var(--space-5);max-width:1400px;width:100%}
+.page-title{margin:0 0 4px;font-size:22px;font-weight:650}
+.page-sub{margin:0 0 var(--space-5);color:var(--muted);font-size:13px;max-width:72ch}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:var(--space-3);margin-bottom:var(--space-5)}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:var(--space-3) var(--space-4)}
+.kpi .k{font-size:11px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.kpi .v{font-family:var(--mono);font-size:20px;font-weight:650;margin-top:4px}
+.kpi .d{font-size:11px;color:var(--muted);margin-top:2px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:var(--space-4);margin-bottom:var(--space-4)}
+.panel h2{margin:0 0 var(--space-3);font-size:14px;font-weight:650;letter-spacing:.02em}
+.table-wrap{overflow:auto}
+table.inst{width:100%;border-collapse:collapse;font-size:12.5px}
+table.inst th,table.inst td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+table.inst th{color:var(--muted);font-weight:600;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+table.inst td.num,table.inst th.num{text-align:right;font-family:var(--mono)}
+.btn,.ghost{appearance:none;border:1px solid var(--line2);background:var(--panel2);color:var(--text);border-radius:var(--radius-sm);padding:7px 12px;font:inherit;cursor:pointer}
+.btn.primary{background:var(--blue-dim);border-color:rgba(91,157,255,.45);color:var(--text)}
+.ghost:hover,.btn:hover{border-color:var(--blue)}
+.details-toggle{font-size:12px;color:var(--muted);cursor:pointer;user-select:none}
+.details-toggle summary{list-style:none}
+.details-toggle summary::-webkit-details-marker{display:none}
+.details-toggle summary::before{content:"Show ";color:var(--blue)}
+.details-toggle[open] summary::before{content:"Hide "}
+.grid-2{display:grid;grid-template-columns:1.4fr 1fr;gap:var(--space-4)}
+@media (max-width: 1100px){
+  .app-shell{grid-template-columns:72px 1fr}
+  .app-nav .label,.app-nav .nav-group{display:none}
+  .app-nav a{justify-content:center;padding:12px 8px}
+  .grid-2{grid-template-columns:1fr}
+}
+@media (max-width: 820px){
+  .app-shell{grid-template-columns:1fr;grid-template-rows:var(--top-h) auto 1fr}
+  .app-nav{position:static;height:auto;display:flex;flex-wrap:wrap;gap:4px;border-right:none;border-bottom:1px solid var(--line)}
+  .app-nav .nav-group{display:none}
+  .app-nav .label{display:inline}
+  .app-nav a{padding:8px 10px}
+  .app-status{gap:6px 10px;font-size:11px}
+}
+/* Compat aliases used by older pages */
+:root{
+  --panel2: var(--panel2);
+  --line2: var(--line2);
+  --radius: var(--radius);
+}
+body.deriv-page,body.qs-app{background:var(--bg)}

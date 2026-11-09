@@ -47,15 +47,36 @@ const BINANCE_DEFAULTS = {
   entryTimeoutSec: 120,
   maxUnprotectedSec: 5,
   limitOffsetPct: 0.02,
-  assets: ['TSLAUSDT','NVDAUSDT','HOODUSDT','MSTRUSDT','COINUSDT','PLTRUSDT','AMZNUSDT','METAUSDT','GOOGLUSDT','CRCLUSDT','INTCUSDT','QQQUSDT','SPYUSDT','MUUSDT'],
-  interval: '15m',
+  assets: [], // filled by liquid-universe refresh (62 US equity TradFi perps)
+  assetsAuto: true,
+  interval: '4h',
   minScore: 6,
   scannerEnabled: true,
   autoTrade: true,
   killSwitch: false,
   allowSignedOrders: false,
   allowTestnetOrders: false,
-  signalMode: 'indicators',
+  signalMode: 'liquidity',
+  liqKinds: ['buy_side_liquidity_taken'], // study-best: liq_buy_side
+  liqWindowBars: 0,
+  activePreset: 'study_best_4h_liq_buy_side',
+  studyPresets: {
+    study_best_4h_liq_buy_side: {
+      id: 'study_best_4h_liq_buy_side',
+      label: 'Study best · 4h buy-side liquidity',
+      interval: '4h', signalMode: 'liquidity', liqKinds: ['buy_side_liquidity_taken'], liqWindowBars: 0, minScore: 6,
+    },
+    combine_1h_and_window_3: {
+      id: 'combine_1h_and_window_3',
+      label: 'Combine · 1h indicators AND liq within 3 bars (OOS #2)',
+      interval: '1h', signalMode: 'confirm_window', liqKinds: [], liqWindowBars: 3, minScore: 6,
+    },
+    legacy_15m_indicators: {
+      id: 'legacy_15m_indicators',
+      label: 'Legacy · 15m indicators (pre-study)',
+      interval: '15m', signalMode: 'indicators', liqKinds: [], liqWindowBars: 0, minScore: 6,
+    },
+  },
   liqLookback: 5,
   liqTolPct: 0.0015,
   liqReclaimN: 3,
@@ -180,7 +201,32 @@ function update(patch) {
     if (b.killSwitch !== undefined) B.killSwitch = !!b.killSwitch;
     if (b.allowSignedOrders !== undefined) B.allowSignedOrders = !!b.allowSignedOrders;
     if (b.allowTestnetOrders !== undefined) B.allowTestnetOrders = !!b.allowTestnetOrders;
-    if (b.signalMode !== undefined) { if (!['indicators','liquidity','confirm','any'].includes(b.signalMode)) throw Error('signalMode invalid'); B.signalMode = b.signalMode; }
+    if (b.signalMode !== undefined) { if (!['indicators','liquidity','confirm','confirm_window','any'].includes(b.signalMode)) throw Error('signalMode invalid'); B.signalMode = b.signalMode; }
+    if (b.liqWindowBars !== undefined) B.liqWindowBars = Math.round(num(b.liqWindowBars, 0, 24, 'liq window bars'));
+    if (b.liqKinds !== undefined) {
+      const kinds = Array.isArray(b.liqKinds) ? b.liqKinds : String(b.liqKinds).split(',').map(x => x.trim()).filter(Boolean);
+      const allowed = new Set(['buy_side_liquidity_taken','sell_side_liquidity_taken','liquidity_grab','liquidity_sweep']);
+      if (kinds.some(k => !allowed.has(k))) throw Error('liqKinds invalid');
+      B.liqKinds = kinds;
+    }
+    if (b.assetsAuto !== undefined) B.assetsAuto = !!b.assetsAuto;
+    if (b.activePreset !== undefined) {
+      const presets = { ...(BINANCE_DEFAULTS.studyPresets || {}), ...(B.studyPresets || {}) };
+      const id = String(b.activePreset || '');
+      if (id && !presets[id]) throw Error('Unknown study preset: ' + id);
+      B.activePreset = id || null;
+      if (id && presets[id]) {
+        const P = presets[id];
+        if (P.interval) B.interval = P.interval;
+        if (P.signalMode) B.signalMode = P.signalMode;
+        if (P.liqKinds) B.liqKinds = [...P.liqKinds];
+        if (P.liqWindowBars != null) B.liqWindowBars = P.liqWindowBars;
+        if (P.minScore != null) B.minScore = P.minScore;
+      }
+    }
+    if (b.studyPresets !== undefined && b.studyPresets && typeof b.studyPresets === 'object') {
+      B.studyPresets = { ...(BINANCE_DEFAULTS.studyPresets || {}), ...b.studyPresets };
+    }
     if (b.liqLookback !== undefined) B.liqLookback = Math.round(num(b.liqLookback, 2, 30, 'liq lookback'));
     if (b.liqTolPct !== undefined) B.liqTolPct = num(b.liqTolPct, 0.0001, 0.02, 'liq tol');
     if (b.liqReclaimN !== undefined) B.liqReclaimN = Math.round(num(b.liqReclaimN, 1, 20, 'liq reclaim N'));
@@ -193,7 +239,7 @@ function update(patch) {
     if (b.assetsLocked !== undefined) B.assetsLocked = !!b.assetsLocked;
     if (b.assets !== undefined) {
       const list = (Array.isArray(b.assets) ? b.assets : String(b.assets).split(',')).map(x => String(x).trim().toUpperCase()).filter(Boolean);
-      if (!list.length || list.length > 30 || list.some(a => !/^[A-Z0-9]{4,20}$/.test(a))) throw Error('Binance assets: 1-30 symbols like BTCUSDT');
+      if (list.length > 120 || list.some(a => !/^[A-Z0-9]{4,20}$/.test(a))) throw Error('Binance assets: 0-120 symbols like BTCUSDT');
       B.assets = [...new Set(list)];
     }
     next.binance = B;

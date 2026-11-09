@@ -784,13 +784,45 @@ async function scanOnce(reason) {
           ON CONFLICT(symbol,interval) DO UPDATE SET ts=excluded.ts, closed_at=excluded.closed_at, direction=excluded.direction, score=excluded.score, data=excluded.data`)
           .run(symbol, c.interval, Date.now(), a.closedAt ?? null, a.direction ?? null, a.score ?? null, JSON.stringify(a));
         const liqOpts = { lookback: c.liqLookback ?? 5, tolPct: c.liqTolPct ?? 0.0015, reclaimN: c.liqReclaimN ?? 3 };
-        const liq = LiquiditySignals.direction(kl, liqOpts);
+        const liqRaw = LiquiditySignals.detect(kl, liqOpts);
+        let liqSigs = liqRaw.signals || [];
+        const kinds = Array.isArray(c.liqKinds) ? c.liqKinds : [];
+        if (kinds.length) liqSigs = liqSigs.filter((s) => kinds.includes(s.kind));
+        const liqDir = (() => {
+          const L = liqSigs.filter((s) => s.side === 'LONG').length;
+          const S = liqSigs.filter((s) => s.side === 'SHORT').length;
+          if (L > S) return 'LONG'; if (S > L) return 'SHORT'; return null;
+        })();
+        const liqScore = Math.max(liqSigs.filter((s) => s.side === liqDir).length, liqDir ? 1 : 0);
+        const liq = { direction: liqDir, score: liqScore, signals: liqSigs, allSignals: liqRaw.signals || [] };
         const mode = c.signalMode || 'indicators';
         let dir = null, score = a.score, sourceTag = 'scanner';
         if (mode === 'indicators') { if (['LONG','SHORT'].includes(a.direction) && (a.score||0) >= c.minScore) dir = a.direction; }
         else if (mode === 'liquidity') { if (liq.direction) { dir = liq.direction; score = 6 + liq.score; sourceTag = 'liquidity'; } }
         else if (mode === 'confirm') {
           if (['LONG','SHORT'].includes(a.direction) && (a.score||0) >= c.minScore && liq.direction === a.direction) { dir = a.direction; sourceTag = 'confirm'; }
+        } else if (mode === 'confirm_window') {
+          const N = Math.max(0, Number(c.liqWindowBars) || 3);
+          let matched = false;
+          if (['LONG','SHORT'].includes(a.direction) && (a.score||0) >= c.minScore) {
+            if (liq.direction === a.direction) matched = true;
+            else {
+              for (let back = 1; back <= N; back++) {
+                const slice = kl.slice(0, Math.max(0, kl.length - back));
+                if (slice.length < 50) break;
+                try {
+                  const d = LiquiditySignals.detect(slice, liqOpts);
+                  let sigs = d.signals || [];
+                  if (kinds.length) sigs = sigs.filter((s) => kinds.includes(s.kind));
+                  const L = sigs.filter((s) => s.side === 'LONG').length;
+                  const S = sigs.filter((s) => s.side === 'SHORT').length;
+                  const dd = L > S ? 'LONG' : S > L ? 'SHORT' : null;
+                  if (dd === a.direction) { matched = true; break; }
+                } catch {}
+              }
+            }
+          }
+          if (matched) { dir = a.direction; sourceTag = 'confirm_window'; }
         } else if (mode === 'any') {
           if (['LONG','SHORT'].includes(a.direction) && (a.score||0) >= c.minScore) dir = a.direction;
           else if (liq.direction) { dir = liq.direction; score = 6 + liq.score; sourceTag = 'liquidity'; }
@@ -970,6 +1002,9 @@ function status() {
       assets: c.assets, interval: c.interval, minScore: c.minScore, scannerEnabled: c.scannerEnabled,
       autoTrade: c.autoTrade, killSwitch: c.killSwitch, allowSignedOrders: !!c.allowSignedOrders,
       allowTestnetOrders: !!c.allowTestnetOrders,
+      signalMode: c.signalMode, liqKinds: c.liqKinds || [], liqWindowBars: c.liqWindowBars || 0, activePreset: c.activePreset || null,
+      studyPresets: c.studyPresets || {}, assetsAuto: c.assetsAuto !== false,
+      universeCount: (state.universeSymbols || c.assets || []).length,
     },
     marks: { ...state.marks, ...(state.prices ? Object.fromEntries(Object.entries(state.prices.state.marks).map(([k, v]) => [k, v.markPrice])) : {}) },
     positions: positionsView(),

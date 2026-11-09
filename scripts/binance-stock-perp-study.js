@@ -131,6 +131,49 @@ function signalAt(bars, i, variant) {
     if (['LONG', 'SHORT'].includes(ind.direction) && ind.score >= MIN_SCORE && liqDir === ind.direction) {
       dir = ind.direction; score = ind.score; stop = ind.stop; tp = ind.tp1; source = 'confirm';
     }
+  } else if (variant.mode === 'confirm_window') {
+    // AND within N bars: indicators on bar i, liquidity same direction on any bar in [i-N, i]
+    // (detect() evaluates the last bar of its window, so we re-detect at each offset)
+    const N = Math.max(1, Number(variant.windowBars) || 3);
+    if (['LONG', 'SHORT'].includes(ind.direction) && ind.score >= MIN_SCORE) {
+      let matched = liqDir === ind.direction; // same-bar counts as window 0
+      if (!matched) {
+        for (let back = 1; back <= N; back++) {
+          const j = i - back;
+          if (j < 220) break;
+          const wj = bars.slice(Math.max(0, j + 1 - 260), j + 1);
+          try {
+            const lj = globalThis.LiquiditySignals.detect(wj, {});
+            let js = lj.signals || [];
+            if (variant.kinds) js = js.filter((s) => variant.kinds.includes(s.kind));
+            const L = js.filter((s) => s.side === 'LONG').length;
+            const S = js.filter((s) => s.side === 'SHORT').length;
+            const d = L > S ? 'LONG' : S > L ? 'SHORT' : null;
+            if (d === ind.direction) { matched = true; break; }
+          } catch {}
+        }
+      }
+      // Also allow liq on bar i with indicators confirming in prior N bars
+      if (!matched && liqDir) {
+        for (let back = 1; back <= N; back++) {
+          const j = i - back;
+          if (j < 220) break;
+          const wj = bars.slice(Math.max(0, j + 1 - 260), j + 1);
+          try {
+            const ij = globalThis.Technicals.analyze(wj, wj[wj.length - 1].T + 1, { minStopPct: 1.5 });
+            if (['LONG', 'SHORT'].includes(ij.direction) && ij.score >= MIN_SCORE && ij.direction === liqDir) {
+              matched = true; break;
+            }
+          } catch {}
+        }
+      }
+      if (matched) {
+        dir = ind.direction || liqDir;
+        score = ind.score || 6;
+        stop = ind.stop; tp = ind.tp1;
+        source = 'confirm_window';
+      }
+    }
   } else if (variant.mode === 'any') {
     if (['LONG', 'SHORT'].includes(ind.direction) && ind.score >= MIN_SCORE) {
       dir = ind.direction; score = ind.score; stop = ind.stop; tp = ind.tp1; source = 'indicators';
@@ -296,7 +339,7 @@ function runPortfolio(series, interval, variant, opts = {}) {
     if (open.length >= MAX_POS) continue;
     if (open.some((p) => p.symbol === ev.symbol)) continue;
 
-    const sig = signalAt(bars, ev.i, variant);
+    const sig = (typeof globalThis.__qsSignalAt === "function" ? globalThis.__qsSignalAt : signalAt)(bars, ev.i, variant);
     if (!sig) continue;
 
     // Limit-then-market after 2 min: next bar

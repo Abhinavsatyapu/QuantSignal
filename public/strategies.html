@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Saved Strategies · QuantSignal Options</title>
+<link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/ds.css">
+</head>
+<body class="qs-app">
+<main>
+  <h1 class="page-title">Saved Strategies</h1>
+  <p class="page-sub">Options section — opens Builder history. No futures data.</p>
+  <section class="panel">
+    <p><a class="btn primary" href="/builder#history">Open Builder · History</a></p>
+    <p class="muted" id="note">Loading strategy runs…</p>
+    <div class="table-wrap"><table class="inst" id="tbl"><thead><tr><th>When</th><th>Ticker</th><th>Note</th></tr></thead><tbody></tbody></table></div>
+  </section>
+</main>
+<script src="/shell.js"></script>
+<script src="/auth-ui.js"></script>
+<script>
+(async function(){
+  const tb=document.querySelector('#tbl tbody');
+  try{
+    const r=await fetch('/api/strategy/runs?limit=30',{credentials:'same-origin'});
+    if(!r.ok){ document.getElementById('note').textContent='Could not load runs ('+r.status+'). Use Builder history.'; return; }
+    const rows=await r.json();
+    const list=Array.isArray(rows)?rows:(rows.runs||[]);
+    document.getElementById('note').textContent=list.length? (list.length+' recent runs') : 'No saved runs yet.';
+    tb.innerHTML=list.slice(0,30).map(x=>{
+      const when=x.ts||x.createdAt||x.created_at||'—';
+      const t=typeof when==='number'?new Date(when).toLocaleString():String(when);
+      return `<tr><td>${t}</td><td>${x.ticker||x.symbol||'—'}</td><td>${(x.label||x.note||x.status||'').toString().slice(0,80)}</td></tr>`;
+    }).join('')||'<tr><td colspan="3">Empty</td></tr>';
+  }catch(e){ document.getElementById('note').textContent=e.message; }
+})();
+</script>
+</body>
+</html>

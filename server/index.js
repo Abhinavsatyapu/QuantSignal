@@ -8,6 +8,7 @@ config.load();
 const store = require('./db');
 const engine = require('./engine');
 const bnTrader = require('./binance-trader');
+const bnWhales = require('./binance-whales');
 const hl = require('./hl');
 const derivatives = require('./derivatives');
 const { Finance } = globalThis;
@@ -205,6 +206,13 @@ bnApi.post('/scan', wrap(async (req, res) => { await bnTrader.scanOnce('manual')
 bnApi.post('/reconcile', wrap(async (req, res) => { const r = await bnTrader.reconcile(); res.json(r); }));
 bnApi.get('/events', (req, res) => res.json(require('./db').db.prepare('SELECT * FROM bn_events ORDER BY id DESC LIMIT ?').all(Math.min(500, Number(req.query.limit) || 100))));
 bnApi.get('/trades', (req, res) => res.json(require('./db').db.prepare('SELECT * FROM bn_trades ORDER BY id DESC LIMIT ?').all(Math.min(500, Number(req.query.limit) || 50))));
+app.get('/api/binance/whales', (req, res) => {
+  res.json(bnWhales.snapshot());
+});
+app.post('/api/binance/whales/refresh', wrap(async (req, res) => {
+  const out = await bnWhales.refresh({ limit: 16 });
+  res.json(out);
+}));
 app.use('/api/binance', bnApi);
 
 app.use('/api/autotrader', at);
@@ -277,11 +285,17 @@ app.all(/^\/api\/.*/, (req, res) => res.status(404).json({ error: 'Unknown API e
 // ------------------------------------------------------------------ frontend
 const PUB = path.join(config.ROOT, 'public');
 // static assets: HTML revalidated every time (no stale UI after a deploy); JS/CSS/images cached 1 h with ETag revalidation
+app.get('/', (req, res) => res.redirect(302, '/futures'));
 app.use(express.static(PUB, { extensions: ['html'], index: 'index.html', etag: true, setHeaders: (res, file) => res.setHeader('Cache-Control', /\.html$/.test(file) ? 'no-cache' : /sheet-data\.js$/.test(file) ? 'public, max-age=86400' : 'public, max-age=3600, must-revalidate') }));
 for (const p of ['/options', '/gamma', '/hedge', '/ratio', '/live-hedge', '/options-studio', '/gamma-book']) app.get(p, (req, res) => res.redirect(301, '/builder'));
 for (const p of ['/signals', '/news', '/webhook', '/risk', '/paper', '/autotrader']) app.get(p, (req, res) => res.sendFile(path.join(PUB, 'index.html')));
 app.get('/positions', (req, res) => res.sendFile(path.join(PUB, 'positions.html')));
 app.get('/futures', (req, res) => res.sendFile(path.join(PUB, 'futures.html')));
+app.get('/whales', (req, res) => res.sendFile(path.join(PUB, 'whales.html')));
+app.get('/futures-settings', (req, res) => res.sendFile(path.join(PUB, 'futures-settings.html')));
+app.get('/options', (req, res) => res.sendFile(path.join(PUB, 'options.html')));
+app.get('/strategies', (req, res) => res.sendFile(path.join(PUB, 'strategies.html')));
+app.get('/options-settings', (req, res) => res.sendFile(path.join(PUB, 'options-settings.html')));
 app.get('/manual', (req, res) => res.sendFile(path.join(PUB, 'manual.html')));
 app.get('/builder', (req, res) => res.sendFile(path.join(PUB, 'builder.html')));
 app.get('/docs/four-leg-methodology.md', (req, res) => res.type('text/markdown; charset=utf-8').sendFile(path.join(__dirname, '..', 'docs', 'four-leg-methodology.md')));
@@ -302,6 +316,7 @@ strategyMod.initPersistence().catch(e => log.error('persist.init_crash', { error
     log.info('server.start', { port, commit: VERSION.commit, storage: require('./persist').backend(), ownerAuth: auth.ownerConfigured(), guestAuth: auth.guestConfigured() });
     engine.start();
   try { bnTrader.start(); } catch (e) { log.error('bnTrader.start_failed', { error: e.message }); };
+  try { if (bnWhales.start) bnWhales.start(); else bnWhales.refresh({ limit: 12 }).catch(()=>{}); } catch (e) { log.error('bnWhales.start_failed', { error: e.message }); };
   });
   const stop = (sig) => { log.info('server.stop', { signal: sig }); server.close(); require('./persist').close().finally(() => process.exit(0)); setTimeout(() => process.exit(0), 8000).unref(); };
   process.on('SIGTERM', () => stop('SIGTERM')); process.on('SIGINT', () => stop('SIGINT'));

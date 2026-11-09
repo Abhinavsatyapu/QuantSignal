@@ -2,56 +2,49 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Positions · QuantSignal</title>
-<link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/builder.css">
+<meta name="color-scheme" content="dark">
+<title>Positions & Orders · QuantSignal Futures</title>
+<link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/builder.css"><link rel="stylesheet" href="/ds.css">
 <style>
 .pos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin:14px 0}
-.pos-card{border:1px solid var(--line2);border-radius:var(--radius);background:var(--panel2);padding:14px 16px}
+.pos-card{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel2);padding:14px 16px}
 .pos-card.long{border-left:3px solid var(--green)}.pos-card.short{border-left:3px solid var(--red)}
-.pos-card h3{margin:0 0 8px;font-size:16px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.pos-card h3{margin:0 0 8px;font-size:15px;display:flex;justify-content:space-between;gap:8px;align-items:center}
 .pos-card dl{margin:0;display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:13px}
-.pos-card dt{color:var(--muted)}.pos-card dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
-.pos-card .badge-row{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
-.lat{font-size:12px;color:var(--muted)}.lat b{color:var(--text)}
-.daily-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:12px 0}
-.daily-bar .m{background:var(--panel2);border:1px solid var(--line2);border-radius:10px;padding:12px}
-.daily-bar .m span{display:block;font-size:11px;color:var(--muted)}.daily-bar .m b{font-size:18px}
+.pos-card dt{color:var(--muted)}.pos-card dd{margin:0;text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono)}
 .pending-cd{color:var(--amber);font-weight:600}
-.miss{color:var(--red);font-weight:600}.okp{color:var(--green)}
+.daily-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:12px 0}
+.daily-bar .m{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px}
+.daily-bar .m span{display:block;font-size:11px;color:var(--muted)}.daily-bar .m b{font-size:17px;font-family:var(--mono)}
 </style>
 </head>
-<body class="deriv-page">
-<header class="top"><div class="brand">QuantSignal</div><nav id="mainNav"><a href="/">Dashboard</a> <a href="/positions" class="active">Positions</a> <a href="/futures">Futures</a></nav></header>
-<main class="wrap">
-  <p class="eyebrow">BINANCE USDⓈ-M · US EQUITY PERPS</p>
-  <h1>Positions</h1>
-  <p class="market-note" id="srcLine">Connecting to Binance price feed…</p>
-  <p class="market-note warn-text" id="geoNote" hidden></p>
-
+<body class="qs-app">
+<main>
+  <h1 class="page-title">Positions &amp; Orders</h1>
+  <p class="page-sub">Futures-only open positions, pending LIMIT→MARKET entries, and closed trades. No options data on this page.</p>
+  <p class="page-sub" id="srcLine">Connecting…</p>
+  <p class="page-sub" id="geoNote" hidden style="color:var(--amber)"></p>
   <section class="panel">
-    <div class="panel-head"><h2>Daily summary (UTC)</h2><span class="badge" id="modeBadge">—</span></div>
+    <h2>Daily summary (IST) <span class="pill" id="modeBadge">—</span></h2>
     <div class="daily-bar" id="daily"></div>
   </section>
-
   <section class="panel">
-    <div class="panel-head"><h2>Open positions</h2><span class="market-note" id="openCount">—</span></div>
+    <h2>Open positions <span class="muted" id="openCount"></span></h2>
     <div id="open" class="pos-grid"></div>
   </section>
-
   <section class="panel">
-    <div class="panel-head"><h2>Pending entries</h2><span class="market-note">Limit working · market fallback when the countdown hits 0</span></div>
+    <h2>Pending entries</h2>
     <div id="pending" class="pos-grid"></div>
   </section>
-
   <section class="panel">
-    <div class="panel-head"><h2>Closed trades</h2></div>
-    <div class="table-wrap"><table class="data-table" id="closed"><thead><tr>
+    <h2>Closed trades</h2>
+    <div class="table-wrap"><table class="inst data-table" id="closed"><thead><tr>
       <th>#</th><th>Symbol</th><th>Side</th><th class="num">Entry</th><th class="num">Exit</th><th>Reason</th><th class="num">Qty</th><th class="num">P&amp;L</th><th class="num">Fees</th><th>Entry type</th><th>Closed</th>
     </tr></thead><tbody></tbody></table></div>
   </section>
 </main>
-<script src="/deriv-nav.js"></script>
 <script src="/positions.js"></script>
+<script src="/shell.js"></script>
 <script src="/auth-ui.js"></script>
 </body>
 </html>

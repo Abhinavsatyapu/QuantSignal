@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Whale Footprints · QuantSignal Futures</title>
+<link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/builder.css"><link rel="stylesheet" href="/ds.css">
+<style>
+.whale-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;margin:14px 0}
+.wcard{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel2);padding:14px 16px}
+.wcard h3{margin:0 0 6px;font-size:15px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.wcard .bias{font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px}
+.bias.WHALE_LONG,.bias.LEAN_LONG{background:var(--green-dim);color:var(--green)}
+.bias.WHALE_SHORT,.bias.LEAN_SHORT{background:var(--red-dim);color:var(--red)}
+.bias.NEUTRAL{background:rgba(148,163,184,.15);color:var(--muted)}
+.wcard dl{margin:8px 0 0;display:grid;grid-template-columns:1fr auto;gap:3px 10px;font-size:12px}
+.wcard dt{color:var(--muted)}.wcard dd{margin:0;text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono)}
+.prints{margin-top:8px;font-size:11px;max-height:90px;overflow:auto}
+.prints div{display:flex;justify-content:space-between;gap:8px;padding:2px 0;border-bottom:1px solid var(--line)}
+.meta{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);margin:8px 0;align-items:center}
+</style>
+</head>
+<body class="qs-app">
+<main>
+  <h1 class="page-title">Whale Footprints</h1>
+  <p class="page-sub">Futures section only — large prints, OI spikes, top-trader &amp; global L/S, taker imbalance, book walls. Binance public data. Guest read-only. Timestamps IST.</p>
+  <div class="meta">
+    <span id="upd">Last refresh: —</span>
+    <span id="uni">Universe: —</span>
+    <span id="thr">Print ≥ $50k · Wall ≥ $100k</span>
+    <button class="btn ghost" id="btnRefresh" type="button">Refresh now</button>
+  </div>
+  <p class="page-sub" id="err" hidden style="color:var(--amber)"></p>
+  <div class="whale-grid" id="grid"><p class="muted">Loading whale cards…</p></div>
+  <section class="panel" style="margin-top:8px">
+    <h2>Sources</h2>
+    <p class="muted" id="sources" style="font-size:13px">Binance fapi aggTrades, openInterest, futures/data OI hist + L/S + taker ratios, depth. Third-party notes listed but not required.</p>
+    <details class="details-toggle"><summary>How bias is chosen</summary>
+      <ol style="font-size:13px;color:var(--text2)">
+        <li>Score OI change, taker buy ratio, top-trader long ratio, large print imbalance, book wall skew.</li>
+        <li>Map score → WHALE_LONG / LEAN_LONG / NEUTRAL / LEAN_SHORT / WHALE_SHORT.</li>
+        <li>No commodities; US equity TradFi perps only.</li>
+      </ol>
+    </details>
+  </section>
+</main>
+<script src="/whales.js"></script>
+<script src="/shell.js"></script>
+<script src="/auth-ui.js"></script>
+</body>
+</html>

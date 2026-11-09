@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Futures Settings · QuantSignal</title>
+<link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/ds.css">
+</head>
+<body class="qs-app">
+<main>
+  <h1 class="page-title">Futures Settings</h1>
+  <p class="page-sub">Dry-run bot presets. Study-best (4h buy-side) is default; legacy 15m indicators remains selectable. Owner write only.</p>
+  <section class="panel">
+    <h2>Active study preset</h2>
+    <p class="muted" id="cur">Loading…</p>
+    <label style="display:block;margin:12px 0 8px;font-size:12px;color:var(--muted)">Preset
+      <select id="preset" style="display:block;width:100%;max-width:420px;margin-top:4px;padding:8px;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px"></select>
+    </label>
+    <button class="btn primary" id="save" type="button">Apply preset</button>
+    <p id="msg" class="muted" style="margin-top:10px"></p>
+    <details class="details-toggle" style="margin-top:12px"><summary>Raw settings</summary>
+      <pre id="raw" class="mono" style="font-size:11px;white-space:pre-wrap"></pre>
+    </details>
+  </section>
+</main>
+<script src="/shell.js"></script>
+<script src="/auth-ui.js"></script>
+<script>
+(async function(){
+  const $ = (id)=>document.getElementById(id);
+  async function load(){
+    const r = await fetch('/api/binance/status',{credentials:'same-origin'});
+    if(!r.ok){ $('cur').textContent='Login required to view status ('+r.status+')'; return; }
+    const j = await r.json();
+    const s = j.settings||{};
+    $('cur').textContent = `Now: ${s.activePreset||'(custom)'} · ${s.interval} · ${s.signalMode} · kinds [${(s.liqKinds||[]).join(', ')}] · symbols ${s.universeCount||(s.assets||[]).length}`;
+    $('raw').textContent = JSON.stringify(s,null,2);
+    const presets = s.studyPresets||{};
+    $('preset').innerHTML = Object.values(presets).map(p=>`<option value="${p.id}" ${p.id===s.activePreset?'selected':''}>${p.label}</option>`).join('') || '<option value="">(none)</option>';
+  }
+  $('save').onclick = async ()=>{
+    $('msg').textContent='Saving…';
+    const r = await fetch('/api/binance/settings',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({activePreset:$('preset').value})});
+    const j = await r.json().catch(()=>({}));
+    $('msg').textContent = r.ok ? 'Applied. Scanner will use the new interval/mode on next cycle.' : (j.error||('HTTP '+r.status));
+    load();
+  };
+  load();
+})();
+</script>
+</body>
+</html>

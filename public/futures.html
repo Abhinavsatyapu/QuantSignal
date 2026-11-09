@@ -2,70 +2,147 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Futures · QuantSignal</title>
-<link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/builder.css">
+<meta name="color-scheme" content="dark">
+<title>Futures Overview · QuantSignal</title>
+<link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/builder.css"><link rel="stylesheet" href="/ds.css">
 <style>
 .pos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin:14px 0}
-.pos-card{border:1px solid var(--line2);border-radius:var(--radius);background:var(--panel2);padding:14px 16px}
+.pos-card{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel2);padding:14px 16px}
 .pos-card.long{border-left:3px solid var(--green)}.pos-card.short{border-left:3px solid var(--red)}
-.pos-card h3{margin:0 0 8px;font-size:16px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.pos-card h3{margin:0 0 8px;font-size:15px;display:flex;justify-content:space-between;gap:8px;align-items:center}
 .pos-card dl{margin:0;display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:13px}
-.pos-card dt{color:var(--muted)}.pos-card dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
-.pos-card .badge-row{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
-.lat{font-size:12px;color:var(--muted)}.lat b{color:var(--text)}
-.daily-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:12px 0}
-.daily-bar .m{background:var(--panel2);border:1px solid var(--line2);border-radius:10px;padding:12px}
-.daily-bar .m span{display:block;font-size:11px;color:var(--muted)}.daily-bar .m b{font-size:17px}
-.pending-cd{color:var(--amber);font-weight:600}
-.top nav a{margin-right:14px;color:var(--muted);text-decoration:none;font-size:13px}
-.top nav a.active,.top nav a:hover{color:var(--text)}
-.pos{color:var(--green)}.neg{color:var(--red)}
+.pos-card dt{color:var(--muted)}.pos-card dd{margin:0;text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono)}
+.curve-wrap{height:180px;background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius);padding:8px}
+.curve-wrap canvas{width:100%;height:100%}
+.risk-bars{display:grid;gap:8px}
+.risk-row{display:grid;grid-template-columns:90px 1fr 70px;gap:8px;align-items:center;font-size:12px}
+.risk-row .bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.risk-row .bar > i{display:block;height:100%;background:var(--blue)}
+.sig-feed{font-size:12px;max-height:260px;overflow:auto}
+.sig-feed div{display:grid;grid-template-columns:70px 1fr auto;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
 </style>
 </head>
-<body class="deriv-page">
-<header class="top"><div class="brand">QuantSignal</div>
-<nav id="mainNav">
-  <a href="/">Dashboard</a>
-  <a href="/positions">Positions</a>
-  <a href="/futures" class="active">Futures</a>
-  <a href="/autotrader">Auto-Trader</a>
-</nav></header>
-<main class="wrap">
-  <p class="eyebrow">BINANCE USDⓈ-M · US EQUITY FUTURES BOT</p>
-  <h1>Futures</h1>
-  <p class="market-note">Live / dry-run trading only — open positions, pending entries, closed trades, and daily returns from <b>actual</b> bot trades. Backtest study results are not shown here (see study Page / CSV).</p>
-  <p class="market-note" id="srcLine">Connecting to Binance price feed…</p>
-  <p class="market-note warn-text" id="geoNote" hidden></p>
+<body class="qs-app">
+<main>
+  <p class="page-sub muted" style="margin:0 0 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase">Binance USDⓈ-M · US equity TradFi perps · dry-run default</p>
+  <h1 class="page-title">Futures Overview</h1>
+  <p class="page-sub" id="srcLine">Connecting to Binance price feed…</p>
+  <p class="page-sub" id="geoNote" hidden style="color:var(--amber)"></p>
+  <p class="page-sub" id="presetLine">Active preset: —</p>
+
+  <div class="kpi-row" id="kpis"></div>
+
+  <div class="grid-2">
+    <section class="panel">
+      <h2>Equity curve (actual closed · 60 IST days)</h2>
+      <div class="curve-wrap"><canvas id="eqCanvas" width="640" height="180"></canvas></div>
+      <div class="kpi-row" id="avgDaily" style="margin-top:12px"></div>
+      <p class="muted" id="avgDailyNote" style="font-size:12px"></p>
+    </section>
+    <section class="panel">
+      <h2>Risk exposure by symbol</h2>
+      <div class="risk-bars" id="riskBySym"><p class="muted">No open risk</p></div>
+      <h2 style="margin-top:18px">Recent signals</h2>
+      <div class="sig-feed" id="sigFeed"><p class="muted">Loading…</p></div>
+    </section>
+  </div>
 
   <section class="panel">
-    <div class="panel-head"><h2>Today (IST) · bot mode</h2><span class="badge" id="modeBadge">—</span></div>
-    <div class="daily-bar" id="daily"></div>
-  </section>
-
-  <section class="panel">
-    <div class="panel-head"><h2>Actual avg daily return</h2><span class="market-note">From closed dry-run/live trades · last 60 IST days</span></div>
-    <div class="daily-bar" id="avgDaily"></div>
-    <p class="market-note" id="avgDailyNote"></p>
-  </section>
-
-  <section class="panel">
-    <div class="panel-head"><h2>Open positions</h2><span class="market-note" id="openCount">—</span></div>
+    <h2>Open positions <span class="muted" id="openCount" style="font-weight:500"></span></h2>
     <div id="open" class="pos-grid"></div>
   </section>
 
   <section class="panel">
-    <div class="panel-head"><h2>Pending entries</h2><span class="market-note">Limit → market after countdown</span></div>
+    <h2>Pending entries</h2>
     <div id="pending" class="pos-grid"></div>
   </section>
 
   <section class="panel">
-    <div class="panel-head"><h2>Closed trades</h2></div>
-    <div class="table-wrap"><table class="data-table" id="closed"><thead><tr>
+    <h2>Closed trades</h2>
+    <div class="table-wrap"><table class="inst" id="closed"><thead><tr>
       <th>#</th><th>Symbol</th><th>Side</th><th class="num">Entry</th><th class="num">Exit</th><th>Reason</th><th class="num">Qty</th><th class="num">P&amp;L</th><th class="num">Fees</th><th>Entry type</th><th>Closed</th>
     </tr></thead><tbody></tbody></table></div>
   </section>
+
+  <!-- compat hooks for futures.js -->
+  <div id="daily" hidden></div>
+  <span id="modeBadge" hidden></span>
 </main>
 <script src="/futures.js"></script>
+<script src="/shell.js"></script>
 <script src="/auth-ui.js"></script>
+<script>
+// Overview extras on top of futures.js
+(function(){
+  const $ = (id) => document.getElementById(id);
+  const usd = (v,d=2) => Number.isFinite(+v) ? ((v<0?'−':'')+'$'+Math.abs(+v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d})) : '—';
+  const cls = (v) => v>0?'pos':v<0?'neg':'';
+  async function enrich(){
+    try {
+      const [pos, st, ev] = await Promise.all([
+        fetch('/api/binance/positions',{credentials:'same-origin'}).then(r=>r.json()),
+        fetch('/api/binance/status',{credentials:'same-origin'}).then(r=>r.ok?r.json():null).catch(()=>null),
+        fetch('/api/binance/events?limit=30',{credentials:'same-origin'}).then(r=>r.ok?r.json():[]).catch(()=>[]),
+      ]);
+      const day = pos.daily||{};
+      const ar = pos.actualReturns||{};
+      $('kpis').innerHTML = [
+        ['Equity', usd(pos.equity), 'compounding'],
+        ["Day P&L", usd(day.pnl)+(day.pnlPct!=null?` (${day.pnlPct.toFixed(2)}%)`:''), 'IST day-start'],
+        ['Week / 60d mean', (ar.meanDailyPctAllDays!=null?((ar.meanDailyPctAllDays>=0?'+':'')+ar.meanDailyPctAllDays.toFixed(3)+'%'):'—'), 'avg daily % all days'],
+        ['Win rate (closed)', (pos.closed&&pos.closed.length)? (100*pos.closed.filter(t=>t.pnl>0).length/pos.closed.length).toFixed(0)+'%':'—', 'last 50'],
+        ['Max DD (60d)', ar.maxDdPct!=null?ar.maxDdPct.toFixed(2)+'%':(ar.medianDailyPctAllDays!=null?'see curve':'—'), 'from actual returns'],
+        ['Positions', `${day.positionsUsed??0}/${day.maxPositions??4}`, pos.dryRun?'DRY-RUN':'LIVE'],
+      ].map(([k,v,d])=>`<div class="kpi"><div class="k">${k}</div><div class="v ${String(k).includes('P&L')?cls(day.pnl):''}">${v}</div><div class="d">${d}</div></div>`).join('');
+
+      // risk by symbol
+      const open = pos.open||[];
+      const tot = open.reduce((s,p)=>s+Math.abs(p.margin||0),0)||1;
+      $('riskBySym').innerHTML = open.length ? open.map(p=>{
+        const pct = 100*Math.abs(p.margin||0)/tot;
+        return `<div class="risk-row"><b>${p.symbol.replace('USDT','')}</b><div class="bar"><i style="width:${pct}%"></i></div><span class="num">${pct.toFixed(0)}%</span></div>`;
+      }).join('') : '<p class="muted">No open risk</p>';
+
+      // signals feed
+      const rows = Array.isArray(ev)?ev: [];
+      $('sigFeed').innerHTML = rows.length ? rows.slice(0,20).map(e=>{
+        const t = e.ts ? new Date(e.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '—';
+        return `<div><span class="muted">${t}</span><span>${(e.msg||e.message||e.level||'').toString().slice(0,80)}</span><span class="muted">${e.level||''}</span></div>`;
+      }).join('') : '<p class="muted">No recent bot events</p>';
+
+      // preset line
+      const s = st && st.settings;
+      if (s) {
+        $('presetLine').textContent = `Active: ${s.activePreset||'(custom)'} · ${s.interval} · ${s.signalMode}` +
+          (s.liqKinds&&s.liqKinds.length?` · kinds ${s.liqKinds.join(',')}`:'') +
+          ` · universe ${s.universeCount|| (s.assets||[]).length}`;
+      }
+
+      // equity curve from actualReturns.days if present
+      const days = (ar.days||ar.daily||[]);
+      drawCurve(Array.isArray(days)?days:[]);
+    } catch(e) { console.warn(e); }
+  }
+  function drawCurve(days){
+    const c=$('eqCanvas'); if(!c) return;
+    const ctx=c.getContext('2d');
+    const w=c.width,h=c.height;
+    ctx.fillStyle='#141e30'; ctx.fillRect(0,0,w,h);
+    if(!days.length){ ctx.fillStyle='#7f8eab'; ctx.fillText('No closed-trade equity series yet', 16, h/2); return; }
+    const ys=days.map(d=>+d.equity).filter(Number.isFinite);
+    if(!ys.length) return;
+    const min=Math.min(...ys), max=Math.max(...ys);
+    const pad=10;
+    ctx.strokeStyle='#5b9dff'; ctx.lineWidth=2; ctx.beginPath();
+    days.forEach((d,i)=>{
+      const x=pad+(i/(days.length-1||1))*(w-2*pad);
+      const y=h-pad-((d.equity-min)/((max-min)||1))*(h-2*pad);
+      i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+    });
+    ctx.stroke();
+  }
+  enrich(); setInterval(enrich, 8000);
+})();
+</script>
 </body>
 </html>
