@@ -40,10 +40,21 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Smoke test /health and /version
         run: |
-          docker run -d --name qs -p 8787:8787 -e NETWORK=testnet -e DRY_RUN=1 -e HOST=0.0.0.0 -e PORT=8787 quantsignal:ci
+          docker run -d --name qs -p 8787:8787 \
+            -e NETWORK=testnet -e DRY_RUN=1 -e HOST=0.0.0.0 -e PORT=8787 \
+            -e OWNER_PASSWORD=ci-owner-pass -e GUEST_PASSWORD=ci-guest-pass \
+            quantsignal:ci
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8787/health && break; sleep 2; done
           curl -fsS http://127.0.0.1:8787/health | grep '"ok":true'
           curl -fsS http://127.0.0.1:8787/version
-          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8787/builder)" = 200
-          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8787/weekly)" = 200
+          # Unauthenticated HTML pages redirect to /login
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: text/html' http://127.0.0.1:8787/builder)" = 302
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Accept: text/html' http://127.0.0.1:8787/weekly)" = 302
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8787/login)" = 200
+          # Authenticated session can load builder + weekly
+          curl -fsS -c /tmp/qs.ck -H 'Content-Type: application/json' \
+            -d '{"password":"ci-owner-pass"}' http://127.0.0.1:8787/api/auth/login | grep -E '"role":"owner"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -b /tmp/qs.ck -H 'Accept: text/html' http://127.0.0.1:8787/builder)" = 200
+          test "$(curl -s -o /dev/null -w '%{http_code}' -b /tmp/qs.ck -H 'Accept: text/html' http://127.0.0.1:8787/weekly)" = 200
+          test "$(curl -s -o /dev/null -w '%{http_code}' -b /tmp/qs.ck -H 'Accept: text/html' http://127.0.0.1:8787/futures)" = 200
           docker logs qs | tail -20
