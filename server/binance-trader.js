@@ -110,6 +110,10 @@ function closeTrade(id, status, px, reason, pnl, fees) {
   store.db.prepare('UPDATE bn_trades SET status=?, exit_px=?, exit_ts=?, exit_reason=?, pnl=?, fees=COALESCE(?,fees) WHERE id=?')
     .run(target, px, Date.now(), reason, pnl, fees == null ? null : fees, id);
   try { require('./persist').mark('bn_trades', id); } catch {}
+  try {
+    const row = store.db.prepare('SELECT * FROM bn_trades WHERE id=?').get(id);
+    if (row) require('./trade-lessons').recordLesson(row);
+  } catch (e) { blog('warn', 'trade-lessons: ' + e.message); }
 }
 /** Idempotent persisted state transition. Returns transition result. */
 function transitionTrade(id, to, meta = {}) {

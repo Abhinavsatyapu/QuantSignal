@@ -1,0 +1,3416 @@
+{
+  "generatedAt": "2026-11-09T20:28:40.422Z",
+  "universe": 62,
+  "note": "Active live preset unchanged (user picks). Dry-run only. Earnings calendar not free-wired — gaps tagged gap_or_slippage_like / unclassified.",
+  "setupA": {
+    "label": "Setup A · 4h liq_buy_side",
+    "lossCount": 45,
+    "winCount": 26,
+    "oos": {
+      "trades": 13,
+      "wins": 3,
+      "losses": 10,
+      "winRate": 0.231,
+      "profitFactor": 0.58,
+      "totalPnlPct": -8.34,
+      "endEquity": 733.29,
+      "maxDdPct": 4.38,
+      "avgDailyPctAllDays": -0.1694,
+      "geoAvgDailyPct": 0.0332,
+      "meanDailyPctTradeDays": -1.9904,
+      "tradeDays": 4,
+      "calendarDays": 47,
+      "lowSample": true
+    },
+    "sixty": {
+      "trades": 78,
+      "wins": 34,
+      "losses": 44,
+      "winRate": 0.436,
+      "profitFactor": 1.24,
+      "totalPnlPct": 29.93,
+      "endEquity": 1039.41,
+      "maxDdPct": 17.41,
+      "avgDailyPctAllDays": 0.5264,
+      "geoAvgDailyPct": 0.6094,
+      "meanDailyPctTradeDays": 0.9571,
+      "tradeDays": 33,
+      "calendarDays": 60,
+      "lowSample": false
+    },
+    "train": {
+      "trades": 58,
+      "wins": 23,
+      "losses": 35,
+      "winRate": 0.397,
+      "profitFactor": 1.03,
+      "totalPnlPct": 1.99,
+      "endEquity": 815.89,
+      "maxDdPct": 27.99,
+      "avgDailyPctAllDays": 0.0945,
+      "geoAvgDailyPct": -0.1133,
+      "meanDailyPctTradeDays": 0.3196,
+      "tradeDays": 21,
+      "calendarDays": 71,
+      "lowSample": false
+    },
+    "mistakeTable": [
+      {
+        "cause": "correlated_cluster",
+        "count": 35,
+        "pnl": -598.77,
+        "examples": [
+          {
+            "symbol": "SQQQUSDT",
+            "pnl": -19.01,
+            "entryTs": 1787572800000,
+            "reason": "stop",
+            "meta": {
+              "mae": 1.1999999999999957,
+              "mfe": 0,
+              "maeAtr": 2.9893238434163685,
+              "mfeAtr": 0,
+              "atr": 0.40142857142857025,
+              "stopDist": 0.5944499999999948,
+              "session": "premarket_utc",
+              "htf": null,
+              "holdBars": 1,
+              "reason": "stop",
+              "entryHourIST": 17,
+              "entryDowIST": 1
+            }
+          },
+          {
+            "symbol": "MVLLUSDT",
+            "pnl": -17.02,
+            "entryTs": 1787544000000,
+            "reason": "stop",
+            "meta": {
+              "mae": 0.9499999999999993,
+              "mfe": 1.7300000000000004,
+              "maeAtr": 1.5429234338747086,
+              "mfeAtr": 2.809744779582367,
+              "atr": 0.6157142857142858,
+              "stopDist": 0.4250999999999969,
+              "session": "premarket_utc",
+              "htf": null,
+              "holdBars": 3,
+              "reason": "stop",
+              "entryHourIST": 9,
+              "entryDowIST": 1
+            }
+          },
+          {
+            "symbol": "DRAMUSDT",
+            "pnl": -18.1,
+            "entryTs": 1787587200000,
+            "reason": "stop",
+            "meta": {
+              "mae": 1.5999999999999943,
+              "mfe": 1.3300000000000054,
+              "maeAtr": 1.854304635761582,
+              "mfeAtr": 1.541390728476827,
+              "atr": 0.8628571428571432,
+              "stopDist": 0.8167499999999919,
+              "session": "us_cash",
+              "htf": null,
+              "holdBars": 3,
+              "reason": "stop",
+              "entryHourIST": 21,
+              "entryDowIST": 1
+            }
+          }
+        ],
+        "pctOfLosses": 77.8
+      },
+      {
+        "cause": "illiquid_session",
+        "count": 20,
+        "pnl": -347.32,
+        "examples": [
+          {
+            "symbol": "SQQQUSDT",
+            "pnl": -19.01,
+            "entryTs": 1787572800000,
+            "reason": "stop",
+            "meta": {
+              "mae": 1.1999999999999957,
+              "mfe": 0,
+              "maeAtr": 2.9893238434163685,
+              "mfeAtr": 0,
+              "atr": 0.40142857142857025,
+              "stopDist": 0.5944499999999948,
+              "session": "premarket_utc",
+              "htf": null,
+              "holdBars": 1,
+              "reason": "stop",
+              "entryHourIST": 17,
+              "entryDowIST": 1
+            }
+          },
+          {
+            "symbol": "MVLLUSDT",
+            "pnl": -17.02,
+            "entryTs": 1787544000000,
+            "reason": "stop",
+            "meta": {
+              "mae": 0.9499999999999993,
+              "mfe": 1.7300000000000004,
+              "maeAtr": 1.5429234338747086,
+              "mfeAtr": 2.809744779582367,
+              "atr": 0.6157142857142858,
+              "stopDist": 0.4250999999999969,
+              "session": "premarket_utc",
+              "htf": null,
+              "holdBars": 3,
+              "reason": "stop",
+              "entryHourIST": 9,
+              "entryDowIST": 1
+            }
+          },
+          {
+            "symbol": "MVLLUSDT",
+            "pnl": -17.3,
+            "entryTs": 1787616000000,
+            "reason": "stop",
+            "meta": {
+              "mae": 2.120000000000001,
+              "mfe": 0.5199999999999996,
+              "maeAtr": 2.3574265289912626,
+              "mfeAtr": 0.578236695790309,
+              "atr": 0.8992857142857148,
+              "stopDist": 0.4249499999999955,
+              "session": "premarket_utc",
+              "htf": null,
+              "holdBars": 1,
+              "reason": "stop",
+              "entryHourIST": 5,
+              "entryDowIST": 2
+            }
+          }
+        ],
+        "pctOfLosses": 44.4
+      },
+      {
+        "cause": "noise_stop_out",
+        "count": 17,
+        "pnl": -285.34,
+        "examples": [
+          {
+            "symbol": "MVLLUSDT",
+            "pnl": -17.02,
+            "entryTs": 1787544000000,
+            "reason": "stop",
+            "meta": {
+              "mae": 0.9499999999999993,
+              "mfe": 1.7300000000000004,
+              "maeAtr": 1.5429234338747086,
+              "mfeAtr": 2.809744779582367,
+              "atr": 0.6157142857142858,
+              "stopDist": 0.4250999999999969,
+              "session": "premarket_utc",
+              "htf": null,
+              "holdBars": 3,
+              "reason": "stop",
+              "entryHourIST": 9,
+              "entryDowIST": 1
+            }
+          },
+          {
+            "symbol": "DRAMUSDT",
+            "pnl": -18.1,
+            "entryTs": 1787587200000,
+            "reason": "stop",
+            "meta": {
+              "mae": 1.5999999999999943,
+              "mfe": 1.3300000000000054,
+              "maeAtr": 1.854304635761582,
+              "mfeAtr": 1.541390728476827,
+              "atr": 0.8628571428571432,
+              "stopDist": 0.8167499999999919,
+              "session": "us_cash",
+              "htf": null,
+              "holdBars": 3,
+              "reason": "stop",
+              "entryHourIST": 21,
+              "entryDowIST": 1
+            }
+          },
+          {
+            "symbol": "AAOIUSDT",
+            "pnl": -16.54,
+            "entryTs": 1787673600000,
+            "reason": "stop",
+            "meta": {
+              "mae": 6.140000000000001,
+              "mfe": 3.309999999999988,
+              "maeAtr": 1.5369211514392984,
+              "mfeAtr": 0.8285356695869802,
+              "atr": 3.9950000000000023,
+              "stopDist": 1.698149999999984,
+              "session": "us_cash",
+              "htf": null,
+              "holdBars": 7,
+              "reason": "stop",
+              "entryHourIST": 21,
+              "entryDowIST": 2
+            }
+          }
+        ],
+        "pctOfLosses": 37.8
+      },
+      {
+        "cause": "unclassified_stop_or_thesis",
+        "count": 14,
+        "pnl": -241.91,
+        "examples": [
+          {
+            "symbol": "AMATUSDT",
+            "pnl": -17.27,
+            "entryTs": 1787673600000,
+            "reason": "stop",
+            "meta": {
+              "mae": 13.579999999999984,
+              "mfe": 7.670000000000016,
+              "maeAtr": 1.5901639344262284,
+              "mfeAtr": 0.8981264637002365,
+              "atr": 8.539999999999996,
+              "stopDist": 7.212299999999971,
+              "session": "us_cash",
+              "htf": null,
+              "holdBars": 10,
+              "reason": "stop",
+              "entryHourIST": 21,
+              "entryDowIST": 2
+            }
+          },
+          {
+            "symbol": "MUUUSDT",
+            "pnl": -17.76,
+            "entryTs": 1788192000000,
+            "reason": "stop",
+            "meta": {
+              "mae": 1.379999999999999,
+              "mfe": 0.0799999999999983,
+              "maeAtr": 2.185520361990945,
+              "mfeAtr": 0.12669683257918263,
+              "atr": 0.6314285714285724,
+              "stopDist": 0.44249999999999545,
+              "session": "us_cash",
+              "htf": null,
+              "holdBars": 1,
+              "reason": "stop",
+              "entryHourIST": 21,
+              "entryDowIST": 1
+            }
+          },
+          {
+            "symbol": "SQQQUSDT",
+            "pnl": -18.46,
+            "entryTs": 1788206400000,
+            "reason": "stop",
+            "meta": {
+              "mae": 1.3299999999999983,
+              "mfe": 0.22000000000000597,
+              "maeAtr": 3.5399239543726204,
+              "mfeAtr": 0.5855513307984952,
+              "atr": 0.37571428571428556,
+              "stopDist": 0.5777999999999963,
+              "session": "us_cash",
+              "htf": null,
+              "holdBars": 3,
+              "reason": "stop",
+              "entryHourIST": 1,
+              "entryDowIST": 2
+            }
+          }
+        ],
+        "pctOfLosses": 31.1
+      },
+      {
+        "cause": "against_htf_trend",
+        "count": 3,
+        "pnl": -53.38,
+        "examples": [
+          {
+            "symbol": "TSLAUSDT",
+            "pnl": -19.64,
+            "entryTs": 1789675200000,
+            "reason": "stop",
+            "meta": {
+              "mae": 11.96999999999997,
+              "mfe": 5.25,
+              "maeAtr": 2.9033264033263975,
+              "mfeAtr": 1.2733887733887739,
+              "atr": 4.122857142857141,
+              "stopDist": 5.498999999999967,
+              "session": "us_cash",
+              "htf": "LONG",
+              "holdBars": 22,
+              "reason": "stop",
+              "entryHourIST": 1,
+              "entryDowIST": 5
+            }
+          },
+          {
+            "symbol": "TSLAUSDT",
+            "pnl": -16.55,
+            "entryTs": 1793764800000,
+            "reason": "stop",
+            "meta": {
+              "mae": 11.670000000000016,
+              "mfe": 6.259999999999991,
+              "maeAtr": 1.7309036974255771,
+              "mfeAtr": 0.9284881873079762,
+              "atr": 6.7421428571428565,
+              "stopDist": 5.707499999999982,
+              "session": "premarket_utc",
+              "htf": "LONG",
+              "holdBars": 2,
+              "reason": "stop",
+              "entryHourIST": 9,
+              "entryDowIST": 3
+            }
+          },
+          {
+            "symbol": "AMZNUSDT",
+            "pnl": -17.2,
+            "entryTs": 1793894400000,
+            "reason": "stop",
+            "meta": {
+              "mae": 12.829999999999984,
+              "mfe": 0.9599999999999795,
+              "maeAtr": 1.9137012571915586,
+              "mfeAtr": 0.14319198806733122,
+              "atr": 6.704285714285717,
+              "stopDist": 3.8297999999999774,
+              "session": "us_cash",
+              "htf": "SHORT",
+              "holdBars": 22,
+              "reason": "stop",
+              "entryHourIST": 21,
+              "entryDowIST": 4
+            }
+          }
+        ],
+        "pctOfLosses": 6.7
+      },
+      {
+        "cause": "weekend_risk_window",
+        "count": 2,
+        "pnl": -34.36,
+        "examples": [
+          {
+            "symbol": "BNCUSDT",
+            "pnl": -17,
+            "entryTs": 1787932800000,
+            "reason": "stop",
+            "meta": {
+              "mae": 0.17300000000000004,
+              "mfe": 0.02400000000000002,
+              "maeAtr": 1.481345565749236,
+              "mfeAtr": 0.2055045871559635,
+              "atr": 0.11678571428571427,
+              "stopDist": 0.043304999999999705,
+              "session": "us_cash",
+              "htf": null,
+              "holdBars": 8,
+              "reason": "stop",
+              "entryHourIST": 21,
+              "entryDowIST": 5
+            }
+          },
+          {
+            "symbol": "INTWUSDT",
+            "pnl": -17.36,
+            "entryTs": 1787932800000,
+            "reason": "stop",
+            "meta": {
+              "mae": 1.3499999999999979,
+              "mfe": 1.740000000000002,
+              "maeAtr": 1.7647058823529376,
+              "mfeAtr": 2.2745098039215703,
+              "atr": 0.7650000000000003,
+              "stopDist": 0.2789999999999999,
+              "session": "us_cash",
+              "htf": null,
+              "holdBars": 39,
+              "reason": "stop",
+              "entryHourIST": 21,
+              "entryDowIST": 5
+            }
+          }
+        ],
+        "pctOfLosses": 4.4
+      },
+      {
+        "cause": "late_entry_extended",
+        "count": 1,
+        "pnl": -19.12,
+        "examples": [
+          {
+            "symbol": "AMATUSDT",
+            "pnl": -19.12,
+            "entryTs": 1788768000000,
+            "reason": "stop",
+            "meta": {
+              "mae": 8.319999999999993,
+              "mfe": 4.7000000000000455,
+              "maeAtr": 4.017937219730953,
+              "mfeAtr": 2.2697481890307305,
+              "atr": 2.070714285714278,
+              "stopDist": 6.903449999999964,
+              "session": "premarket_utc",
+              "htf": null,
+              "holdBars": 4,
+              "reason": "stop",
+              "entryHourIST": 13,
+              "entryDowIST": 1
+            }
+          }
+        ],
+        "pctOfLosses": 2.2
+      },
+      {
+        "cause": "gap_or_slippage_like",
+        "count": 1,
+        "pnl": -16.69,
+        "examples": [
+          {
+            "symbol": "AAPLUSDT",
+            "pnl": -16.69,
+            "entryTs": 1793664000000,
+            "reason": "stop",
+            "meta": {
+              "mae": 23.960000000000036,
+              "mfe": 8.529999999999973,
+              "maeAtr": 6.607051408312,
+              "mfeAtr": 2.3521764821745035,
+              "atr": 3.626428571428574,
+              "stopDist": 4.955849999999941,
+              "session": "premarket_utc",
+              "htf": null,
+              "holdBars": 9,
+              "reason": "stop",
+              "entryHourIST": 5,
+              "entryDowIST": 2
+            }
+          }
+        ],
+        "pctOfLosses": 2.2
+      }
+    ],
+    "correlation": {
+      "multiLossTradeCount": 35,
+      "multiPnl": -598.77,
+      "examples": [
+        {
+          "day": "2026-08-24",
+          "n": 3,
+          "symbols": [
+            "SQQQUSDT",
+            "MVLLUSDT",
+            "DRAMUSDT"
+          ]
+        },
+        {
+          "day": "2026-08-25",
+          "n": 3,
+          "symbols": [
+            "MVLLUSDT",
+            "AAOIUSDT",
+            "AMATUSDT"
+          ]
+        },
+        {
+          "day": "2026-08-27",
+          "n": 2,
+          "symbols": [
+            "BNCUSDT",
+            "AAPLUSDT"
+          ]
+        }
+      ]
+    },
+    "classifiedSample": [
+      {
+        "symbol": "SQQQUSDT",
+        "pnl": -19.01,
+        "reason": "stop",
+        "causes": [
+          "illiquid_session",
+          "correlated_cluster"
+        ],
+        "session": "premarket_utc",
+        "htf": null,
+        "maeAtr": 2.99,
+        "mfeAtr": 0
+      },
+      {
+        "symbol": "MVLLUSDT",
+        "pnl": -17.02,
+        "reason": "stop",
+        "causes": [
+          "noise_stop_out",
+          "illiquid_session",
+          "correlated_cluster"
+        ],
+        "session": "premarket_utc",
+        "htf": null,
+        "maeAtr": 1.54,
+        "mfeAtr": 2.81
+      },
+      {
+        "symbol": "DRAMUSDT",
+        "pnl": -18.1,
+        "reason": "stop",
+        "causes": [
+          "noise_stop_out",
+          "correlated_cluster"
+        ],
+        "session": "us_cash",
+        "htf": null,
+        "maeAtr": 1.85,
+        "mfeAtr": 1.54
+      },
+      {
+        "symbol": "MVLLUSDT",
+        "pnl": -17.3,
+        "reason": "stop",
+        "causes": [
+          "illiquid_session",
+          "correlated_cluster"
+        ],
+        "session": "premarket_utc",
+        "htf": null,
+        "maeAtr": 2.36,
+        "mfeAtr": 0.58
+      },
+      {
+        "symbol": "AAOIUSDT",
+        "pnl": -16.54,
+        "reason": "stop",
+        "causes": [
+          "noise_stop_out",
+          "correlated_cluster"
+        ],
+        "session": "us_cash",
+        "htf": null,
+        "maeAtr": 1.54,
+        "mfeAtr": 0.83
+      },
+      {
+        "symbol": "AMATUSDT",
+        "pnl": -17.27,
+        "reason": "stop",
+        "causes": [
+          "unclassified_stop_or_thesis",
+          "correlated_cluster"
+        ],
+        "session": "us_cash",
+        "htf": null,
+        "maeAtr": 1.59,
+        "mfeAtr": 0.9
+      },
+      {
+        "symbol": "BNCUSDT",
+        "pnl": -17.47,
+        "reason": "stop",
+        "causes": [
+          "illiquid_session",
+          "correlated_cluster"
+        ],
+        "session": "premarket_utc",
+        "htf": null,
+        "maeAtr": 2.14,
+        "mfeAtr": 0.2
+      },
+      {
+        "symbol": "AAPLUSDT",
+        "pnl": -19.3,
+        "reason": "stop",
+        "causes": [
+          "illiquid_session",
+          "correlated_cluster"
+        ],
+        "session": "premarket_utc",
+        "htf": null,
+        "maeAtr": 1.82,
+        "mfeAtr": 1.12
+      },
+      {
+        "symbol": "BNCUSDT",
+        "pnl": -17,
+        "reason": "stop",
+        "causes": [
+          "weekend_risk_window",
+          "correlated_cluster"
+        ],
+        "session": "us_cash",
+        "htf": null,
+        "maeAtr": 1.48,
+        "mfeAtr": 0.21
+      },
+      {
+        "symbol": "MUUUSDT",
+        "pnl": -17.76,
+        "reason": "stop",
+        "causes": [
+          "unclassified_stop_or_thesis"
+        ],
+        "session": "us_cash",
+        "htf": null,
+        "maeAtr": 2.19,
+        "mfeAtr": 0.13
+      },
+      {
+        "symbol": "SQQQUSDT",
+        "pnl": -18.46,
+        "reason": "stop",
+        "causes": [
+          "unclassified_stop_or_thesis",
+          "correlated_cluster"
+        ],
+        "session": "us_cash",
+        "htf": null,
+        "maeAtr": 3.54,
+        "mfeAtr": 0.59
+      },
+      {
+        "symbol": "BNCUSDT",
+        "pnl": -16.65,
+        "reason": "stop",
+        "causes": [
+          "noise_stop_out",
+          "correlated_cluster"
+        ],
+        "session": "us_cash",
+        "htf": null,
+        "maeAtr": 5.64,
+        "mfeAtr": 1.33
+      },
+      {
+        "symbol": "MSFTUSDT",
+        "pnl": -20.31,
+        "reason": "stop",
+        "causes": [
+          "unclassified_stop_or_thesis",
+          "correlated_cluster"
+        ],
+        "session": "us_cash",
+        "htf": null,
+        "maeAtr": 3.89,
+        "mfeAtr": 1.91
+      },
+      {
+        "symbol": "MUUUSDT",
+        "pnl": -17.9,
+        "reason": "stop",
+        "causes": [
+          "noise_stop_out"
+        ],
+        "session": "us_cash",
+        "htf": null,
+        "maeAtr": 1.53,
+        "mfeAtr": 0.81
+      },
+      {
+        "symbol": "INTWUSDT",
+        "pnl": -17.36,
+        "reason": "stop",
+        "causes": [
+          "noise_stop_out",
+          "weekend_risk_window",
+          "correlated_cluster"
+        ],
+        "session": "us_cash",
+        "htf": null,
+        "maeAtr": 1.76,
+        "mfeAtr": 2.27
+      }
+    ]
+  },
+  "setupB": {
+    "label": "Setup B · 1h AND window 3",
+    "lossCount": 11,
+    "winCount": 17,
+    "oos": {
+      "trades": 11,
+      "wins": 5,
+      "losses": 6,
+      "winRate": 0.455,
+      "profitFactor": 3.22,
+      "totalPnlPct": 11.07,
+      "endEquity": 888.52,
+      "maxDdPct": 2.08,
+      "avgDailyPctAllDays": 0.6502,
+      "geoAvgDailyPct": 0.625,
+      "meanDailyPctTradeDays": 2.3407,
+      "tradeDays": 5,
+      "calendarDays": 18,
+      "lowSample": true
+    },
+    "sixty": {
+      "trades": 40,
+      "wins": 21,
+      "losses": 19,
+      "winRate": 0.525,
+      "profitFactor": 1.45,
+      "totalPnlPct": 13.85,
+      "endEquity": 910.76,
+      "maxDdPct": 12.21,
+      "avgDailyPctAllDays": 0.3328,
+      "geoAvgDailyPct": 0.3188,
+      "meanDailyPctTradeDays": 0.6815,
+      "tradeDays": 21,
+      "calendarDays": 43,
+      "lowSample": false
+    },
+    "train": {
+      "trades": 17,
+      "wins": 12,
+      "losses": 5,
+      "winRate": 0.706,
+      "profitFactor": 2.69,
+      "totalPnlPct": 15.23,
+      "endEquity": 921.8,
+      "maxDdPct": 4.32,
+      "avgDailyPctAllDays": 0.5575,
+      "geoAvgDailyPct": 0.4487,
+      "meanDailyPctTradeDays": 1.6107,
+      "tradeDays": 9,
+      "calendarDays": 26,
+      "lowSample": true
+    },
+    "mistakeTable": [
+      {
+        "cause": "illiquid_session",
+        "count": 3,
+        "pnl": -56.75,
+        "examples": [
+          {
+            "symbol": "SOXSUSDT",
+            "pnl": -16.98,
+            "entryTs": 1791795600000,
+            "reason": "stop",
+            "meta": {
+              "mae": 2.009999999999998,
+              "mfe": 0.3500000000000014,
+              "maeAtr": 4.697829716193644,
+              "mfeAtr": 0.8180300500834745,
+              "atr": 0.4278571428571435,
+              "stopDist": 0.5318999999999932,
+              "session": "premarket_utc",
+              "htf": null,
+              "holdBars": 6,
+              "reason": "stop",
+              "entryHourIST": 14,
+              "entryDowIST": 1
+            }
+          },
+          {
+            "symbol": "SPCXUSDT",
+            "pnl": -20.56,
+            "entryTs": 1792551600000,
+            "reason": "stop",
+            "meta": {
+              "mae": 3.009999999999991,
+              "mfe": 3.3200000000000216,
+              "maeAtr": 1.1934296233361616,
+              "mfeAtr": 1.3163409798923902,
+              "atr": 2.5221428571428572,
+              "stopDist": 2.4236999999999966,
+              "session": "premarket_utc",
+              "htf": null,
+              "holdBars": 10,
+              "reason": "stop",
+              "entryHourIST": 8,
+              "entryDowIST": 3
+            }
+          },
+          {
+            "symbol": "METAUSDT",
+            "pnl": -19.2,
+            "entryTs": 1792418400000,
+            "reason": "stop",
+            "meta": {
+              "mae": 50.110000000000014,
+              "mfe": 16.49000000000001,
+              "maeAtr": 10.193839000290593,
+              "mfeAtr": 3.3545480964835743,
+              "atr": 4.915714285714297,
+              "stopDist": 10.483349999999973,
+              "session": "premarket_utc",
+              "htf": null,
+              "holdBars": 54,
+              "reason": "stop",
+              "entryHourIST": 19,
+              "entryDowIST": 1
+            }
+          }
+        ],
+        "pctOfLosses": 27.3
+      },
+      {
+        "cause": "gap_or_slippage_like",
+        "count": 3,
+        "pnl": -52.79,
+        "examples": [
+          {
+            "symbol": "SOXSUSDT",
+            "pnl": -16.98,
+            "entryTs": 1791795600000,
+            "reason": "stop",
+            "meta": {
+              "mae": 2.009999999999998,
+              "mfe": 0.3500000000000014,
+              "maeAtr": 4.697829716193644,
+              "mfeAtr": 0.8180300500834745,
+              "atr": 0.4278571428571435,
+              "stopDist": 0.5318999999999932,
+              "session": "premarket_utc",
+              "htf": null,
+              "holdBars": 6,
+              "reason": "stop",
+              "entryHourIST": 14,
+              "entryDowIST": 1
+            }
+          },
+          {
+            "symbol": "METAUSDT",
+            "pnl": -19.2,
+            "entryTs": 1792418400000,
+            "reason": "stop",
+            "meta": {
+              "mae": 50.110000000000014,
+              "mfe": 16.49000000000001,
+              "maeAtr": 10.193839000290593,
+              "mfeAtr": 3.3545480964835743,
+              "atr": 4.915714285714297,
+              "stopDist": 10.483349999999973,
+              "session": "premarket_utc",
+              "htf": null,
+              "holdBars": 54,
+              "reason": "stop",
+              "entryHourIST": 19,
+              "entryDowIST": 1
+            }
+          },
+          {
+            "symbol": "AMDUSDT",
+            "pnl": -16.61,
+            "entryTs": 1793638800000,
+            "reason": "stop",
+            "meta": {
+              "mae": 45.549999999999955,
+              "mfe": 24.230000000000018,
+              "maeAtr": 7.629815745393644,
+              "mfeAtr": 4.0586264656616535,
+              "atr": 5.969999999999986,
+              "stopDist": 7.362749999999949,
+              "session": "us_cash",
+              "htf": null,
+              "holdBars": 28,
+              "reason": "stop",
+              "entryHourIST": 22,
+              "entryDowIST": 1
+            }
+          }
+        ],
+        "pctOfLosses": 27.3
+      },
+      {
+        "cause": "noise_stop_out",
+        "count": 2,
+        "pnl": -35.81,
+        "examples": [
+          {
+            "symbol": "METAUSDT",
+            "pnl": -19.2,
+            "entryTs": 1792418400000,
+            "reason": "stop",
+            "meta": {
+              "mae": 50.110000000000014,
+              "mfe": 16.49000000000001,
+              "maeAtr": 10.193839000290593,
+              "mfeAtr": 3.3545480964835743,
+              "atr": 4.915714285714297,
+              "stopDist": 10.483349999999973,
+              "session": "premarket_utc",
+              "htf": null,
+              "holdBars": 54,
+              "reason": "stop",
+              "entryHourIST": 19,
+              "entryDowIST": 1
+            }
+          },
+          {
+            "symbol": "AMDUSDT",
+            "pnl": -16.61,
+            "entryTs": 1793638800000,
+            "reason": "stop",
+            "meta": {
+              "mae": 45.549999999999955,
+              "mfe": 24.230000000000018,
+              "maeAtr": 7.629815745393644,
+              "mfeAtr": 4.0586264656616535,
+              "atr": 5.969999999999986,
+              "stopDist": 7.362749999999949,
+              "session": "us_cash",
+              "htf": null,
+              "holdBars": 28,
+              "reason": "stop",
+              "entryHourIST": 22,
+              "entryDowIST": 1
+            }
+          }
+        ],
+        "pctOfLosses": 18.2
+      },
+      {
+        "cause": "against_htf_trend",
+        "count": 3,
+        "pnl": -20.36,
+        "examples": [
+          {
+            "symbol": "PLTRUSDT",
+            "pnl": -7.48,
+            "entryTs": 1792166400000,
+            "reason": "max hold",
+            "meta": {
+              "mae": 9.329999999999984,
+              "mfe": 4.480000000000018,
+              "maeAtr": 4.149301143583211,
+              "mfeAtr": 1.99237611181703,
+              "atr": 2.248571428571434,
+              "stopDist": 2.818499999999972,
+              "session": "us_cash",
+              "htf": "LONG",
+              "holdBars": 72,
+              "reason": "max hold",
+              "entryHourIST": 21,
+              "entryDowIST": 5
+            }
+          },
+          {
+            "symbol": "CRCLUSDT",
+            "pnl": -2.54,
+            "entryTs": 1793894400000,
+            "reason": "max hold",
+            "meta": {
+              "mae": 3.8600000000000136,
+              "mfe": 0.4899999999999949,
+              "maeAtr": 2.620756547041712,
+              "mfeAtr": 0.33268671193016086,
+              "atr": 1.4728571428571453,
+              "stopDist": 0.9910499999999871,
+              "session": "us_cash",
+              "htf": "SHORT",
+              "holdBars": 72,
+              "reason": "max hold",
+              "entryHourIST": 21,
+              "entryDowIST": 4
+            }
+          },
+          {
+            "symbol": "COINUSDT",
+            "pnl": -10.34,
+            "entryTs": 1793988000000,
+            "reason": "max hold",
+            "meta": {
+              "mae": 6.72999999999999,
+              "mfe": 5.27000000000001,
+              "maeAtr": 3.070055392636036,
+              "mfeAtr": 2.404040404040411,
+              "atr": 2.192142857142855,
+              "stopDist": 1.9966499999999883,
+              "session": "us_cash",
+              "htf": "SHORT",
+              "holdBars": 72,
+              "reason": "max hold",
+              "entryHourIST": 23,
+              "entryDowIST": 5
+            }
+          }
+        ],
+        "pctOfLosses": 27.3
+      },
+      {
+        "cause": "weekend_risk_window",
+        "count": 2,
+        "pnl": -17.82,
+        "examples": [
+          {
+            "symbol": "PLTRUSDT",
+            "pnl": -7.48,
+            "entryTs": 1792166400000,
+            "reason": "max hold",
+            "meta": {
+              "mae": 9.329999999999984,
+              "mfe": 4.480000000000018,
+              "maeAtr": 4.149301143583211,
+              "mfeAtr": 1.99237611181703,
+              "atr": 2.248571428571434,
+              "stopDist": 2.818499999999972,
+              "session": "us_cash",
+              "htf": "LONG",
+              "holdBars": 72,
+              "reason": "max hold",
+              "entryHourIST": 21,
+              "entryDowIST": 5
+            }
+          },
+          {
+            "symbol": "COINUSDT",
+            "pnl": -10.34,
+            "entryTs": 1793988000000,
+            "reason": "max hold",
+            "meta": {
+              "mae": 6.72999999999999,
+              "mfe": 5.27000000000001,
+              "maeAtr": 3.070055392636036,
+              "mfeAtr": 2.404040404040411,
+              "atr": 2.192142857142855,
+              "stopDist": 1.9966499999999883,
+              "session": "us_cash",
+              "htf": "SHORT",
+              "holdBars": 72,
+              "reason": "max hold",
+              "entryHourIST": 23,
+              "entryDowIST": 5
+            }
+          }
+        ],
+        "pctOfLosses": 18.2
+      },
+      {
+        "cause": "correlated_cluster",
+        "count": 4,
+        "pnl": -12.98,
+        "examples": [
+          {
+            "symbol": "CRCLUSDT",
+            "pnl": -2.54,
+            "entryTs": 1793894400000,
+            "reason": "max hold",
+            "meta": {
+              "mae": 3.8600000000000136,
+              "mfe": 0.4899999999999949,
+              "maeAtr": 2.620756547041712,
+              "mfeAtr": 0.33268671193016086,
+              "atr": 1.4728571428571453,
+              "stopDist": 0.9910499999999871,
+              "session": "us_cash",
+              "htf": "SHORT",
+              "holdBars": 72,
+              "reason": "max hold",
+              "entryHourIST": 21,
+              "entryDowIST": 4
+            }
+          },
+          {
+            "symbol": "UVXYUSDT",
+            "pnl": -1.94,
+            "entryTs": 1793901600000,
+            "reason": "max hold",
+            "meta": {
+              "mae": 2.6499999999999986,
+              "mfe": 1.5600000000000023,
+              "maeAtr": 2.93280632411067,
+              "mfeAtr": 1.7264822134387374,
+              "atr": 0.9035714285714287,
+              "stopDist": 0.3325499999999977,
+              "session": "us_cash",
+              "htf": null,
+              "holdBars": 72,
+              "reason": "max hold",
+              "entryHourIST": 23,
+              "entryDowIST": 4
+            }
+          },
+          {
+            "symbol": "RKLBUSDT",
+            "pnl": -6.83,
+            "entryTs": 1794236400000,
+            "reason": "eod_flatten",
+            "meta": {
+              "mae": 3.559999999999995,
+              "mfe": 0.240000000000002,
+              "maeAtr": 2.8334280841387107,
+              "mfeAtr": 0.19101762364980257,
+              "atr": 1.2564285714285717,
+              "stopDist": 0.8429999999999964,
+              "session": "us_cash",
+              "htf": null,
+              "holdBars": 4,
+              "reason": "eod_flatten",
+              "entryHourIST": 20,
+              "entryDowIST": 1
+            }
+          }
+        ],
+        "pctOfLosses": 36.4
+      },
+      {
+        "cause": "unclassified_stop_or_thesis",
+        "count": 3,
+        "pnl": -10.44,
+        "examples": [
+          {
+            "symbol": "UVXYUSDT",
+            "pnl": -1.94,
+            "entryTs": 1793901600000,
+            "reason": "max hold",
+            "meta": {
+              "mae": 2.6499999999999986,
+              "mfe": 1.5600000000000023,
+              "maeAtr": 2.93280632411067,
+              "mfeAtr": 1.7264822134387374,
+              "atr": 0.9035714285714287,
+              "stopDist": 0.3325499999999977,
+              "session": "us_cash",
+              "htf": null,
+              "holdBars": 72,
+              "reason": "max hold",
+              "entryHourIST": 23,
+              "entryDowIST": 4
+            }
+          },
+          {
+            "symbol": "RKLBUSDT",
+            "pnl": -6.83,
+            "entryTs": 1794236400000,
+            "reason": "eod_flatten",
+            "meta": {
+              "mae": 3.559999999999995,
+              "mfe": 0.240000000000002,
+              "maeAtr": 2.8334280841387107,
+              "mfeAtr": 0.19101762364980257,
+              "atr": 1.2564285714285717,
+              "stopDist": 0.8429999999999964,
+              "session": "us_cash",
+              "htf": null,
+              "holdBars": 4,
+              "reason": "eod_flatten",
+              "entryHourIST": 20,
+              "entryDowIST": 1
+            }
+          },
+          {
+            "symbol": "AMDUSDT",
+            "pnl": -1.67,
+            "entryTs": 1794240000000,
+            "reason": "eod_flatten",
+            "meta": {
+              "mae": 9.259999999999991,
+              "mfe": 5.699999999999989,
+              "maeAtr": 1.0063654712001229,
+              "mfeAtr": 0.6194690265486711,
+              "atr": 9.201428571428576,
+              "stopDist": 7.517099999999971,
+              "session": "us_cash",
+              "htf": null,
+              "holdBars": 3,
+              "reason": "eod_flatten",
+              "entryHourIST": 21,
+              "entryDowIST": 1
+            }
+          }
+        ],
+        "pctOfLosses": 27.3
+      },
+      {
+        "cause": "late_entry_extended",
+        "count": 1,
+        "pnl": -7.8,
+        "examples": [
+          {
+            "symbol": "QQQUSDT",
+            "pnl": -7.8,
+            "entryTs": 1791482400000,
+            "reason": "max hold",
+            "meta": {
+              "mae": 8.789999999999964,
+              "mfe": 0.8899999999999864,
+              "maeAtr": 2.7885791978245833,
+              "mfeAtr": 0.2823476093360468,
+              "atr": 3.152142857142873,
+              "stopDist": 11.202749999999924,
+              "session": "us_cash",
+              "htf": null,
+              "holdBars": 72,
+              "reason": "max hold",
+              "entryHourIST": 23,
+              "entryDowIST": 4
+            }
+          }
+        ],
+        "pctOfLosses": 9.1
+      }
+    ],
+    "correlation": {
+      "multiLossTradeCount": 4,
+      "multiPnl": -12.98,
+      "examples": [
+        {
+          "day": "2026-11-05",
+          "n": 2,
+          "symbols": [
+            "CRCLUSDT",
+            "UVXYUSDT"
+          ]
+        },
+        {
+          "day": "2026-11-09",
+          "n": 2,
+          "symbols": [
+            "RKLBUSDT",
+            "AMDUSDT"
+          ]
+        }
+      ]
+    },
+    "classifiedSample": [
+      {
+        "symbol": "QQQUSDT",
+        "pnl": -7.8,
+        "reason": "max hold",
+        "causes": [
+          "late_entry_extended"
+        ],
+        "session": "us_cash",
+        "htf": null,
+        "maeAtr": 2.79,
+        "mfeAtr": 0.28
+      },
+      {
+        "symbol": "SOXSUSDT",
+        "pnl": -16.98,
+        "reason": "stop",
+        "causes": [
+          "illiquid_session",
+          "gap_or_slippage_like"
+        ],
+        "session": "premarket_utc",
+        "htf": null,
+        "maeAtr": 4.7,
+        "mfeAtr": 0.82
+      },
+      {
+        "symbol": "PLTRUSDT",
+        "pnl": -7.48,
+        "reason": "max hold",
+        "causes": [
+          "against_htf_trend",
+          "weekend_risk_window"
+        ],
+        "session": "us_cash",
+        "htf": "LONG",
+        "maeAtr": 4.15,
+        "mfeAtr": 1.99
+      },
+      {
+        "symbol": "SPCXUSDT",
+        "pnl": -20.56,
+        "reason": "stop",
+        "causes": [
+          "illiquid_session"
+        ],
+        "session": "premarket_utc",
+        "htf": null,
+        "maeAtr": 1.19,
+        "mfeAtr": 1.32
+      },
+      {
+        "symbol": "METAUSDT",
+        "pnl": -19.2,
+        "reason": "stop",
+        "causes": [
+          "noise_stop_out",
+          "illiquid_session",
+          "gap_or_slippage_like"
+        ],
+        "session": "premarket_utc",
+        "htf": null,
+        "maeAtr": 10.19,
+        "mfeAtr": 3.35
+      },
+      {
+        "symbol": "AMDUSDT",
+        "pnl": -16.61,
+        "reason": "stop",
+        "causes": [
+          "noise_stop_out",
+          "gap_or_slippage_like"
+        ],
+        "session": "us_cash",
+        "htf": null,
+        "maeAtr": 7.63,
+        "mfeAtr": 4.06
+      },
+      {
+        "symbol": "CRCLUSDT",
+        "pnl": -2.54,
+        "reason": "max hold",
+        "causes": [
+          "against_htf_trend",
+          "correlated_cluster"
+        ],
+        "session": "us_cash",
+        "htf": "SHORT",
+        "maeAtr": 2.62,
+        "mfeAtr": 0.33
+      },
+      {
+        "symbol": "UVXYUSDT",
+        "pnl": -1.94,
+        "reason": "max hold",
+        "causes": [
+          "unclassified_stop_or_thesis",
+          "correlated_cluster"
+        ],
+        "session": "us_cash",
+        "htf": null,
+        "maeAtr": 2.93,
+        "mfeAtr": 1.73
+      },
+      {
+        "symbol": "COINUSDT",
+        "pnl": -10.34,
+        "reason": "max hold",
+        "causes": [
+          "against_htf_trend",
+          "weekend_risk_window"
+        ],
+        "session": "us_cash",
+        "htf": "SHORT",
+        "maeAtr": 3.07,
+        "mfeAtr": 2.4
+      },
+      {
+        "symbol": "RKLBUSDT",
+        "pnl": -6.83,
+        "reason": "eod_flatten",
+        "causes": [
+          "unclassified_stop_or_thesis",
+          "correlated_cluster"
+        ],
+        "session": "us_cash",
+        "htf": null,
+        "maeAtr": 2.83,
+        "mfeAtr": 0.19
+      },
+      {
+        "symbol": "AMDUSDT",
+        "pnl": -1.67,
+        "reason": "eod_flatten",
+        "causes": [
+          "unclassified_stop_or_thesis",
+          "correlated_cluster"
+        ],
+        "session": "us_cash",
+        "htf": null,
+        "maeAtr": 1.01,
+        "mfeAtr": 0.62
+      }
+    ]
+  },
+  "fixes": {
+    "A": [
+      {
+        "fix": "us_cash_only",
+        "desc": "Trade only during US cash session (≈14:30–21:00 UTC)",
+        "oos": {
+          "trades": 9,
+          "wins": 3,
+          "losses": 6,
+          "winRate": 0.333,
+          "profitFactor": 0.94,
+          "totalPnlPct": -0.76,
+          "endEquity": 793.95,
+          "maxDdPct": 2.08,
+          "avgDailyPctAllDays": -0.0042,
+          "geoAvgDailyPct": 0.1538,
+          "meanDailyPctTradeDays": -0.0492,
+          "tradeDays": 4,
+          "calendarDays": 47,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 57,
+          "wins": 25,
+          "losses": 32,
+          "winRate": 0.439,
+          "profitFactor": 1.37,
+          "totalPnlPct": 29.24,
+          "endEquity": 1033.92,
+          "maxDdPct": 12.19,
+          "avgDailyPctAllDays": 0.493,
+          "geoAvgDailyPct": 0.5607,
+          "meanDailyPctTradeDays": 0.9543,
+          "tradeDays": 31,
+          "calendarDays": 60,
+          "lowSample": false
+        },
+        "train": {
+          "trades": 30,
+          "wins": 10,
+          "losses": 20,
+          "winRate": 0.333,
+          "profitFactor": 0.71,
+          "totalPnlPct": -11.13,
+          "endEquity": 710.98,
+          "maxDdPct": 21.95,
+          "avgDailyPctAllDays": -0.1419,
+          "geoAvgDailyPct": -0.239,
+          "meanDailyPctTradeDays": -0.6719,
+          "tradeDays": 15,
+          "calendarDays": 71,
+          "lowSample": false
+        },
+        "vsBaseline": {
+          "dWR": 10.2,
+          "dPF": 0.36,
+          "dNet": 7.58,
+          "tradeRatio": 0.69
+        },
+        "adopt": true,
+        "lowN": true
+      },
+      {
+        "fix": "htf_align",
+        "desc": "Require 1d EMA20/50 alignment with trade direction",
+        "oos": {
+          "trades": 13,
+          "wins": 3,
+          "losses": 10,
+          "winRate": 0.231,
+          "profitFactor": 0.58,
+          "totalPnlPct": -8.34,
+          "endEquity": 733.29,
+          "maxDdPct": 4.38,
+          "avgDailyPctAllDays": -0.1694,
+          "geoAvgDailyPct": 0.0332,
+          "meanDailyPctTradeDays": -1.9904,
+          "tradeDays": 4,
+          "calendarDays": 47,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 73,
+          "wins": 31,
+          "losses": 42,
+          "winRate": 0.425,
+          "profitFactor": 1.12,
+          "totalPnlPct": 13.46,
+          "endEquity": 907.69,
+          "maxDdPct": 22.96,
+          "avgDailyPctAllDays": 0.2973,
+          "geoAvgDailyPct": 0.344,
+          "meanDailyPctTradeDays": 0.5246,
+          "tradeDays": 34,
+          "calendarDays": 60,
+          "lowSample": false
+        },
+        "train": {
+          "trades": 58,
+          "wins": 23,
+          "losses": 35,
+          "winRate": 0.397,
+          "profitFactor": 1.03,
+          "totalPnlPct": 1.99,
+          "endEquity": 815.89,
+          "maxDdPct": 27.99,
+          "avgDailyPctAllDays": 0.0945,
+          "geoAvgDailyPct": -0.1133,
+          "meanDailyPctTradeDays": 0.3196,
+          "tradeDays": 21,
+          "calendarDays": 71,
+          "lowSample": false
+        },
+        "vsBaseline": {
+          "dWR": 0,
+          "dPF": 0,
+          "dNet": 0,
+          "tradeRatio": 1
+        },
+        "adopt": false,
+        "lowN": true
+      },
+      {
+        "fix": "wider_stop_2atr",
+        "desc": "Place stop at 2×ATR beyond entry (reduce noise stop-outs)",
+        "oos": {
+          "trades": 12,
+          "wins": 3,
+          "losses": 9,
+          "winRate": 0.25,
+          "profitFactor": 0.68,
+          "totalPnlPct": -5.52,
+          "endEquity": 755.86,
+          "maxDdPct": 6.29,
+          "avgDailyPctAllDays": -0.0993,
+          "geoAvgDailyPct": 0.0706,
+          "meanDailyPctTradeDays": -1.1673,
+          "tradeDays": 4,
+          "calendarDays": 47,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 73,
+          "wins": 40,
+          "losses": 33,
+          "winRate": 0.548,
+          "profitFactor": 2.05,
+          "totalPnlPct": 113.75,
+          "endEquity": 1709.99,
+          "maxDdPct": 9.37,
+          "avgDailyPctAllDays": 1.3531,
+          "geoAvgDailyPct": 1.426,
+          "meanDailyPctTradeDays": 2.1942,
+          "tradeDays": 37,
+          "calendarDays": 60,
+          "lowSample": false
+        },
+        "train": {
+          "trades": 48,
+          "wins": 11,
+          "losses": 37,
+          "winRate": 0.229,
+          "profitFactor": 0.44,
+          "totalPnlPct": -36.76,
+          "endEquity": 505.91,
+          "maxDdPct": 44.87,
+          "avgDailyPctAllDays": -0.5864,
+          "geoAvgDailyPct": -0.8125,
+          "meanDailyPctTradeDays": -2.3132,
+          "tradeDays": 18,
+          "calendarDays": 71,
+          "lowSample": false
+        },
+        "vsBaseline": {
+          "dWR": 1.9,
+          "dPF": 0.1,
+          "dNet": 2.82,
+          "tradeRatio": 0.92
+        },
+        "adopt": true,
+        "lowN": true
+      },
+      {
+        "fix": "max_stop_2_5atr",
+        "desc": "Skip late/extended entries where stop distance > 2.5 ATR",
+        "oos": {
+          "trades": 13,
+          "wins": 4,
+          "losses": 9,
+          "winRate": 0.308,
+          "profitFactor": 0.85,
+          "totalPnlPct": -2.85,
+          "endEquity": 777.21,
+          "maxDdPct": 2.08,
+          "avgDailyPctAllDays": -0.0451,
+          "geoAvgDailyPct": 0.1572,
+          "meanDailyPctTradeDays": -0.5295,
+          "tradeDays": 4,
+          "calendarDays": 47,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 88,
+          "wins": 42,
+          "losses": 46,
+          "winRate": 0.477,
+          "profitFactor": 1.48,
+          "totalPnlPct": 66.71,
+          "endEquity": 1333.66,
+          "maxDdPct": 20.83,
+          "avgDailyPctAllDays": 0.9389,
+          "geoAvgDailyPct": 1.0283,
+          "meanDailyPctTradeDays": 1.5225,
+          "tradeDays": 37,
+          "calendarDays": 60,
+          "lowSample": false
+        },
+        "train": {
+          "trades": 59,
+          "wins": 23,
+          "losses": 36,
+          "winRate": 0.39,
+          "profitFactor": 1.04,
+          "totalPnlPct": 3.34,
+          "endEquity": 826.73,
+          "maxDdPct": 27.99,
+          "avgDailyPctAllDays": 0.1118,
+          "geoAvgDailyPct": -0.0762,
+          "meanDailyPctTradeDays": 0.3608,
+          "tradeDays": 22,
+          "calendarDays": 71,
+          "lowSample": false
+        },
+        "vsBaseline": {
+          "dWR": 7.7,
+          "dPF": 0.27,
+          "dNet": 5.49,
+          "tradeRatio": 1
+        },
+        "adopt": true,
+        "lowN": true
+      },
+      {
+        "fix": "fresh_level",
+        "desc": "Reject liquidity signals with level age > 8 bars",
+        "oos": {
+          "trades": 13,
+          "wins": 3,
+          "losses": 10,
+          "winRate": 0.231,
+          "profitFactor": 0.58,
+          "totalPnlPct": -8.34,
+          "endEquity": 733.29,
+          "maxDdPct": 4.38,
+          "avgDailyPctAllDays": -0.1694,
+          "geoAvgDailyPct": 0.0332,
+          "meanDailyPctTradeDays": -1.9904,
+          "tradeDays": 4,
+          "calendarDays": 47,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 78,
+          "wins": 34,
+          "losses": 44,
+          "winRate": 0.436,
+          "profitFactor": 1.24,
+          "totalPnlPct": 29.93,
+          "endEquity": 1039.41,
+          "maxDdPct": 17.41,
+          "avgDailyPctAllDays": 0.5264,
+          "geoAvgDailyPct": 0.6094,
+          "meanDailyPctTradeDays": 0.9571,
+          "tradeDays": 33,
+          "calendarDays": 60,
+          "lowSample": false
+        },
+        "train": {
+          "trades": 58,
+          "wins": 23,
+          "losses": 35,
+          "winRate": 0.397,
+          "profitFactor": 1.03,
+          "totalPnlPct": 1.99,
+          "endEquity": 815.89,
+          "maxDdPct": 27.99,
+          "avgDailyPctAllDays": 0.0945,
+          "geoAvgDailyPct": -0.1133,
+          "meanDailyPctTradeDays": 0.3196,
+          "tradeDays": 21,
+          "calendarDays": 71,
+          "lowSample": false
+        },
+        "vsBaseline": {
+          "dWR": 0,
+          "dPF": 0,
+          "dNet": 0,
+          "tradeRatio": 1
+        },
+        "adopt": false,
+        "lowN": true
+      },
+      {
+        "fix": "cash_htf",
+        "desc": "US cash + HTF align combined",
+        "oos": {
+          "trades": 9,
+          "wins": 3,
+          "losses": 6,
+          "winRate": 0.333,
+          "profitFactor": 0.94,
+          "totalPnlPct": -0.76,
+          "endEquity": 793.95,
+          "maxDdPct": 2.08,
+          "avgDailyPctAllDays": -0.0042,
+          "geoAvgDailyPct": 0.1538,
+          "meanDailyPctTradeDays": -0.0492,
+          "tradeDays": 4,
+          "calendarDays": 47,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 52,
+          "wins": 23,
+          "losses": 29,
+          "winRate": 0.442,
+          "profitFactor": 1.4,
+          "totalPnlPct": 27.84,
+          "endEquity": 1022.75,
+          "maxDdPct": 12.02,
+          "avgDailyPctAllDays": 0.4659,
+          "geoAvgDailyPct": 0.5438,
+          "meanDailyPctTradeDays": 0.9317,
+          "tradeDays": 30,
+          "calendarDays": 60,
+          "lowSample": false
+        },
+        "train": {
+          "trades": 30,
+          "wins": 10,
+          "losses": 20,
+          "winRate": 0.333,
+          "profitFactor": 0.71,
+          "totalPnlPct": -11.13,
+          "endEquity": 710.98,
+          "maxDdPct": 21.95,
+          "avgDailyPctAllDays": -0.1419,
+          "geoAvgDailyPct": -0.239,
+          "meanDailyPctTradeDays": -0.6719,
+          "tradeDays": 15,
+          "calendarDays": 71,
+          "lowSample": false
+        },
+        "vsBaseline": {
+          "dWR": 10.2,
+          "dPF": 0.36,
+          "dNet": 7.58,
+          "tradeRatio": 0.69
+        },
+        "adopt": true,
+        "lowN": true
+      },
+      {
+        "fix": "cash_htf_fresh",
+        "desc": "US cash + HTF + fresh level",
+        "oos": {
+          "trades": 9,
+          "wins": 3,
+          "losses": 6,
+          "winRate": 0.333,
+          "profitFactor": 0.94,
+          "totalPnlPct": -0.76,
+          "endEquity": 793.95,
+          "maxDdPct": 2.08,
+          "avgDailyPctAllDays": -0.0042,
+          "geoAvgDailyPct": 0.1538,
+          "meanDailyPctTradeDays": -0.0492,
+          "tradeDays": 4,
+          "calendarDays": 47,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 52,
+          "wins": 23,
+          "losses": 29,
+          "winRate": 0.442,
+          "profitFactor": 1.4,
+          "totalPnlPct": 27.84,
+          "endEquity": 1022.75,
+          "maxDdPct": 12.02,
+          "avgDailyPctAllDays": 0.4659,
+          "geoAvgDailyPct": 0.5438,
+          "meanDailyPctTradeDays": 0.9317,
+          "tradeDays": 30,
+          "calendarDays": 60,
+          "lowSample": false
+        },
+        "train": {
+          "trades": 30,
+          "wins": 10,
+          "losses": 20,
+          "winRate": 0.333,
+          "profitFactor": 0.71,
+          "totalPnlPct": -11.13,
+          "endEquity": 710.98,
+          "maxDdPct": 21.95,
+          "avgDailyPctAllDays": -0.1419,
+          "geoAvgDailyPct": -0.239,
+          "meanDailyPctTradeDays": -0.6719,
+          "tradeDays": 15,
+          "calendarDays": 71,
+          "lowSample": false
+        },
+        "vsBaseline": {
+          "dWR": 10.2,
+          "dPF": 0.36,
+          "dNet": 7.58,
+          "tradeRatio": 0.69
+        },
+        "adopt": true,
+        "lowN": true
+      },
+      {
+        "fix": "cash_htf_maxext",
+        "desc": "US cash + HTF + max stop 2.5 ATR",
+        "oos": {
+          "trades": 9,
+          "wins": 3,
+          "losses": 6,
+          "winRate": 0.333,
+          "profitFactor": 0.94,
+          "totalPnlPct": -0.68,
+          "endEquity": 794.54,
+          "maxDdPct": 2.08,
+          "avgDailyPctAllDays": -0.0025,
+          "geoAvgDailyPct": 0.1554,
+          "meanDailyPctTradeDays": -0.0293,
+          "tradeDays": 4,
+          "calendarDays": 47,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 53,
+          "wins": 24,
+          "losses": 29,
+          "winRate": 0.453,
+          "profitFactor": 1.39,
+          "totalPnlPct": 27.82,
+          "endEquity": 1022.57,
+          "maxDdPct": 13.41,
+          "avgDailyPctAllDays": 0.4758,
+          "geoAvgDailyPct": 0.5436,
+          "meanDailyPctTradeDays": 0.9845,
+          "tradeDays": 29,
+          "calendarDays": 60,
+          "lowSample": false
+        },
+        "train": {
+          "trades": 30,
+          "wins": 10,
+          "losses": 20,
+          "winRate": 0.333,
+          "profitFactor": 0.76,
+          "totalPnlPct": -9.11,
+          "endEquity": 727.12,
+          "maxDdPct": 21.95,
+          "avgDailyPctAllDays": -0.1084,
+          "geoAvgDailyPct": -0.193,
+          "meanDailyPctTradeDays": -0.5133,
+          "tradeDays": 15,
+          "calendarDays": 71,
+          "lowSample": false
+        },
+        "vsBaseline": {
+          "dWR": 10.2,
+          "dPF": 0.36,
+          "dNet": 7.66,
+          "tradeRatio": 0.69
+        },
+        "adopt": true,
+        "lowN": true
+      }
+    ],
+    "B": [
+      {
+        "fix": "us_cash_only",
+        "desc": "Trade only during US cash session (≈14:30–21:00 UTC)",
+        "oos": {
+          "trades": 11,
+          "wins": 6,
+          "losses": 5,
+          "winRate": 0.545,
+          "profitFactor": 3.3,
+          "totalPnlPct": 9.36,
+          "endEquity": 874.89,
+          "maxDdPct": 2.08,
+          "avgDailyPctAllDays": 0.5369,
+          "geoAvgDailyPct": 0.467,
+          "meanDailyPctTradeDays": 1.6106,
+          "tradeDays": 6,
+          "calendarDays": 18,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 29,
+          "wins": 21,
+          "losses": 8,
+          "winRate": 0.724,
+          "profitFactor": 4.91,
+          "totalPnlPct": 36.3,
+          "endEquity": 1090.39,
+          "maxDdPct": 2.15,
+          "avgDailyPctAllDays": 0.7428,
+          "geoAvgDailyPct": 0.7096,
+          "meanDailyPctTradeDays": 1.8787,
+          "tradeDays": 17,
+          "calendarDays": 43,
+          "lowSample": true
+        },
+        "train": {
+          "trades": 12,
+          "wins": 10,
+          "losses": 2,
+          "winRate": 0.833,
+          "profitFactor": 8.76,
+          "totalPnlPct": 14.64,
+          "endEquity": 917.1,
+          "maxDdPct": 0,
+          "avgDailyPctAllDays": 0.5325,
+          "geoAvgDailyPct": 0.4346,
+          "meanDailyPctTradeDays": 1.978,
+          "tradeDays": 7,
+          "calendarDays": 26,
+          "lowSample": true
+        },
+        "vsBaseline": {
+          "dWR": 9,
+          "dPF": 0.08,
+          "dNet": -1.71,
+          "tradeRatio": 1
+        },
+        "adopt": true,
+        "lowN": true
+      },
+      {
+        "fix": "htf_align",
+        "desc": "Require 1d EMA20/50 alignment with trade direction",
+        "oos": {
+          "trades": 11,
+          "wins": 5,
+          "losses": 6,
+          "winRate": 0.455,
+          "profitFactor": 3.22,
+          "totalPnlPct": 11.07,
+          "endEquity": 888.52,
+          "maxDdPct": 2.08,
+          "avgDailyPctAllDays": 0.6502,
+          "geoAvgDailyPct": 0.625,
+          "meanDailyPctTradeDays": 2.3407,
+          "tradeDays": 5,
+          "calendarDays": 18,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 40,
+          "wins": 21,
+          "losses": 19,
+          "winRate": 0.525,
+          "profitFactor": 1.45,
+          "totalPnlPct": 13.9,
+          "endEquity": 911.16,
+          "maxDdPct": 12.24,
+          "avgDailyPctAllDays": 0.3346,
+          "geoAvgDailyPct": 0.3198,
+          "meanDailyPctTradeDays": 0.654,
+          "tradeDays": 22,
+          "calendarDays": 43,
+          "lowSample": false
+        },
+        "train": {
+          "trades": 17,
+          "wins": 12,
+          "losses": 5,
+          "winRate": 0.706,
+          "profitFactor": 2.69,
+          "totalPnlPct": 15.23,
+          "endEquity": 921.8,
+          "maxDdPct": 4.32,
+          "avgDailyPctAllDays": 0.5575,
+          "geoAvgDailyPct": 0.4487,
+          "meanDailyPctTradeDays": 1.6107,
+          "tradeDays": 9,
+          "calendarDays": 26,
+          "lowSample": true
+        },
+        "vsBaseline": {
+          "dWR": 0,
+          "dPF": 0,
+          "dNet": 0,
+          "tradeRatio": 1
+        },
+        "adopt": false,
+        "lowN": true
+      },
+      {
+        "fix": "wider_stop_2atr",
+        "desc": "Place stop at 2×ATR beyond entry (reduce noise stop-outs)",
+        "oos": {
+          "trades": 24,
+          "wins": 10,
+          "losses": 14,
+          "winRate": 0.417,
+          "profitFactor": 1.04,
+          "totalPnlPct": 1.27,
+          "endEquity": 810.19,
+          "maxDdPct": 5.84,
+          "avgDailyPctAllDays": 0.0932,
+          "geoAvgDailyPct": -0.0531,
+          "meanDailyPctTradeDays": 0.2397,
+          "tradeDays": 7,
+          "calendarDays": 18,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 76,
+          "wins": 27,
+          "losses": 49,
+          "winRate": 0.355,
+          "profitFactor": 0.8,
+          "totalPnlPct": -18.6,
+          "endEquity": 651.2,
+          "maxDdPct": 23.3,
+          "avgDailyPctAllDays": -0.3837,
+          "geoAvgDailyPct": -0.5289,
+          "meanDailyPctTradeDays": -0.6599,
+          "tradeDays": 25,
+          "calendarDays": 43,
+          "lowSample": false
+        },
+        "train": {
+          "trades": 31,
+          "wins": 12,
+          "losses": 19,
+          "winRate": 0.387,
+          "profitFactor": 0.97,
+          "totalPnlPct": -1.15,
+          "endEquity": 790.79,
+          "maxDdPct": 19.3,
+          "avgDailyPctAllDays": 0.0418,
+          "geoAvgDailyPct": -0.0445,
+          "meanDailyPctTradeDays": 0.0906,
+          "tradeDays": 12,
+          "calendarDays": 26,
+          "lowSample": false
+        },
+        "vsBaseline": {
+          "dWR": -3.8,
+          "dPF": -2.18,
+          "dNet": -9.8,
+          "tradeRatio": 2.18
+        },
+        "adopt": false,
+        "lowN": true
+      },
+      {
+        "fix": "max_stop_2_5atr",
+        "desc": "Skip late/extended entries where stop distance > 2.5 ATR",
+        "oos": {
+          "trades": 2,
+          "wins": 2,
+          "losses": 0,
+          "winRate": 1,
+          "profitFactor": 999,
+          "totalPnlPct": 8.04,
+          "endEquity": 864.3,
+          "maxDdPct": 0,
+          "avgDailyPctAllDays": 0.4379,
+          "geoAvgDailyPct": 0.4304,
+          "meanDailyPctTradeDays": 3.941,
+          "tradeDays": 2,
+          "calendarDays": 18,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 11,
+          "wins": 5,
+          "losses": 6,
+          "winRate": 0.455,
+          "profitFactor": 1.42,
+          "totalPnlPct": 5.87,
+          "endEquity": 846.95,
+          "maxDdPct": 8.71,
+          "avgDailyPctAllDays": 0.1448,
+          "geoAvgDailyPct": 0.1327,
+          "meanDailyPctTradeDays": 0.5662,
+          "tradeDays": 11,
+          "calendarDays": 43,
+          "lowSample": true
+        },
+        "train": {
+          "trades": 5,
+          "wins": 3,
+          "losses": 2,
+          "winRate": 0.6,
+          "profitFactor": 2.61,
+          "totalPnlPct": 7.34,
+          "endEquity": 858.7,
+          "maxDdPct": 2.23,
+          "avgDailyPctAllDays": 0.2827,
+          "geoAvgDailyPct": 0.2727,
+          "meanDailyPctTradeDays": 1.4702,
+          "tradeDays": 5,
+          "calendarDays": 26,
+          "lowSample": true
+        },
+        "vsBaseline": {
+          "dWR": 54.5,
+          "dPF": 995.78,
+          "dNet": -3.03,
+          "tradeRatio": 0.18
+        },
+        "adopt": false,
+        "lowN": true
+      },
+      {
+        "fix": "fresh_level",
+        "desc": "Reject liquidity signals with level age > 8 bars",
+        "oos": {
+          "trades": 11,
+          "wins": 5,
+          "losses": 6,
+          "winRate": 0.455,
+          "profitFactor": 3.22,
+          "totalPnlPct": 11.07,
+          "endEquity": 888.52,
+          "maxDdPct": 2.08,
+          "avgDailyPctAllDays": 0.6502,
+          "geoAvgDailyPct": 0.625,
+          "meanDailyPctTradeDays": 2.3407,
+          "tradeDays": 5,
+          "calendarDays": 18,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 40,
+          "wins": 21,
+          "losses": 19,
+          "winRate": 0.525,
+          "profitFactor": 1.45,
+          "totalPnlPct": 13.85,
+          "endEquity": 910.76,
+          "maxDdPct": 12.21,
+          "avgDailyPctAllDays": 0.3328,
+          "geoAvgDailyPct": 0.3188,
+          "meanDailyPctTradeDays": 0.6815,
+          "tradeDays": 21,
+          "calendarDays": 43,
+          "lowSample": false
+        },
+        "train": {
+          "trades": 17,
+          "wins": 12,
+          "losses": 5,
+          "winRate": 0.706,
+          "profitFactor": 2.69,
+          "totalPnlPct": 15.23,
+          "endEquity": 921.8,
+          "maxDdPct": 4.32,
+          "avgDailyPctAllDays": 0.5575,
+          "geoAvgDailyPct": 0.4487,
+          "meanDailyPctTradeDays": 1.6107,
+          "tradeDays": 9,
+          "calendarDays": 26,
+          "lowSample": true
+        },
+        "vsBaseline": {
+          "dWR": 0,
+          "dPF": 0,
+          "dNet": 0,
+          "tradeRatio": 1
+        },
+        "adopt": false,
+        "lowN": true
+      },
+      {
+        "fix": "cash_htf",
+        "desc": "US cash + HTF align combined",
+        "oos": {
+          "trades": 11,
+          "wins": 6,
+          "losses": 5,
+          "winRate": 0.545,
+          "profitFactor": 3.3,
+          "totalPnlPct": 9.36,
+          "endEquity": 874.89,
+          "maxDdPct": 2.08,
+          "avgDailyPctAllDays": 0.5369,
+          "geoAvgDailyPct": 0.467,
+          "meanDailyPctTradeDays": 1.6106,
+          "tradeDays": 6,
+          "calendarDays": 18,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 28,
+          "wins": 21,
+          "losses": 7,
+          "winRate": 0.75,
+          "profitFactor": 5.44,
+          "totalPnlPct": 37.43,
+          "endEquity": 1099.44,
+          "maxDdPct": 2.15,
+          "avgDailyPctAllDays": 0.7626,
+          "geoAvgDailyPct": 0.729,
+          "meanDailyPctTradeDays": 1.929,
+          "tradeDays": 17,
+          "calendarDays": 43,
+          "lowSample": true
+        },
+        "train": {
+          "trades": 12,
+          "wins": 10,
+          "losses": 2,
+          "winRate": 0.833,
+          "profitFactor": 8.76,
+          "totalPnlPct": 14.64,
+          "endEquity": 917.1,
+          "maxDdPct": 0,
+          "avgDailyPctAllDays": 0.5325,
+          "geoAvgDailyPct": 0.4346,
+          "meanDailyPctTradeDays": 1.978,
+          "tradeDays": 7,
+          "calendarDays": 26,
+          "lowSample": true
+        },
+        "vsBaseline": {
+          "dWR": 9,
+          "dPF": 0.08,
+          "dNet": -1.71,
+          "tradeRatio": 1
+        },
+        "adopt": true,
+        "lowN": true
+      },
+      {
+        "fix": "cash_htf_fresh",
+        "desc": "US cash + HTF + fresh level",
+        "oos": {
+          "trades": 11,
+          "wins": 6,
+          "losses": 5,
+          "winRate": 0.545,
+          "profitFactor": 3.3,
+          "totalPnlPct": 9.36,
+          "endEquity": 874.89,
+          "maxDdPct": 2.08,
+          "avgDailyPctAllDays": 0.5369,
+          "geoAvgDailyPct": 0.467,
+          "meanDailyPctTradeDays": 1.6106,
+          "tradeDays": 6,
+          "calendarDays": 18,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 28,
+          "wins": 21,
+          "losses": 7,
+          "winRate": 0.75,
+          "profitFactor": 5.44,
+          "totalPnlPct": 37.43,
+          "endEquity": 1099.44,
+          "maxDdPct": 2.15,
+          "avgDailyPctAllDays": 0.7626,
+          "geoAvgDailyPct": 0.729,
+          "meanDailyPctTradeDays": 1.929,
+          "tradeDays": 17,
+          "calendarDays": 43,
+          "lowSample": true
+        },
+        "train": {
+          "trades": 12,
+          "wins": 10,
+          "losses": 2,
+          "winRate": 0.833,
+          "profitFactor": 8.76,
+          "totalPnlPct": 14.64,
+          "endEquity": 917.1,
+          "maxDdPct": 0,
+          "avgDailyPctAllDays": 0.5325,
+          "geoAvgDailyPct": 0.4346,
+          "meanDailyPctTradeDays": 1.978,
+          "tradeDays": 7,
+          "calendarDays": 26,
+          "lowSample": true
+        },
+        "vsBaseline": {
+          "dWR": 9,
+          "dPF": 0.08,
+          "dNet": -1.71,
+          "tradeRatio": 1
+        },
+        "adopt": true,
+        "lowN": true
+      },
+      {
+        "fix": "cash_htf_maxext",
+        "desc": "US cash + HTF + max stop 2.5 ATR",
+        "oos": {
+          "trades": 1,
+          "wins": 1,
+          "losses": 0,
+          "winRate": 1,
+          "profitFactor": 999,
+          "totalPnlPct": 3.95,
+          "endEquity": 831.6,
+          "maxDdPct": 0,
+          "avgDailyPctAllDays": 0.2194,
+          "geoAvgDailyPct": 0.2154,
+          "meanDailyPctTradeDays": 3.9496,
+          "tradeDays": 1,
+          "calendarDays": 18,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 4,
+          "wins": 4,
+          "losses": 0,
+          "winRate": 1,
+          "profitFactor": 999,
+          "totalPnlPct": 16.5,
+          "endEquity": 932,
+          "maxDdPct": 0,
+          "avgDailyPctAllDays": 0.362,
+          "geoAvgDailyPct": 0.3558,
+          "meanDailyPctTradeDays": 3.8919,
+          "tradeDays": 4,
+          "calendarDays": 43,
+          "lowSample": true
+        },
+        "train": {
+          "trades": 3,
+          "wins": 3,
+          "losses": 0,
+          "winRate": 1,
+          "profitFactor": 999,
+          "totalPnlPct": 12.07,
+          "endEquity": 896.59,
+          "maxDdPct": 0,
+          "avgDailyPctAllDays": 0.4469,
+          "geoAvgDailyPct": 0.4394,
+          "meanDailyPctTradeDays": 3.8727,
+          "tradeDays": 3,
+          "calendarDays": 26,
+          "lowSample": true
+        },
+        "vsBaseline": {
+          "dWR": 54.5,
+          "dPF": 995.78,
+          "dNet": -7.12,
+          "tradeRatio": 0.09
+        },
+        "adopt": false,
+        "lowN": true
+      }
+    ]
+  },
+  "adoptedFixes": {
+    "A": [
+      {
+        "fix": "us_cash_only",
+        "desc": "Trade only during US cash session (≈14:30–21:00 UTC)",
+        "oos": {
+          "trades": 9,
+          "wins": 3,
+          "losses": 6,
+          "winRate": 0.333,
+          "profitFactor": 0.94,
+          "totalPnlPct": -0.76,
+          "endEquity": 793.95,
+          "maxDdPct": 2.08,
+          "avgDailyPctAllDays": -0.0042,
+          "geoAvgDailyPct": 0.1538,
+          "meanDailyPctTradeDays": -0.0492,
+          "tradeDays": 4,
+          "calendarDays": 47,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 57,
+          "wins": 25,
+          "losses": 32,
+          "winRate": 0.439,
+          "profitFactor": 1.37,
+          "totalPnlPct": 29.24,
+          "endEquity": 1033.92,
+          "maxDdPct": 12.19,
+          "avgDailyPctAllDays": 0.493,
+          "geoAvgDailyPct": 0.5607,
+          "meanDailyPctTradeDays": 0.9543,
+          "tradeDays": 31,
+          "calendarDays": 60,
+          "lowSample": false
+        },
+        "train": {
+          "trades": 30,
+          "wins": 10,
+          "losses": 20,
+          "winRate": 0.333,
+          "profitFactor": 0.71,
+          "totalPnlPct": -11.13,
+          "endEquity": 710.98,
+          "maxDdPct": 21.95,
+          "avgDailyPctAllDays": -0.1419,
+          "geoAvgDailyPct": -0.239,
+          "meanDailyPctTradeDays": -0.6719,
+          "tradeDays": 15,
+          "calendarDays": 71,
+          "lowSample": false
+        },
+        "vsBaseline": {
+          "dWR": 10.2,
+          "dPF": 0.36,
+          "dNet": 7.58,
+          "tradeRatio": 0.69
+        },
+        "adopt": true,
+        "lowN": true
+      },
+      {
+        "fix": "wider_stop_2atr",
+        "desc": "Place stop at 2×ATR beyond entry (reduce noise stop-outs)",
+        "oos": {
+          "trades": 12,
+          "wins": 3,
+          "losses": 9,
+          "winRate": 0.25,
+          "profitFactor": 0.68,
+          "totalPnlPct": -5.52,
+          "endEquity": 755.86,
+          "maxDdPct": 6.29,
+          "avgDailyPctAllDays": -0.0993,
+          "geoAvgDailyPct": 0.0706,
+          "meanDailyPctTradeDays": -1.1673,
+          "tradeDays": 4,
+          "calendarDays": 47,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 73,
+          "wins": 40,
+          "losses": 33,
+          "winRate": 0.548,
+          "profitFactor": 2.05,
+          "totalPnlPct": 113.75,
+          "endEquity": 1709.99,
+          "maxDdPct": 9.37,
+          "avgDailyPctAllDays": 1.3531,
+          "geoAvgDailyPct": 1.426,
+          "meanDailyPctTradeDays": 2.1942,
+          "tradeDays": 37,
+          "calendarDays": 60,
+          "lowSample": false
+        },
+        "train": {
+          "trades": 48,
+          "wins": 11,
+          "losses": 37,
+          "winRate": 0.229,
+          "profitFactor": 0.44,
+          "totalPnlPct": -36.76,
+          "endEquity": 505.91,
+          "maxDdPct": 44.87,
+          "avgDailyPctAllDays": -0.5864,
+          "geoAvgDailyPct": -0.8125,
+          "meanDailyPctTradeDays": -2.3132,
+          "tradeDays": 18,
+          "calendarDays": 71,
+          "lowSample": false
+        },
+        "vsBaseline": {
+          "dWR": 1.9,
+          "dPF": 0.1,
+          "dNet": 2.82,
+          "tradeRatio": 0.92
+        },
+        "adopt": true,
+        "lowN": true
+      },
+      {
+        "fix": "max_stop_2_5atr",
+        "desc": "Skip late/extended entries where stop distance > 2.5 ATR",
+        "oos": {
+          "trades": 13,
+          "wins": 4,
+          "losses": 9,
+          "winRate": 0.308,
+          "profitFactor": 0.85,
+          "totalPnlPct": -2.85,
+          "endEquity": 777.21,
+          "maxDdPct": 2.08,
+          "avgDailyPctAllDays": -0.0451,
+          "geoAvgDailyPct": 0.1572,
+          "meanDailyPctTradeDays": -0.5295,
+          "tradeDays": 4,
+          "calendarDays": 47,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 88,
+          "wins": 42,
+          "losses": 46,
+          "winRate": 0.477,
+          "profitFactor": 1.48,
+          "totalPnlPct": 66.71,
+          "endEquity": 1333.66,
+          "maxDdPct": 20.83,
+          "avgDailyPctAllDays": 0.9389,
+          "geoAvgDailyPct": 1.0283,
+          "meanDailyPctTradeDays": 1.5225,
+          "tradeDays": 37,
+          "calendarDays": 60,
+          "lowSample": false
+        },
+        "train": {
+          "trades": 59,
+          "wins": 23,
+          "losses": 36,
+          "winRate": 0.39,
+          "profitFactor": 1.04,
+          "totalPnlPct": 3.34,
+          "endEquity": 826.73,
+          "maxDdPct": 27.99,
+          "avgDailyPctAllDays": 0.1118,
+          "geoAvgDailyPct": -0.0762,
+          "meanDailyPctTradeDays": 0.3608,
+          "tradeDays": 22,
+          "calendarDays": 71,
+          "lowSample": false
+        },
+        "vsBaseline": {
+          "dWR": 7.7,
+          "dPF": 0.27,
+          "dNet": 5.49,
+          "tradeRatio": 1
+        },
+        "adopt": true,
+        "lowN": true
+      },
+      {
+        "fix": "cash_htf",
+        "desc": "US cash + HTF align combined",
+        "oos": {
+          "trades": 9,
+          "wins": 3,
+          "losses": 6,
+          "winRate": 0.333,
+          "profitFactor": 0.94,
+          "totalPnlPct": -0.76,
+          "endEquity": 793.95,
+          "maxDdPct": 2.08,
+          "avgDailyPctAllDays": -0.0042,
+          "geoAvgDailyPct": 0.1538,
+          "meanDailyPctTradeDays": -0.0492,
+          "tradeDays": 4,
+          "calendarDays": 47,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 52,
+          "wins": 23,
+          "losses": 29,
+          "winRate": 0.442,
+          "profitFactor": 1.4,
+          "totalPnlPct": 27.84,
+          "endEquity": 1022.75,
+          "maxDdPct": 12.02,
+          "avgDailyPctAllDays": 0.4659,
+          "geoAvgDailyPct": 0.5438,
+          "meanDailyPctTradeDays": 0.9317,
+          "tradeDays": 30,
+          "calendarDays": 60,
+          "lowSample": false
+        },
+        "train": {
+          "trades": 30,
+          "wins": 10,
+          "losses": 20,
+          "winRate": 0.333,
+          "profitFactor": 0.71,
+          "totalPnlPct": -11.13,
+          "endEquity": 710.98,
+          "maxDdPct": 21.95,
+          "avgDailyPctAllDays": -0.1419,
+          "geoAvgDailyPct": -0.239,
+          "meanDailyPctTradeDays": -0.6719,
+          "tradeDays": 15,
+          "calendarDays": 71,
+          "lowSample": false
+        },
+        "vsBaseline": {
+          "dWR": 10.2,
+          "dPF": 0.36,
+          "dNet": 7.58,
+          "tradeRatio": 0.69
+        },
+        "adopt": true,
+        "lowN": true
+      },
+      {
+        "fix": "cash_htf_fresh",
+        "desc": "US cash + HTF + fresh level",
+        "oos": {
+          "trades": 9,
+          "wins": 3,
+          "losses": 6,
+          "winRate": 0.333,
+          "profitFactor": 0.94,
+          "totalPnlPct": -0.76,
+          "endEquity": 793.95,
+          "maxDdPct": 2.08,
+          "avgDailyPctAllDays": -0.0042,
+          "geoAvgDailyPct": 0.1538,
+          "meanDailyPctTradeDays": -0.0492,
+          "tradeDays": 4,
+          "calendarDays": 47,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 52,
+          "wins": 23,
+          "losses": 29,
+          "winRate": 0.442,
+          "profitFactor": 1.4,
+          "totalPnlPct": 27.84,
+          "endEquity": 1022.75,
+          "maxDdPct": 12.02,
+          "avgDailyPctAllDays": 0.4659,
+          "geoAvgDailyPct": 0.5438,
+          "meanDailyPctTradeDays": 0.9317,
+          "tradeDays": 30,
+          "calendarDays": 60,
+          "lowSample": false
+        },
+        "train": {
+          "trades": 30,
+          "wins": 10,
+          "losses": 20,
+          "winRate": 0.333,
+          "profitFactor": 0.71,
+          "totalPnlPct": -11.13,
+          "endEquity": 710.98,
+          "maxDdPct": 21.95,
+          "avgDailyPctAllDays": -0.1419,
+          "geoAvgDailyPct": -0.239,
+          "meanDailyPctTradeDays": -0.6719,
+          "tradeDays": 15,
+          "calendarDays": 71,
+          "lowSample": false
+        },
+        "vsBaseline": {
+          "dWR": 10.2,
+          "dPF": 0.36,
+          "dNet": 7.58,
+          "tradeRatio": 0.69
+        },
+        "adopt": true,
+        "lowN": true
+      },
+      {
+        "fix": "cash_htf_maxext",
+        "desc": "US cash + HTF + max stop 2.5 ATR",
+        "oos": {
+          "trades": 9,
+          "wins": 3,
+          "losses": 6,
+          "winRate": 0.333,
+          "profitFactor": 0.94,
+          "totalPnlPct": -0.68,
+          "endEquity": 794.54,
+          "maxDdPct": 2.08,
+          "avgDailyPctAllDays": -0.0025,
+          "geoAvgDailyPct": 0.1554,
+          "meanDailyPctTradeDays": -0.0293,
+          "tradeDays": 4,
+          "calendarDays": 47,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 53,
+          "wins": 24,
+          "losses": 29,
+          "winRate": 0.453,
+          "profitFactor": 1.39,
+          "totalPnlPct": 27.82,
+          "endEquity": 1022.57,
+          "maxDdPct": 13.41,
+          "avgDailyPctAllDays": 0.4758,
+          "geoAvgDailyPct": 0.5436,
+          "meanDailyPctTradeDays": 0.9845,
+          "tradeDays": 29,
+          "calendarDays": 60,
+          "lowSample": false
+        },
+        "train": {
+          "trades": 30,
+          "wins": 10,
+          "losses": 20,
+          "winRate": 0.333,
+          "profitFactor": 0.76,
+          "totalPnlPct": -9.11,
+          "endEquity": 727.12,
+          "maxDdPct": 21.95,
+          "avgDailyPctAllDays": -0.1084,
+          "geoAvgDailyPct": -0.193,
+          "meanDailyPctTradeDays": -0.5133,
+          "tradeDays": 15,
+          "calendarDays": 71,
+          "lowSample": false
+        },
+        "vsBaseline": {
+          "dWR": 10.2,
+          "dPF": 0.36,
+          "dNet": 7.66,
+          "tradeRatio": 0.69
+        },
+        "adopt": true,
+        "lowN": true
+      }
+    ],
+    "B": [
+      {
+        "fix": "us_cash_only",
+        "desc": "Trade only during US cash session (≈14:30–21:00 UTC)",
+        "oos": {
+          "trades": 11,
+          "wins": 6,
+          "losses": 5,
+          "winRate": 0.545,
+          "profitFactor": 3.3,
+          "totalPnlPct": 9.36,
+          "endEquity": 874.89,
+          "maxDdPct": 2.08,
+          "avgDailyPctAllDays": 0.5369,
+          "geoAvgDailyPct": 0.467,
+          "meanDailyPctTradeDays": 1.6106,
+          "tradeDays": 6,
+          "calendarDays": 18,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 29,
+          "wins": 21,
+          "losses": 8,
+          "winRate": 0.724,
+          "profitFactor": 4.91,
+          "totalPnlPct": 36.3,
+          "endEquity": 1090.39,
+          "maxDdPct": 2.15,
+          "avgDailyPctAllDays": 0.7428,
+          "geoAvgDailyPct": 0.7096,
+          "meanDailyPctTradeDays": 1.8787,
+          "tradeDays": 17,
+          "calendarDays": 43,
+          "lowSample": true
+        },
+        "train": {
+          "trades": 12,
+          "wins": 10,
+          "losses": 2,
+          "winRate": 0.833,
+          "profitFactor": 8.76,
+          "totalPnlPct": 14.64,
+          "endEquity": 917.1,
+          "maxDdPct": 0,
+          "avgDailyPctAllDays": 0.5325,
+          "geoAvgDailyPct": 0.4346,
+          "meanDailyPctTradeDays": 1.978,
+          "tradeDays": 7,
+          "calendarDays": 26,
+          "lowSample": true
+        },
+        "vsBaseline": {
+          "dWR": 9,
+          "dPF": 0.08,
+          "dNet": -1.71,
+          "tradeRatio": 1
+        },
+        "adopt": true,
+        "lowN": true
+      },
+      {
+        "fix": "cash_htf",
+        "desc": "US cash + HTF align combined",
+        "oos": {
+          "trades": 11,
+          "wins": 6,
+          "losses": 5,
+          "winRate": 0.545,
+          "profitFactor": 3.3,
+          "totalPnlPct": 9.36,
+          "endEquity": 874.89,
+          "maxDdPct": 2.08,
+          "avgDailyPctAllDays": 0.5369,
+          "geoAvgDailyPct": 0.467,
+          "meanDailyPctTradeDays": 1.6106,
+          "tradeDays": 6,
+          "calendarDays": 18,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 28,
+          "wins": 21,
+          "losses": 7,
+          "winRate": 0.75,
+          "profitFactor": 5.44,
+          "totalPnlPct": 37.43,
+          "endEquity": 1099.44,
+          "maxDdPct": 2.15,
+          "avgDailyPctAllDays": 0.7626,
+          "geoAvgDailyPct": 0.729,
+          "meanDailyPctTradeDays": 1.929,
+          "tradeDays": 17,
+          "calendarDays": 43,
+          "lowSample": true
+        },
+        "train": {
+          "trades": 12,
+          "wins": 10,
+          "losses": 2,
+          "winRate": 0.833,
+          "profitFactor": 8.76,
+          "totalPnlPct": 14.64,
+          "endEquity": 917.1,
+          "maxDdPct": 0,
+          "avgDailyPctAllDays": 0.5325,
+          "geoAvgDailyPct": 0.4346,
+          "meanDailyPctTradeDays": 1.978,
+          "tradeDays": 7,
+          "calendarDays": 26,
+          "lowSample": true
+        },
+        "vsBaseline": {
+          "dWR": 9,
+          "dPF": 0.08,
+          "dNet": -1.71,
+          "tradeRatio": 1
+        },
+        "adopt": true,
+        "lowN": true
+      },
+      {
+        "fix": "cash_htf_fresh",
+        "desc": "US cash + HTF + fresh level",
+        "oos": {
+          "trades": 11,
+          "wins": 6,
+          "losses": 5,
+          "winRate": 0.545,
+          "profitFactor": 3.3,
+          "totalPnlPct": 9.36,
+          "endEquity": 874.89,
+          "maxDdPct": 2.08,
+          "avgDailyPctAllDays": 0.5369,
+          "geoAvgDailyPct": 0.467,
+          "meanDailyPctTradeDays": 1.6106,
+          "tradeDays": 6,
+          "calendarDays": 18,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 28,
+          "wins": 21,
+          "losses": 7,
+          "winRate": 0.75,
+          "profitFactor": 5.44,
+          "totalPnlPct": 37.43,
+          "endEquity": 1099.44,
+          "maxDdPct": 2.15,
+          "avgDailyPctAllDays": 0.7626,
+          "geoAvgDailyPct": 0.729,
+          "meanDailyPctTradeDays": 1.929,
+          "tradeDays": 17,
+          "calendarDays": 43,
+          "lowSample": true
+        },
+        "train": {
+          "trades": 12,
+          "wins": 10,
+          "losses": 2,
+          "winRate": 0.833,
+          "profitFactor": 8.76,
+          "totalPnlPct": 14.64,
+          "endEquity": 917.1,
+          "maxDdPct": 0,
+          "avgDailyPctAllDays": 0.5325,
+          "geoAvgDailyPct": 0.4346,
+          "meanDailyPctTradeDays": 1.978,
+          "tradeDays": 7,
+          "calendarDays": 26,
+          "lowSample": true
+        },
+        "vsBaseline": {
+          "dWR": 9,
+          "dPF": 0.08,
+          "dNet": -1.71,
+          "tradeRatio": 1
+        },
+        "adopt": true,
+        "lowN": true
+      }
+    ]
+  },
+  "bestFixA": {
+    "fix": "max_stop_2_5atr",
+    "desc": "Skip late/extended entries where stop distance > 2.5 ATR",
+    "oos": {
+      "trades": 13,
+      "wins": 4,
+      "losses": 9,
+      "winRate": 0.308,
+      "profitFactor": 0.85,
+      "totalPnlPct": -2.85,
+      "endEquity": 777.21,
+      "maxDdPct": 2.08,
+      "avgDailyPctAllDays": -0.0451,
+      "geoAvgDailyPct": 0.1572,
+      "meanDailyPctTradeDays": -0.5295,
+      "tradeDays": 4,
+      "calendarDays": 47,
+      "lowSample": true
+    },
+    "sixty": {
+      "trades": 88,
+      "wins": 42,
+      "losses": 46,
+      "winRate": 0.477,
+      "profitFactor": 1.48,
+      "totalPnlPct": 66.71,
+      "endEquity": 1333.66,
+      "maxDdPct": 20.83,
+      "avgDailyPctAllDays": 0.9389,
+      "geoAvgDailyPct": 1.0283,
+      "meanDailyPctTradeDays": 1.5225,
+      "tradeDays": 37,
+      "calendarDays": 60,
+      "lowSample": false
+    },
+    "train": {
+      "trades": 59,
+      "wins": 23,
+      "losses": 36,
+      "winRate": 0.39,
+      "profitFactor": 1.04,
+      "totalPnlPct": 3.34,
+      "endEquity": 826.73,
+      "maxDdPct": 27.99,
+      "avgDailyPctAllDays": 0.1118,
+      "geoAvgDailyPct": -0.0762,
+      "meanDailyPctTradeDays": 0.3608,
+      "tradeDays": 22,
+      "calendarDays": 71,
+      "lowSample": false
+    },
+    "vsBaseline": {
+      "dWR": 7.7,
+      "dPF": 0.27,
+      "dNet": 5.49,
+      "tradeRatio": 1
+    },
+    "adopt": true,
+    "lowN": true
+  },
+  "bestFixB": {
+    "fix": "us_cash_only",
+    "desc": "Trade only during US cash session (≈14:30–21:00 UTC)",
+    "oos": {
+      "trades": 11,
+      "wins": 6,
+      "losses": 5,
+      "winRate": 0.545,
+      "profitFactor": 3.3,
+      "totalPnlPct": 9.36,
+      "endEquity": 874.89,
+      "maxDdPct": 2.08,
+      "avgDailyPctAllDays": 0.5369,
+      "geoAvgDailyPct": 0.467,
+      "meanDailyPctTradeDays": 1.6106,
+      "tradeDays": 6,
+      "calendarDays": 18,
+      "lowSample": true
+    },
+    "sixty": {
+      "trades": 29,
+      "wins": 21,
+      "losses": 8,
+      "winRate": 0.724,
+      "profitFactor": 4.91,
+      "totalPnlPct": 36.3,
+      "endEquity": 1090.39,
+      "maxDdPct": 2.15,
+      "avgDailyPctAllDays": 0.7428,
+      "geoAvgDailyPct": 0.7096,
+      "meanDailyPctTradeDays": 1.8787,
+      "tradeDays": 17,
+      "calendarDays": 43,
+      "lowSample": true
+    },
+    "train": {
+      "trades": 12,
+      "wins": 10,
+      "losses": 2,
+      "winRate": 0.833,
+      "profitFactor": 8.76,
+      "totalPnlPct": 14.64,
+      "endEquity": 917.1,
+      "maxDdPct": 0,
+      "avgDailyPctAllDays": 0.5325,
+      "geoAvgDailyPct": 0.4346,
+      "meanDailyPctTradeDays": 1.978,
+      "tradeDays": 7,
+      "calendarDays": 26,
+      "lowSample": true
+    },
+    "vsBaseline": {
+      "dWR": 9,
+      "dPF": 0.08,
+      "dNet": -1.71,
+      "tradeRatio": 1
+    },
+    "adopt": true,
+    "lowN": true
+  },
+  "recommended": {
+    "id": "B_us_cash_only",
+    "setup": "B",
+    "oos": {
+      "trades": 11,
+      "wins": 6,
+      "losses": 5,
+      "winRate": 0.545,
+      "profitFactor": 3.3,
+      "totalPnlPct": 9.36,
+      "endEquity": 874.89,
+      "maxDdPct": 2.08,
+      "avgDailyPctAllDays": 0.5369,
+      "geoAvgDailyPct": 0.467,
+      "meanDailyPctTradeDays": 1.6106,
+      "tradeDays": 6,
+      "calendarDays": 18,
+      "lowSample": true
+    },
+    "sixty": {
+      "trades": 29,
+      "wins": 21,
+      "losses": 8,
+      "winRate": 0.724,
+      "profitFactor": 4.91,
+      "totalPnlPct": 36.3,
+      "endEquity": 1090.39,
+      "maxDdPct": 2.15,
+      "avgDailyPctAllDays": 0.7428,
+      "geoAvgDailyPct": 0.7096,
+      "meanDailyPctTradeDays": 1.8787,
+      "tradeDays": 17,
+      "calendarDays": 43,
+      "lowSample": true
+    },
+    "fix": {
+      "fix": "us_cash_only",
+      "desc": "Trade only during US cash session (≈14:30–21:00 UTC)",
+      "oos": {
+        "trades": 11,
+        "wins": 6,
+        "losses": 5,
+        "winRate": 0.545,
+        "profitFactor": 3.3,
+        "totalPnlPct": 9.36,
+        "endEquity": 874.89,
+        "maxDdPct": 2.08,
+        "avgDailyPctAllDays": 0.5369,
+        "geoAvgDailyPct": 0.467,
+        "meanDailyPctTradeDays": 1.6106,
+        "tradeDays": 6,
+        "calendarDays": 18,
+        "lowSample": true
+      },
+      "sixty": {
+        "trades": 29,
+        "wins": 21,
+        "losses": 8,
+        "winRate": 0.724,
+        "profitFactor": 4.91,
+        "totalPnlPct": 36.3,
+        "endEquity": 1090.39,
+        "maxDdPct": 2.15,
+        "avgDailyPctAllDays": 0.7428,
+        "geoAvgDailyPct": 0.7096,
+        "meanDailyPctTradeDays": 1.8787,
+        "tradeDays": 17,
+        "calendarDays": 43,
+        "lowSample": true
+      },
+      "train": {
+        "trades": 12,
+        "wins": 10,
+        "losses": 2,
+        "winRate": 0.833,
+        "profitFactor": 8.76,
+        "totalPnlPct": 14.64,
+        "endEquity": 917.1,
+        "maxDdPct": 0,
+        "avgDailyPctAllDays": 0.5325,
+        "geoAvgDailyPct": 0.4346,
+        "meanDailyPctTradeDays": 1.978,
+        "tradeDays": 7,
+        "calendarDays": 26,
+        "lowSample": true
+      },
+      "vsBaseline": {
+        "dWR": 9,
+        "dPF": 0.08,
+        "dNet": -1.71,
+        "tradeRatio": 1
+      },
+      "adopt": true,
+      "lowN": true
+    }
+  },
+  "contenders": [
+    {
+      "id": "B_us_cash_only",
+      "setup": "B",
+      "oos": {
+        "trades": 11,
+        "wins": 6,
+        "losses": 5,
+        "winRate": 0.545,
+        "profitFactor": 3.3,
+        "totalPnlPct": 9.36,
+        "endEquity": 874.89,
+        "maxDdPct": 2.08,
+        "avgDailyPctAllDays": 0.5369,
+        "geoAvgDailyPct": 0.467,
+        "meanDailyPctTradeDays": 1.6106,
+        "tradeDays": 6,
+        "calendarDays": 18,
+        "lowSample": true
+      },
+      "sixty": {
+        "trades": 29,
+        "wins": 21,
+        "losses": 8,
+        "winRate": 0.724,
+        "profitFactor": 4.91,
+        "totalPnlPct": 36.3,
+        "endEquity": 1090.39,
+        "maxDdPct": 2.15,
+        "avgDailyPctAllDays": 0.7428,
+        "geoAvgDailyPct": 0.7096,
+        "meanDailyPctTradeDays": 1.8787,
+        "tradeDays": 17,
+        "calendarDays": 43,
+        "lowSample": true
+      },
+      "fix": {
+        "fix": "us_cash_only",
+        "desc": "Trade only during US cash session (≈14:30–21:00 UTC)",
+        "oos": {
+          "trades": 11,
+          "wins": 6,
+          "losses": 5,
+          "winRate": 0.545,
+          "profitFactor": 3.3,
+          "totalPnlPct": 9.36,
+          "endEquity": 874.89,
+          "maxDdPct": 2.08,
+          "avgDailyPctAllDays": 0.5369,
+          "geoAvgDailyPct": 0.467,
+          "meanDailyPctTradeDays": 1.6106,
+          "tradeDays": 6,
+          "calendarDays": 18,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 29,
+          "wins": 21,
+          "losses": 8,
+          "winRate": 0.724,
+          "profitFactor": 4.91,
+          "totalPnlPct": 36.3,
+          "endEquity": 1090.39,
+          "maxDdPct": 2.15,
+          "avgDailyPctAllDays": 0.7428,
+          "geoAvgDailyPct": 0.7096,
+          "meanDailyPctTradeDays": 1.8787,
+          "tradeDays": 17,
+          "calendarDays": 43,
+          "lowSample": true
+        },
+        "train": {
+          "trades": 12,
+          "wins": 10,
+          "losses": 2,
+          "winRate": 0.833,
+          "profitFactor": 8.76,
+          "totalPnlPct": 14.64,
+          "endEquity": 917.1,
+          "maxDdPct": 0,
+          "avgDailyPctAllDays": 0.5325,
+          "geoAvgDailyPct": 0.4346,
+          "meanDailyPctTradeDays": 1.978,
+          "tradeDays": 7,
+          "calendarDays": 26,
+          "lowSample": true
+        },
+        "vsBaseline": {
+          "dWR": 9,
+          "dPF": 0.08,
+          "dNet": -1.71,
+          "tradeRatio": 1
+        },
+        "adopt": true,
+        "lowN": true
+      }
+    },
+    {
+      "id": "B_baseline",
+      "setup": "B",
+      "oos": {
+        "trades": 11,
+        "wins": 5,
+        "losses": 6,
+        "winRate": 0.455,
+        "profitFactor": 3.22,
+        "totalPnlPct": 11.07,
+        "endEquity": 888.52,
+        "maxDdPct": 2.08,
+        "avgDailyPctAllDays": 0.6502,
+        "geoAvgDailyPct": 0.625,
+        "meanDailyPctTradeDays": 2.3407,
+        "tradeDays": 5,
+        "calendarDays": 18,
+        "lowSample": true
+      },
+      "sixty": {
+        "trades": 40,
+        "wins": 21,
+        "losses": 19,
+        "winRate": 0.525,
+        "profitFactor": 1.45,
+        "totalPnlPct": 13.85,
+        "endEquity": 910.76,
+        "maxDdPct": 12.21,
+        "avgDailyPctAllDays": 0.3328,
+        "geoAvgDailyPct": 0.3188,
+        "meanDailyPctTradeDays": 0.6815,
+        "tradeDays": 21,
+        "calendarDays": 43,
+        "lowSample": false
+      }
+    },
+    {
+      "id": "A_max_stop_2_5atr",
+      "setup": "A",
+      "oos": {
+        "trades": 13,
+        "wins": 4,
+        "losses": 9,
+        "winRate": 0.308,
+        "profitFactor": 0.85,
+        "totalPnlPct": -2.85,
+        "endEquity": 777.21,
+        "maxDdPct": 2.08,
+        "avgDailyPctAllDays": -0.0451,
+        "geoAvgDailyPct": 0.1572,
+        "meanDailyPctTradeDays": -0.5295,
+        "tradeDays": 4,
+        "calendarDays": 47,
+        "lowSample": true
+      },
+      "sixty": {
+        "trades": 88,
+        "wins": 42,
+        "losses": 46,
+        "winRate": 0.477,
+        "profitFactor": 1.48,
+        "totalPnlPct": 66.71,
+        "endEquity": 1333.66,
+        "maxDdPct": 20.83,
+        "avgDailyPctAllDays": 0.9389,
+        "geoAvgDailyPct": 1.0283,
+        "meanDailyPctTradeDays": 1.5225,
+        "tradeDays": 37,
+        "calendarDays": 60,
+        "lowSample": false
+      },
+      "fix": {
+        "fix": "max_stop_2_5atr",
+        "desc": "Skip late/extended entries where stop distance > 2.5 ATR",
+        "oos": {
+          "trades": 13,
+          "wins": 4,
+          "losses": 9,
+          "winRate": 0.308,
+          "profitFactor": 0.85,
+          "totalPnlPct": -2.85,
+          "endEquity": 777.21,
+          "maxDdPct": 2.08,
+          "avgDailyPctAllDays": -0.0451,
+          "geoAvgDailyPct": 0.1572,
+          "meanDailyPctTradeDays": -0.5295,
+          "tradeDays": 4,
+          "calendarDays": 47,
+          "lowSample": true
+        },
+        "sixty": {
+          "trades": 88,
+          "wins": 42,
+          "losses": 46,
+          "winRate": 0.477,
+          "profitFactor": 1.48,
+          "totalPnlPct": 66.71,
+          "endEquity": 1333.66,
+          "maxDdPct": 20.83,
+          "avgDailyPctAllDays": 0.9389,
+          "geoAvgDailyPct": 1.0283,
+          "meanDailyPctTradeDays": 1.5225,
+          "tradeDays": 37,
+          "calendarDays": 60,
+          "lowSample": false
+        },
+        "train": {
+          "trades": 59,
+          "wins": 23,
+          "losses": 36,
+          "winRate": 0.39,
+          "profitFactor": 1.04,
+          "totalPnlPct": 3.34,
+          "endEquity": 826.73,
+          "maxDdPct": 27.99,
+          "avgDailyPctAllDays": 0.1118,
+          "geoAvgDailyPct": -0.0762,
+          "meanDailyPctTradeDays": 0.3608,
+          "tradeDays": 22,
+          "calendarDays": 71,
+          "lowSample": false
+        },
+        "vsBaseline": {
+          "dWR": 7.7,
+          "dPF": 0.27,
+          "dNet": 5.49,
+          "tradeRatio": 1
+        },
+        "adopt": true,
+        "lowN": true
+      }
+    },
+    {
+      "id": "A_baseline",
+      "setup": "A",
+      "oos": {
+        "trades": 13,
+        "wins": 3,
+        "losses": 10,
+        "winRate": 0.231,
+        "profitFactor": 0.58,
+        "totalPnlPct": -8.34,
+        "endEquity": 733.29,
+        "maxDdPct": 4.38,
+        "avgDailyPctAllDays": -0.1694,
+        "geoAvgDailyPct": 0.0332,
+        "meanDailyPctTradeDays": -1.9904,
+        "tradeDays": 4,
+        "calendarDays": 47,
+        "lowSample": true
+      },
+      "sixty": {
+        "trades": 78,
+        "wins": 34,
+        "losses": 44,
+        "winRate": 0.436,
+        "profitFactor": 1.24,
+        "totalPnlPct": 29.93,
+        "endEquity": 1039.41,
+        "maxDdPct": 17.41,
+        "avgDailyPctAllDays": 0.5264,
+        "geoAvgDailyPct": 0.6094,
+        "meanDailyPctTradeDays": 0.9571,
+        "tradeDays": 33,
+        "calendarDays": 60,
+        "lowSample": false
+      }
+    }
+  ],
+  "learningLoop": {
+    "table": "bn_trade_lessons",
+    "behavior": "On each closed trade, tag failure/success causes and store; daily digest suggests rule updates; never auto-applies without approval."
+  }
+}

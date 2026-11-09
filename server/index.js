@@ -9,6 +9,7 @@ const store = require('./db');
 const engine = require('./engine');
 const bnTrader = require('./binance-trader');
 const bnWhales = require('./binance-whales');
+const tradeLessons = require('./trade-lessons');
 const hl = require('./hl');
 const derivatives = require('./derivatives');
 const { Finance } = globalThis;
@@ -213,6 +214,15 @@ app.post('/api/binance/whales/refresh', wrap(async (req, res) => {
   const out = await bnWhales.refresh({ limit: 16 });
   res.json(out);
 }));
+
+bnApi.get('/lessons', (req, res) => res.json(tradeLessons.summarizeLessons(Math.min(500, Number(req.query.limit) || 200))));
+bnApi.get('/suggestions', (req, res) => res.json(tradeLessons.listSuggestions(req.query.status || 'pending')));
+bnApi.post('/suggestions/refresh', wrap(async (req, res) => { res.json({ ok: true, created: tradeLessons.buildSuggestions() }); }));
+bnApi.post('/suggestions/:id', wrap(async (req, res) => {
+  const st = String((req.body || {}).status || '');
+  res.json(tradeLessons.setSuggestionStatus(Number(req.params.id), st));
+}));
+
 app.use('/api/binance', bnApi);
 
 app.use('/api/autotrader', at);
@@ -316,6 +326,7 @@ strategyMod.initPersistence().catch(e => log.error('persist.init_crash', { error
     log.info('server.start', { port, commit: VERSION.commit, storage: require('./persist').backend(), ownerAuth: auth.ownerConfigured(), guestAuth: auth.guestConfigured() });
     engine.start();
   try { bnTrader.start(); } catch (e) { log.error('bnTrader.start_failed', { error: e.message }); };
+  try { tradeLessons.buildSuggestions(); } catch (e) { log.warn('tradeLessons.suggest_failed', { error: e.message }); }
   try { if (bnWhales.start) bnWhales.start(); else bnWhales.refresh({ limit: 12 }).catch(()=>{}); } catch (e) { log.error('bnWhales.start_failed', { error: e.message }); };
   });
   const stop = (sig) => { log.info('server.stop', { signal: sig }); server.close(); require('./persist').close().finally(() => process.exit(0)); setTimeout(() => process.exit(0), 8000).unref(); };

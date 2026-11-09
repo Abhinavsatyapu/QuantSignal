@@ -233,7 +233,7 @@ function guestAllowed(req) {
     if (p === '/api/binance/prices' || p === '/api/binance/prices/stream' || p === '/api/binance/positions' || p === '/api/binance/whales') return true;
     if (p === '/futures') return true;
     // status/health/events/trades/settings — no settings; allow status/events/trades read
-    if (p === '/api/binance/status' || p === '/api/binance/events' || p === '/api/binance/trades') return true;
+    if (p === '/api/binance/status' || p === '/api/binance/events' || p === '/api/binance/trades' || p === '/api/binance/lessons' || p === '/api/binance/suggestions') return true;
     return false;
   }
   // Strategy / builder reads

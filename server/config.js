@@ -71,6 +71,13 @@ const BINANCE_DEFAULTS = {
       label: 'Combine · 1h indicators AND liq within 3 bars (OOS #2)',
       interval: '1h', signalMode: 'confirm_window', liqKinds: [], liqWindowBars: 3, minScore: 6,
     },
+    combine_1h_and_window_3_uscash: {
+      id: 'combine_1h_and_window_3_uscash',
+      label: 'Suggested · 1h AND window 3 + US cash only (postmortem; not auto-on)',
+      interval: '1h', signalMode: 'confirm_window', liqKinds: [], liqWindowBars: 3, minScore: 6,
+      // entryFilters.usCashOnly applied when selected via activeStudyRuleset / entryFilters
+      entryFilters: { usCashOnly: true },
+    },
     legacy_15m_indicators: {
       id: 'legacy_15m_indicators',
       label: 'Legacy · 15m indicators (pre-study)',
@@ -221,6 +228,7 @@ function update(patch) {
         if (P.signalMode) B.signalMode = P.signalMode;
         if (P.liqKinds) B.liqKinds = [...P.liqKinds];
         if (P.liqWindowBars != null) B.liqWindowBars = P.liqWindowBars;
+        if (P.entryFilters) B.entryFilters = { ...(B.entryFilters || {}), ...P.entryFilters };
         if (P.minScore != null) B.minScore = P.minScore;
       }
     }
