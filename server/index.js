@@ -11,6 +11,7 @@ const bnTrader = require('./binance-trader');
 const hl = require('./hl');
 const derivatives = require('./derivatives');
 const { Finance } = globalThis;
+const auth = require('./auth');
 
 const app = express();
 app.disable('x-powered-by');
@@ -34,7 +35,7 @@ app.use(helmet({
 app.use(compression());
 // structured request log (one JSON line per API request; static assets are not logged)
 app.use((req, res, next) => { const t0 = Date.now(); res.on('finish', () => { if (req.path.startsWith('/api/') || res.statusCode >= 500) log.info('http', { method: req.method, path: req.path, status: res.statusCode, ms: Date.now() - t0 }); }); next(); });
-app.get('/version', (req, res) => res.json(VERSION));
+app.get('/version', (req, res) => res.json(auth.publicVersion(VERSION)));
 app.use('/api/strategy/import', express.json({ limit: '50mb' }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.text({ type: ['text/plain'], limit: '1mb' }));
@@ -50,9 +51,23 @@ function requireAdmin(req, res, next) {
 }
 const { plainError } = require('./alpaca');
 const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { if (!e.status) log.error('http.bug', { path: req.path, error: (e.name || 'Error') + ': ' + e.message }); res.status(e.status || 500).json({ error: plainError(e) }); });
+app.use(auth.attachUser);
+auth.mountRoutes(app, { wrap });
+app.get('/login', (req, res) => {
+  if (req.user && (req.user.role === 'owner' || req.user.role === 'guest')) return res.redirect(302, '/');
+  res.sendFile(path.join(config.ROOT, 'public', 'login.html'));
+});
+// Owner session required for all non-public routes (fail closed if OWNER_PASSWORD unset)
+app.use((req, res, next) => {
+  if (auth.publicPath(req.path)) return next();
+  return auth.requireOwner(req, res, next);
+});
 
 // ------------------------------------------------------------------ health
 app.get('/health', (req, res) => {
+  res.json(auth.publicHealth(Math.round(process.uptime())));
+});
+app.get('/api/health/detail', (req, res) => {
   const rt = config.runtime();
   let binance = null;
   try { binance = bnTrader.health(); } catch (e) { binance = { ok: false, error: e.message }; }
@@ -84,14 +99,20 @@ app.post('/webhook', wrap(async (req, res) => {
   }
 }));
 
-// ------------------------------------------------------------------ Auto-trader API (admin token)
+// Session gate for everything below (webhook above stays public + WEBHOOK_SECRET)
+app.use(auth.gateMiddleware);
+
+// ------------------------------------------------------------------ Auto-trader API
 const at = express.Router();
-at.use(requireAdmin);
+at.use((req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD') return auth.requireAuth(req, res, next);
+  return auth.requireOwner(req, res, next);
+});
 at.get('/status', wrap(async (req, res) => {
   const cfg = config.get(), rt = config.runtime();
   let account = engine.state.account;
   try { account = await engine.refreshAccount(); } catch {}
-  res.json({
+  const payload = {
     running: true, startedAt: engine.state.startedAt, network: rt.network, apiUrl: rt.apiUrl, mode: rt.dryRun ? 'dry_run' : 'live',
     mainnetBlocked: rt.mainnetBlocked, problems: rt.problems, accountAddress: rt.accountAddress ? rt.accountAddress.slice(0, 6) + '…' + rt.accountAddress.slice(-4) : null,
     agentAddress: engine.state.agent?.address || null, agentRole: engine.state.agent?.role?.role || null, keyPresent: rt.keyPresent, keyVar: rt.keyVar, killSwitch: cfg.trading.killSwitch, pausedReason: engine.state.pausedReason,
@@ -102,7 +123,12 @@ at.get('/status', wrap(async (req, res) => {
     risk: cfg.risk,
     stats: store.one("SELECT COUNT(*) n, COALESCE(SUM(CASE WHEN pnl>0 THEN 1 ELSE 0 END),0) wins, COALESCE(SUM(pnl),0) pnl FROM trades WHERE status='closed'"),
     serverTime: Date.now(),
-  });
+  };
+  if (req.user && req.user.role === 'guest') {
+    delete payload.keyVar; delete payload.agentAddress; delete payload.accountAddress;
+    return res.json(auth.redactSecrets({ ...payload, readOnly: true, role: 'guest' }));
+  }
+  res.json({ ...payload, readOnly: false, role: 'owner' });
 }));
 at.get('/signals', (req, res) => res.json(store.all('SELECT id,ts,source,coin,direction,interval,entry,stop,tp,score,closed_at,status,reason FROM signals ORDER BY id DESC LIMIT ?', Math.min(500, Number(req.query.limit) || 50))));
 at.get('/trades', (req, res) => res.json(store.all('SELECT * FROM trades ORDER BY id DESC LIMIT ?', Math.min(500, Number(req.query.limit) || 50))));
@@ -167,7 +193,10 @@ app.get('/api/binance/positions', (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 const bnApi = express.Router();
-bnApi.use(requireAdmin);
+bnApi.use((req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD') return auth.requireAuth(req, res, next);
+  return auth.requireOwner(req, res, next);
+});
 bnApi.get('/status', (req, res) => res.json(bnTrader.status()));
 bnApi.get('/health', (req, res) => res.json(bnTrader.health()));
 bnApi.post('/settings', wrap(async (req, res) => { const c = config.update({ binance: req.body || {} }); res.json({ ok: true, binance: c.binance }); }));
@@ -269,7 +298,7 @@ const strategyMod = require('./strategy');
 strategyMod.initPersistence().catch(e => log.error('persist.init_crash', { error: e.message })).finally(() => {
   const server = app.listen(port, cfg.host, () => {
     store.log('info', `QuantSignal server listening on http://${cfg.host}:${port}`);
-    log.info('server.start', { port, commit: VERSION.commit, storage: require('./persist').backend() });
+    log.info('server.start', { port, commit: VERSION.commit, storage: require('./persist').backend(), ownerAuth: auth.ownerConfigured(), guestAuth: auth.guestConfigured() });
     engine.start();
   try { bnTrader.start(); } catch (e) { log.error('bnTrader.start_failed', { error: e.message }); };
   });
