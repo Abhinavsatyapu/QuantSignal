@@ -7,6 +7,7 @@ const config = require('./config');
 config.load();
 const store = require('./db');
 const engine = require('./engine');
+const bnTrader = require('./binance-trader');
 const hl = require('./hl');
 const derivatives = require('./derivatives');
 const { Finance } = globalThis;
@@ -27,7 +28,7 @@ const VERSION = (() => {
 app.use(helmet({
   contentSecurityPolicy: { useDefaults: true, directives: {
     'default-src': ["'self'"], 'script-src': ["'self'"], 'style-src': ["'self'", "'unsafe-inline'"], 'img-src': ["'self'", 'data:', 'blob:'],
-    'connect-src': ["'self'", 'https://api.hyperliquid.xyz', 'https://api.hyperliquid-testnet.xyz', 'wss://api.hyperliquid.xyz', 'https://data-api.binance.vision'],
+    'connect-src': ["'self'", 'https://api.hyperliquid.xyz', 'https://api.hyperliquid-testnet.xyz', 'wss://api.hyperliquid.xyz', 'https://data-api.binance.vision', 'https://www.binance.com', 'https://fapi.binance.com', 'https://testnet.binancefuture.com', 'wss://fstream.binance.com', 'wss://stream.binancefuture.com'],
     'font-src': ["'self'", 'data:'], 'object-src': ["'none'"], 'frame-ancestors': ["'none'"], 'base-uri': ["'self'"], 'form-action': ["'self'"], 'upgrade-insecure-requests': null } },
   crossOriginEmbedderPolicy: false, referrerPolicy: { policy: 'same-origin' } }));
 app.use(compression());
@@ -51,7 +52,16 @@ const { plainError } = require('./alpaca');
 const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { if (!e.status) log.error('http.bug', { path: req.path, error: (e.name || 'Error') + ': ' + e.message }); res.status(e.status || 500).json({ error: plainError(e) }); });
 
 // ------------------------------------------------------------------ health
-app.get('/health', (req, res) => { const rt = config.runtime(); res.json({ ok: true, network: rt.network, dryRun: rt.dryRun, uptimeSec: Math.round(process.uptime()), lastScanAt: engine.state.lastScanAt || null }); });
+app.get('/health', (req, res) => {
+  const rt = config.runtime();
+  let binance = null;
+  try { binance = bnTrader.health(); } catch (e) { binance = { ok: false, error: e.message }; }
+  res.json({
+    ok: true, network: rt.network, dryRun: rt.dryRun, uptimeSec: Math.round(process.uptime()),
+    lastScanAt: engine.state.lastScanAt || null,
+    binance,
+  });
+});
 
 // ------------------------------------------------------------------ TradingView webhook
 const webhookHits = new Map();
@@ -126,6 +136,48 @@ at.post('/config', wrap(async (req, res) => {
 }));
 at.post('/scan-now', wrap(async (req, res) => res.json(await engine.scanOnce('manual'))));
 at.post('/close', wrap(async (req, res) => res.json(await engine.closePosition(engine.normalizeCoin(req.body?.coin), 'manual close from UI'))));
+
+// ---- Binance USDⓈ-M prices (public) + trader (admin)
+
+app.get('/api/binance/prices/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+  const send = () => {
+    try {
+      const snap = bnTrader.state.prices ? bnTrader.state.prices.snapshot() : { source: 'Binance USDⓈ-M', transport: 'starting', marks: {}, lastUpdateAt: 0 };
+      snap.serverNow = Date.now();
+      res.write('data: ' + JSON.stringify(snap) + '\n\n');
+    } catch (e) { res.write('data: ' + JSON.stringify({ error: e.message, serverNow: Date.now() }) + '\n\n'); }
+  };
+  send();
+  const iv = setInterval(send, 1000);
+  const onUp = () => send();
+  try { bnTrader.state.prices && bnTrader.state.prices.emitter.on('update', onUp); } catch {}
+  req.on('close', () => { clearInterval(iv); try { bnTrader.state.prices && bnTrader.state.prices.emitter.off('update', onUp); } catch {} });
+});
+
+app.get('/api/binance/prices', (req, res) => {
+  try { res.json(bnTrader.state.prices ? bnTrader.state.prices.snapshot() : { source: 'Binance USDⓈ-M', transport: 'starting', marks: {}, lastUpdateAt: 0 }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get('/api/binance/positions', (req, res) => {
+  try { res.json(bnTrader.positionsView()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+const bnApi = express.Router();
+bnApi.use(requireAdmin);
+bnApi.get('/status', (req, res) => res.json(bnTrader.status()));
+bnApi.get('/health', (req, res) => res.json(bnTrader.health()));
+bnApi.post('/settings', wrap(async (req, res) => { const c = config.update({ binance: req.body || {} }); res.json({ ok: true, binance: c.binance }); }));
+bnApi.post('/kill', wrap(async (req, res) => { bnTrader.setKill(!!(req.body || {}).on, (req.body || {}).reason); res.json(bnTrader.health()); }));
+bnApi.post('/scan', wrap(async (req, res) => { await bnTrader.scanOnce('manual'); res.json({ ok: true, lastScanAt: bnTrader.state.lastScanAt }); }));
+bnApi.post('/reconcile', wrap(async (req, res) => { const r = await bnTrader.reconcile(); res.json(r); }));
+bnApi.get('/events', (req, res) => res.json(require('./db').db.prepare('SELECT * FROM bn_events ORDER BY id DESC LIMIT ?').all(Math.min(500, Number(req.query.limit) || 100))));
+bnApi.get('/trades', (req, res) => res.json(require('./db').db.prepare('SELECT * FROM bn_trades ORDER BY id DESC LIMIT ?').all(Math.min(500, Number(req.query.limit) || 50))));
+app.use('/api/binance', bnApi);
+
 app.use('/api/autotrader', at);
 
 // ------------------------------------------------------------------ market data used by the original UI
@@ -199,6 +251,7 @@ const PUB = path.join(config.ROOT, 'public');
 app.use(express.static(PUB, { extensions: ['html'], index: 'index.html', etag: true, setHeaders: (res, file) => res.setHeader('Cache-Control', /\.html$/.test(file) ? 'no-cache' : /sheet-data\.js$/.test(file) ? 'public, max-age=86400' : 'public, max-age=3600, must-revalidate') }));
 for (const p of ['/options', '/gamma', '/hedge', '/ratio', '/live-hedge', '/options-studio', '/gamma-book']) app.get(p, (req, res) => res.redirect(301, '/builder'));
 for (const p of ['/signals', '/news', '/webhook', '/risk', '/paper', '/autotrader']) app.get(p, (req, res) => res.sendFile(path.join(PUB, 'index.html')));
+app.get('/positions', (req, res) => res.sendFile(path.join(PUB, 'positions.html')));
 app.get('/manual', (req, res) => res.sendFile(path.join(PUB, 'manual.html')));
 app.get('/builder', (req, res) => res.sendFile(path.join(PUB, 'builder.html')));
 app.get('/docs/four-leg-methodology.md', (req, res) => res.type('text/markdown; charset=utf-8').sendFile(path.join(__dirname, '..', 'docs', 'four-leg-methodology.md')));
@@ -218,6 +271,7 @@ strategyMod.initPersistence().catch(e => log.error('persist.init_crash', { error
     store.log('info', `QuantSignal server listening on http://${cfg.host}:${port}`);
     log.info('server.start', { port, commit: VERSION.commit, storage: require('./persist').backend() });
     engine.start();
+  try { bnTrader.start(); } catch (e) { log.error('bnTrader.start_failed', { error: e.message }); };
   });
   const stop = (sig) => { log.info('server.stop', { signal: sig }); server.close(); require('./persist').close().finally(() => process.exit(0)); setTimeout(() => process.exit(0), 8000).unref(); };
   process.on('SIGTERM', () => stop('SIGTERM')); process.on('SIGINT', () => stop('SIGINT'));

@@ -6,7 +6,7 @@
 //     row per SQLite row, keyed by table + id). On boot an empty SQLite is restored from Postgres, so History, weights and
 //     settings survive restarts. SQLite stays the synchronous working store the engine uses; Postgres is the durable copy.
 const log = require('./log');
-const TABLES = { strategy_runs: 'id', strategy_plans: 'id', strategy_weights: 'id', account_settings: 'id', reference_trades: 'page' };
+const TABLES = { strategy_runs: 'id', strategy_plans: 'id', strategy_weights: 'id', account_settings: 'id', reference_trades: 'page', bn_trades: 'id', bn_pending: 'id', bn_signals: 'id', bn_client_orders: 'client_order_id', bn_equity_days: 'day' };
 let pool = null, db = null, timer = null, lastSaved = null, lastError = null, restoreInfo = { pending: true };
 const dirty = new Map(); // table → Set(ids) | 'all'
 const backend = () => (process.env.DATABASE_URL ? 'postgres' : 'sqlite');
