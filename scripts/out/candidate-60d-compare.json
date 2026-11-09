@@ -1,0 +1,1141 @@
+{
+  "generatedAt": "2026-11-09T21:01:35.697Z",
+  "universe": 62,
+  "capital": 800,
+  "leverage": 5,
+  "maxPositions": 4,
+  "riskPerTradePct": 2,
+  "compounding": true,
+  "dailyHalts": false,
+  "usCash": "14:30–21:00 UTC",
+  "harnessNote": "Fixed runPortfolio to honor sig.direction as well as sig.dir.",
+  "results": [
+    {
+      "id": "setupB_uscash_noFri_ON",
+      "name": "Setup B · 1h AND-w3 + US cash + noFriday ON (current live filters)",
+      "interval": "1h",
+      "notes": "Current dry-run baseline",
+      "full": {
+        "trades": 25,
+        "avgTradesPerDay": 0.581,
+        "winRate": 56,
+        "profitFactor": 1.36,
+        "netPct": 5.62,
+        "maxDdPct": 7.74,
+        "avgDailyPct": 0.1506,
+        "geoAvgDailyPct": 0.1416,
+        "endEquity": 844.96,
+        "calendarDays": 43,
+        "tradeDays": 14,
+        "lowN": true
+      },
+      "sixty": {
+        "trades": 25,
+        "avgTradesPerDay": 0.581,
+        "winRate": 56,
+        "profitFactor": 1.36,
+        "netPct": 5.62,
+        "maxDdPct": 7.74,
+        "avgDailyPct": 0.1506,
+        "geoAvgDailyPct": 0.1416,
+        "endEquity": 844.96,
+        "calendarDays": 43,
+        "tradeDays": 14,
+        "lowN": true
+      },
+      "train": {
+        "trades": 11,
+        "avgTradesPerDay": 0.423,
+        "winRate": 54.5,
+        "profitFactor": 0.37,
+        "netPct": -6.07,
+        "maxDdPct": 6.33,
+        "avgDailyPct": -0.2348,
+        "geoAvgDailyPct": -0.2407,
+        "endEquity": 751.42,
+        "calendarDays": 26,
+        "tradeDays": 6,
+        "lowN": true
+      },
+      "oos": {
+        "trades": 10,
+        "avgTradesPerDay": 0.556,
+        "winRate": 50,
+        "profitFactor": 3.02,
+        "netPct": 8.21,
+        "maxDdPct": 2.08,
+        "avgDailyPct": 0.4777,
+        "geoAvgDailyPct": 0.4737,
+        "endEquity": 865.68,
+        "calendarDays": 18,
+        "tradeDays": 5,
+        "lowN": true
+      },
+      "walkForward": [
+        {
+          "fold": 1,
+          "train": {
+            "trades": 4,
+            "avgTradesPerDay": 0.333,
+            "winRate": 100,
+            "profitFactor": 999,
+            "netPct": 57.78,
+            "maxDdPct": 0,
+            "avgDailyPct": 3.9461,
+            "geoAvgDailyPct": 1.6716,
+            "endEquity": 1262.2,
+            "calendarDays": 12,
+            "tradeDays": 1,
+            "lowN": true
+          },
+          "test": {
+            "trades": 6,
+            "avgTradesPerDay": 0.462,
+            "winRate": 66.7,
+            "profitFactor": 0.65,
+            "netPct": -1.6,
+            "maxDdPct": 2.27,
+            "avgDailyPct": -0.1185,
+            "geoAvgDailyPct": -0.1237,
+            "endEquity": 787.23,
+            "calendarDays": 13,
+            "tradeDays": 5,
+            "lowN": true
+          }
+        },
+        {
+          "fold": 2,
+          "train": {
+            "trades": 10,
+            "avgTradesPerDay": 0.435,
+            "winRate": 70,
+            "profitFactor": 0.71,
+            "netPct": -1.57,
+            "maxDdPct": 2.27,
+            "avgDailyPct": -0.0656,
+            "geoAvgDailyPct": -0.0686,
+            "endEquity": 787.47,
+            "calendarDays": 23,
+            "tradeDays": 6,
+            "lowN": true
+          },
+          "test": {
+            "trades": 6,
+            "avgTradesPerDay": 0.5,
+            "winRate": 33.3,
+            "profitFactor": 0.51,
+            "netPct": -4.15,
+            "maxDdPct": 6.21,
+            "avgDailyPct": -0.3396,
+            "geoAvgDailyPct": -0.3864,
+            "endEquity": 766.78,
+            "calendarDays": 12,
+            "tradeDays": 4,
+            "lowN": true
+          }
+        },
+        {
+          "fold": 3,
+          "train": {
+            "trades": 16,
+            "avgTradesPerDay": 0.485,
+            "winRate": 50,
+            "profitFactor": 0.48,
+            "netPct": -8.07,
+            "maxDdPct": 8.68,
+            "avgDailyPct": -0.2457,
+            "geoAvgDailyPct": -0.2668,
+            "endEquity": 735.46,
+            "calendarDays": 33,
+            "tradeDays": 9,
+            "lowN": true
+          },
+          "test": {
+            "trades": 9,
+            "avgTradesPerDay": 0.75,
+            "winRate": 66.7,
+            "profitFactor": 11.84,
+            "netPct": 13.1,
+            "maxDdPct": 0.1,
+            "avgDailyPct": 1.0819,
+            "geoAvgDailyPct": 1.0967,
+            "endEquity": 904.79,
+            "calendarDays": 12,
+            "tradeDays": 4,
+            "lowN": true
+          }
+        }
+      ],
+      "walkForwardMeanTestNetPct": 2.45,
+      "walkForwardMeanTestWR": 55.6,
+      "walkForwardMeanTestPF": 4.33,
+      "walkForwardLowN": true,
+      "ms": 27757
+    },
+    {
+      "id": "setupB_uscash_noFri_OFF",
+      "name": "Setup B · 1h AND-w3 + US cash + noFriday OFF",
+      "interval": "1h",
+      "notes": "Friday entries allowed",
+      "full": {
+        "trades": 28,
+        "avgTradesPerDay": 0.651,
+        "winRate": 50,
+        "profitFactor": 1.07,
+        "netPct": 1.41,
+        "maxDdPct": 9.6,
+        "avgDailyPct": 0.0576,
+        "geoAvgDailyPct": 0.0472,
+        "endEquity": 811.32,
+        "calendarDays": 43,
+        "tradeDays": 16,
+        "lowN": true
+      },
+      "sixty": {
+        "trades": 28,
+        "avgTradesPerDay": 0.651,
+        "winRate": 50,
+        "profitFactor": 1.07,
+        "netPct": 1.41,
+        "maxDdPct": 9.6,
+        "avgDailyPct": 0.0576,
+        "geoAvgDailyPct": 0.0472,
+        "endEquity": 811.32,
+        "calendarDays": 43,
+        "tradeDays": 16,
+        "lowN": true
+      },
+      "train": {
+        "trades": 12,
+        "avgTradesPerDay": 0.462,
+        "winRate": 50,
+        "profitFactor": 0.34,
+        "netPct": -6.89,
+        "maxDdPct": 7.14,
+        "avgDailyPct": -0.2677,
+        "geoAvgDailyPct": -0.2744,
+        "endEquity": 744.85,
+        "calendarDays": 26,
+        "tradeDays": 6,
+        "lowN": true
+      },
+      "oos": {
+        "trades": 11,
+        "avgTradesPerDay": 0.611,
+        "winRate": 45.5,
+        "profitFactor": 2.31,
+        "netPct": 6.96,
+        "maxDdPct": 1.98,
+        "avgDailyPct": 0.4136,
+        "geoAvgDailyPct": 0.4094,
+        "endEquity": 855.7,
+        "calendarDays": 18,
+        "tradeDays": 6,
+        "lowN": true
+      },
+      "walkForward": [
+        {
+          "fold": 1,
+          "train": {
+            "trades": 4,
+            "avgTradesPerDay": 0.333,
+            "winRate": 100,
+            "profitFactor": 999,
+            "netPct": 57.78,
+            "maxDdPct": 0,
+            "avgDailyPct": 3.9461,
+            "geoAvgDailyPct": 1.6716,
+            "endEquity": 1262.2,
+            "calendarDays": 12,
+            "tradeDays": 1,
+            "lowN": true
+          },
+          "test": {
+            "trades": 10,
+            "avgTradesPerDay": 0.769,
+            "winRate": 50,
+            "profitFactor": 0.49,
+            "netPct": -3.32,
+            "maxDdPct": 3.72,
+            "avgDailyPct": -0.2521,
+            "geoAvgDailyPct": -0.2591,
+            "endEquity": 773.47,
+            "calendarDays": 13,
+            "tradeDays": 7,
+            "lowN": true
+          }
+        },
+        {
+          "fold": 2,
+          "train": {
+            "trades": 11,
+            "avgTradesPerDay": 0.478,
+            "winRate": 63.6,
+            "profitFactor": 0.62,
+            "netPct": -2.43,
+            "maxDdPct": 3.09,
+            "avgDailyPct": -0.1028,
+            "geoAvgDailyPct": -0.1068,
+            "endEquity": 780.59,
+            "calendarDays": 23,
+            "tradeDays": 6,
+            "lowN": true
+          },
+          "test": {
+            "trades": 6,
+            "avgTradesPerDay": 0.5,
+            "winRate": 33.3,
+            "profitFactor": 0.51,
+            "netPct": -4.15,
+            "maxDdPct": 6.21,
+            "avgDailyPct": -0.3396,
+            "geoAvgDailyPct": -0.3864,
+            "endEquity": 766.78,
+            "calendarDays": 12,
+            "tradeDays": 4,
+            "lowN": true
+          }
+        },
+        {
+          "fold": 3,
+          "train": {
+            "trades": 17,
+            "avgTradesPerDay": 0.515,
+            "winRate": 47.1,
+            "profitFactor": 0.46,
+            "netPct": -8.87,
+            "maxDdPct": 9.48,
+            "avgDailyPct": -0.2716,
+            "geoAvgDailyPct": -0.2933,
+            "endEquity": 729.03,
+            "calendarDays": 33,
+            "tradeDays": 9,
+            "lowN": true
+          },
+          "test": {
+            "trades": 11,
+            "avgTradesPerDay": 0.917,
+            "winRate": 54.5,
+            "profitFactor": 3.11,
+            "netPct": 9.56,
+            "maxDdPct": 2.08,
+            "avgDailyPct": 0.8198,
+            "geoAvgDailyPct": 0.8297,
+            "endEquity": 876.45,
+            "calendarDays": 12,
+            "tradeDays": 6,
+            "lowN": true
+          }
+        }
+      ],
+      "walkForwardMeanTestNetPct": 0.7,
+      "walkForwardMeanTestWR": 45.9,
+      "walkForwardMeanTestPF": 1.37,
+      "walkForwardLowN": true,
+      "ms": 16581
+    },
+    {
+      "id": "liq_buy_side_30m_uscash",
+      "name": "liq_buy_side alone · 30m · US cash",
+      "interval": "30m",
+      "notes": "",
+      "full": {
+        "trades": 95,
+        "avgTradesPerDay": 3.654,
+        "winRate": 50.5,
+        "profitFactor": 1.65,
+        "netPct": 65.59,
+        "maxDdPct": 18.34,
+        "avgDailyPct": 2.4158,
+        "geoAvgDailyPct": 1.9577,
+        "endEquity": 1324.7,
+        "calendarDays": 26,
+        "tradeDays": 21,
+        "lowN": false
+      },
+      "sixty": {
+        "trades": 95,
+        "avgTradesPerDay": 3.654,
+        "winRate": 50.5,
+        "profitFactor": 1.65,
+        "netPct": 65.59,
+        "maxDdPct": 18.34,
+        "avgDailyPct": 2.4158,
+        "geoAvgDailyPct": 1.9577,
+        "endEquity": 1324.7,
+        "calendarDays": 26,
+        "tradeDays": 21,
+        "lowN": false
+      },
+      "train": {
+        "trades": 52,
+        "avgTradesPerDay": 3.25,
+        "winRate": 48.1,
+        "profitFactor": 1.39,
+        "netPct": 21.66,
+        "maxDdPct": 18.34,
+        "avgDailyPct": 1.6557,
+        "geoAvgDailyPct": 1.0343,
+        "endEquity": 973.25,
+        "calendarDays": 16,
+        "tradeDays": 11,
+        "lowN": true
+      },
+      "oos": {
+        "trades": 27,
+        "avgTradesPerDay": 2.455,
+        "winRate": 66.7,
+        "profitFactor": 3.23,
+        "netPct": 39.33,
+        "maxDdPct": 4.23,
+        "avgDailyPct": 3.4221,
+        "geoAvgDailyPct": 3.0585,
+        "endEquity": 1114.61,
+        "calendarDays": 11,
+        "tradeDays": 7,
+        "lowN": true
+      },
+      "walkForward": [
+        {
+          "fold": 1,
+          "train": {
+            "trades": 12,
+            "avgTradesPerDay": 1.5,
+            "winRate": 33.3,
+            "profitFactor": 3.96,
+            "netPct": 50.22,
+            "maxDdPct": 13.04,
+            "avgDailyPct": 6.6303,
+            "geoAvgDailyPct": -0.6167,
+            "endEquity": 1201.76,
+            "calendarDays": 8,
+            "tradeDays": 3,
+            "lowN": true
+          },
+          "test": {
+            "trades": 23,
+            "avgTradesPerDay": 2.875,
+            "winRate": 34.8,
+            "profitFactor": 1.36,
+            "netPct": 11.68,
+            "maxDdPct": 17.74,
+            "avgDailyPct": 2.075,
+            "geoAvgDailyPct": -2.2011,
+            "endEquity": 893.44,
+            "calendarDays": 8,
+            "tradeDays": 8,
+            "lowN": true
+          }
+        },
+        {
+          "fold": 2,
+          "train": {
+            "trades": 35,
+            "avgTradesPerDay": 2.5,
+            "winRate": 34.3,
+            "profitFactor": 1.16,
+            "netPct": 7.91,
+            "maxDdPct": 19.14,
+            "avgDailyPct": 1.0617,
+            "geoAvgDailyPct": -1.5058,
+            "endEquity": 863.27,
+            "calendarDays": 14,
+            "tradeDays": 9,
+            "lowN": true
+          },
+          "test": {
+            "trades": 31,
+            "avgTradesPerDay": 3.875,
+            "winRate": 45.2,
+            "profitFactor": 1.06,
+            "netPct": 2.85,
+            "maxDdPct": 13.7,
+            "avgDailyPct": 0.8251,
+            "geoAvgDailyPct": 1.3984,
+            "endEquity": 822.81,
+            "calendarDays": 8,
+            "tradeDays": 8,
+            "lowN": true
+          }
+        },
+        {
+          "fold": 3,
+          "train": {
+            "trades": 66,
+            "avgTradesPerDay": 3.3,
+            "winRate": 40.9,
+            "profitFactor": 0.97,
+            "netPct": -2.39,
+            "maxDdPct": 18.34,
+            "avgDailyPct": 0.289,
+            "geoAvgDailyPct": 0.2943,
+            "endEquity": 780.86,
+            "calendarDays": 20,
+            "tradeDays": 15,
+            "lowN": false
+          },
+          "test": {
+            "trades": 32,
+            "avgTradesPerDay": 4,
+            "winRate": 62.5,
+            "profitFactor": 2.69,
+            "netPct": 41.05,
+            "maxDdPct": 4.23,
+            "avgDailyPct": 4.8502,
+            "geoAvgDailyPct": 4.3898,
+            "endEquity": 1128.4,
+            "calendarDays": 8,
+            "tradeDays": 8,
+            "lowN": true
+          }
+        }
+      ],
+      "walkForwardMeanTestNetPct": 18.53,
+      "walkForwardMeanTestWR": 47.5,
+      "walkForwardMeanTestPF": 1.7,
+      "walkForwardLowN": true,
+      "ms": 2305
+    },
+    {
+      "id": "combo30_and_window3",
+      "name": "30m combo trend+flow+buy-side · AND within 3 bars",
+      "interval": "30m",
+      "notes": "",
+      "full": {
+        "trades": 63,
+        "avgTradesPerDay": 2.423,
+        "winRate": 49.2,
+        "profitFactor": 1.67,
+        "netPct": 50.18,
+        "maxDdPct": 8.77,
+        "avgDailyPct": 1.7397,
+        "geoAvgDailyPct": 1.6279,
+        "endEquity": 1201.43,
+        "calendarDays": 26,
+        "tradeDays": 18,
+        "lowN": false
+      },
+      "sixty": {
+        "trades": 63,
+        "avgTradesPerDay": 2.423,
+        "winRate": 49.2,
+        "profitFactor": 1.67,
+        "netPct": 50.18,
+        "maxDdPct": 8.77,
+        "avgDailyPct": 1.7397,
+        "geoAvgDailyPct": 1.6279,
+        "endEquity": 1201.43,
+        "calendarDays": 26,
+        "tradeDays": 18,
+        "lowN": false
+      },
+      "train": {
+        "trades": 25,
+        "avgTradesPerDay": 1.563,
+        "winRate": 56,
+        "profitFactor": 1.79,
+        "netPct": 18.85,
+        "maxDdPct": 8.77,
+        "avgDailyPct": 1.2572,
+        "geoAvgDailyPct": 0.9972,
+        "endEquity": 950.78,
+        "calendarDays": 16,
+        "tradeDays": 8,
+        "lowN": true
+      },
+      "oos": {
+        "trades": 21,
+        "avgTradesPerDay": 1.909,
+        "winRate": 57.1,
+        "profitFactor": 1.97,
+        "netPct": 20.44,
+        "maxDdPct": 0.58,
+        "avgDailyPct": 1.7944,
+        "geoAvgDailyPct": 1.8271,
+        "endEquity": 963.52,
+        "calendarDays": 11,
+        "tradeDays": 7,
+        "lowN": true
+      },
+      "walkForward": [
+        {
+          "fold": 1,
+          "train": {
+            "trades": 7,
+            "avgTradesPerDay": 0.875,
+            "winRate": 28.6,
+            "profitFactor": 1.23,
+            "netPct": 2.52,
+            "maxDdPct": 8.77,
+            "avgDailyPct": 0.3048,
+            "geoAvgDailyPct": 0.3118,
+            "endEquity": 820.17,
+            "calendarDays": 8,
+            "tradeDays": 3,
+            "lowN": true
+          },
+          "test": {
+            "trades": 6,
+            "avgTradesPerDay": 0.75,
+            "winRate": 50,
+            "profitFactor": 1.18,
+            "netPct": 1.27,
+            "maxDdPct": 4.45,
+            "avgDailyPct": 0.1811,
+            "geoAvgDailyPct": 0.1575,
+            "endEquity": 810.13,
+            "calendarDays": 8,
+            "tradeDays": 4,
+            "lowN": true
+          }
+        },
+        {
+          "fold": 2,
+          "train": {
+            "trades": 13,
+            "avgTradesPerDay": 0.929,
+            "winRate": 38.5,
+            "profitFactor": 0.89,
+            "netPct": -2.02,
+            "maxDdPct": 8.77,
+            "avgDailyPct": -0.0734,
+            "geoAvgDailyPct": -0.1456,
+            "endEquity": 783.84,
+            "calendarDays": 14,
+            "tradeDays": 5,
+            "lowN": true
+          },
+          "test": {
+            "trades": 24,
+            "avgTradesPerDay": 3,
+            "winRate": 54.2,
+            "profitFactor": 2.61,
+            "netPct": 33.38,
+            "maxDdPct": 5.34,
+            "avgDailyPct": 3.9715,
+            "geoAvgDailyPct": 3.6658,
+            "endEquity": 1067.02,
+            "calendarDays": 8,
+            "tradeDays": 6,
+            "lowN": true
+          }
+        },
+        {
+          "fold": 3,
+          "train": {
+            "trades": 37,
+            "avgTradesPerDay": 1.85,
+            "winRate": 48.6,
+            "profitFactor": 1.81,
+            "netPct": 30.68,
+            "maxDdPct": 8.77,
+            "avgDailyPct": 1.5372,
+            "geoAvgDailyPct": 1.3471,
+            "endEquity": 1045.47,
+            "calendarDays": 20,
+            "tradeDays": 11,
+            "lowN": false
+          },
+          "test": {
+            "trades": 26,
+            "avgTradesPerDay": 3.25,
+            "winRate": 50,
+            "profitFactor": 1.52,
+            "netPct": 14.92,
+            "maxDdPct": 4.35,
+            "avgDailyPct": 1.8922,
+            "geoAvgDailyPct": 1.921,
+            "endEquity": 919.34,
+            "calendarDays": 8,
+            "tradeDays": 8,
+            "lowN": true
+          }
+        }
+      ],
+      "walkForwardMeanTestNetPct": 16.52,
+      "walkForwardMeanTestWR": 51.4,
+      "walkForwardMeanTestPF": 1.77,
+      "walkForwardLowN": true,
+      "ms": 104497
+    },
+    {
+      "id": "combo30_vote2of3",
+      "name": "30m combo trend+flow+buy-side · 2-of-3 voting",
+      "interval": "30m",
+      "notes": "",
+      "full": {
+        "trades": 113,
+        "avgTradesPerDay": 4.346,
+        "winRate": 42.5,
+        "profitFactor": 1.18,
+        "netPct": 29.13,
+        "maxDdPct": 13.06,
+        "avgDailyPct": 1.2092,
+        "geoAvgDailyPct": 0.8528,
+        "endEquity": 1033.03,
+        "calendarDays": 26,
+        "tradeDays": 20,
+        "lowN": false
+      },
+      "sixty": {
+        "trades": 113,
+        "avgTradesPerDay": 4.346,
+        "winRate": 42.5,
+        "profitFactor": 1.18,
+        "netPct": 29.13,
+        "maxDdPct": 13.06,
+        "avgDailyPct": 1.2092,
+        "geoAvgDailyPct": 0.8528,
+        "endEquity": 1033.03,
+        "calendarDays": 26,
+        "tradeDays": 20,
+        "lowN": false
+      },
+      "train": {
+        "trades": 59,
+        "avgTradesPerDay": 3.688,
+        "winRate": 49.2,
+        "profitFactor": 1.62,
+        "netPct": 41.71,
+        "maxDdPct": 7.48,
+        "avgDailyPct": 2.4208,
+        "geoAvgDailyPct": 1.9459,
+        "endEquity": 1133.69,
+        "calendarDays": 16,
+        "tradeDays": 11,
+        "lowN": true
+      },
+      "oos": {
+        "trades": 32,
+        "avgTradesPerDay": 2.909,
+        "winRate": 40.6,
+        "profitFactor": 1.04,
+        "netPct": 1.38,
+        "maxDdPct": 13.06,
+        "avgDailyPct": 0.2385,
+        "geoAvgDailyPct": -0.1917,
+        "endEquity": 811.06,
+        "calendarDays": 11,
+        "tradeDays": 6,
+        "lowN": true
+      },
+      "walkForward": [
+        {
+          "fold": 1,
+          "train": {
+            "trades": 12,
+            "avgTradesPerDay": 1.5,
+            "winRate": 25,
+            "profitFactor": 0.43,
+            "netPct": -22.35,
+            "maxDdPct": 10.35,
+            "avgDailyPct": -3.0183,
+            "geoAvgDailyPct": -1.3558,
+            "endEquity": 621.19,
+            "calendarDays": 8,
+            "tradeDays": 4,
+            "lowN": true
+          },
+          "test": {
+            "trades": 22,
+            "avgTradesPerDay": 2.75,
+            "winRate": 54.5,
+            "profitFactor": 1.4,
+            "netPct": 11.25,
+            "maxDdPct": 5.01,
+            "avgDailyPct": 1.4261,
+            "geoAvgDailyPct": 1.3415,
+            "endEquity": 890,
+            "calendarDays": 8,
+            "tradeDays": 7,
+            "lowN": true
+          }
+        },
+        {
+          "fold": 2,
+          "train": {
+            "trades": 34,
+            "avgTradesPerDay": 2.429,
+            "winRate": 47.1,
+            "profitFactor": 1.19,
+            "netPct": 8.57,
+            "maxDdPct": 5.01,
+            "avgDailyPct": 0.6551,
+            "geoAvgDailyPct": 0.5893,
+            "endEquity": 868.58,
+            "calendarDays": 14,
+            "tradeDays": 9,
+            "lowN": true
+          },
+          "test": {
+            "trades": 42,
+            "avgTradesPerDay": 5.25,
+            "winRate": 42.9,
+            "profitFactor": 1.32,
+            "netPct": 16.19,
+            "maxDdPct": 7.48,
+            "avgDailyPct": 2.1634,
+            "geoAvgDailyPct": 1.8936,
+            "endEquity": 929.54,
+            "calendarDays": 8,
+            "tradeDays": 6,
+            "lowN": true
+          }
+        },
+        {
+          "fold": 3,
+          "train": {
+            "trades": 76,
+            "avgTradesPerDay": 3.8,
+            "winRate": 46.1,
+            "profitFactor": 1.45,
+            "netPct": 43.31,
+            "maxDdPct": 7.48,
+            "avgDailyPct": 2.0064,
+            "geoAvgDailyPct": 1.8155,
+            "endEquity": 1146.47,
+            "calendarDays": 20,
+            "tradeDays": 14,
+            "lowN": false
+          },
+          "test": {
+            "trades": 37,
+            "avgTradesPerDay": 4.625,
+            "winRate": 35.1,
+            "profitFactor": 0.78,
+            "netPct": -9.9,
+            "maxDdPct": 13.06,
+            "avgDailyPct": -1.0861,
+            "geoAvgDailyPct": -1.723,
+            "endEquity": 720.84,
+            "calendarDays": 8,
+            "tradeDays": 6,
+            "lowN": true
+          }
+        }
+      ],
+      "walkForwardMeanTestNetPct": 5.85,
+      "walkForwardMeanTestWR": 44.2,
+      "walkForwardMeanTestPF": 1.17,
+      "walkForwardLowN": true,
+      "ms": 3120
+    }
+  ],
+  "ranked": [
+    {
+      "id": "setupB_uscash_noFri_ON",
+      "score": 82.88,
+      "robustEligible": false,
+      "oos": {
+        "trades": 10,
+        "avgTradesPerDay": 0.556,
+        "winRate": 50,
+        "profitFactor": 3.02,
+        "netPct": 8.21,
+        "maxDdPct": 2.08,
+        "avgDailyPct": 0.4777,
+        "geoAvgDailyPct": 0.4737,
+        "endEquity": 865.68,
+        "calendarDays": 18,
+        "tradeDays": 5,
+        "lowN": true
+      },
+      "wfWR": 55.6,
+      "wfPF": 4.33
+    },
+    {
+      "id": "liq_buy_side_30m_uscash",
+      "score": 78.59,
+      "robustEligible": false,
+      "oos": {
+        "trades": 27,
+        "avgTradesPerDay": 2.455,
+        "winRate": 66.7,
+        "profitFactor": 3.23,
+        "netPct": 39.33,
+        "maxDdPct": 4.23,
+        "avgDailyPct": 3.4221,
+        "geoAvgDailyPct": 3.0585,
+        "endEquity": 1114.61,
+        "calendarDays": 11,
+        "tradeDays": 7,
+        "lowN": true
+      },
+      "wfWR": 47.5,
+      "wfPF": 1.7
+    },
+    {
+      "id": "combo30_and_window3",
+      "score": 66.07,
+      "robustEligible": true,
+      "oos": {
+        "trades": 21,
+        "avgTradesPerDay": 1.909,
+        "winRate": 57.1,
+        "profitFactor": 1.97,
+        "netPct": 20.44,
+        "maxDdPct": 0.58,
+        "avgDailyPct": 1.7944,
+        "geoAvgDailyPct": 1.8271,
+        "endEquity": 963.52,
+        "calendarDays": 11,
+        "tradeDays": 7,
+        "lowN": true
+      },
+      "wfWR": 51.4,
+      "wfPF": 1.77
+    },
+    {
+      "id": "setupB_uscash_noFri_OFF",
+      "score": 58.14,
+      "robustEligible": false,
+      "oos": {
+        "trades": 11,
+        "avgTradesPerDay": 0.611,
+        "winRate": 45.5,
+        "profitFactor": 2.31,
+        "netPct": 6.96,
+        "maxDdPct": 1.98,
+        "avgDailyPct": 0.4136,
+        "geoAvgDailyPct": 0.4094,
+        "endEquity": 855.7,
+        "calendarDays": 18,
+        "tradeDays": 6,
+        "lowN": true
+      },
+      "wfWR": 45.9,
+      "wfPF": 1.37
+    },
+    {
+      "id": "combo30_vote2of3",
+      "score": 43.07,
+      "robustEligible": false,
+      "oos": {
+        "trades": 32,
+        "avgTradesPerDay": 2.909,
+        "winRate": 40.6,
+        "profitFactor": 1.04,
+        "netPct": 1.38,
+        "maxDdPct": 13.06,
+        "avgDailyPct": 0.2385,
+        "geoAvgDailyPct": -0.1917,
+        "endEquity": 811.06,
+        "calendarDays": 11,
+        "tradeDays": 6,
+        "lowN": true
+      },
+      "wfWR": 44.2,
+      "wfPF": 1.17
+    }
+  ],
+  "baselineId": "setupB_uscash_noFri_ON",
+  "adopt": {
+    "id": "setupB_uscash_noFri_ON",
+    "name": "Setup B · 1h AND-w3 + US cash + noFriday ON (current live filters)",
+    "interval": "1h",
+    "reason": "No candidate robustly beat Setup B on OOS+WF WR/PF with adequate N and DD; keep Setup B.",
+    "oos": {
+      "trades": 10,
+      "avgTradesPerDay": 0.556,
+      "winRate": 50,
+      "profitFactor": 3.02,
+      "netPct": 8.21,
+      "maxDdPct": 2.08,
+      "avgDailyPct": 0.4777,
+      "geoAvgDailyPct": 0.4737,
+      "endEquity": 865.68,
+      "calendarDays": 18,
+      "tradeDays": 5,
+      "lowN": true
+    },
+    "sixty": {
+      "trades": 25,
+      "avgTradesPerDay": 0.581,
+      "winRate": 56,
+      "profitFactor": 1.36,
+      "netPct": 5.62,
+      "maxDdPct": 7.74,
+      "avgDailyPct": 0.1506,
+      "geoAvgDailyPct": 0.1416,
+      "endEquity": 844.96,
+      "calendarDays": 43,
+      "tradeDays": 14,
+      "lowN": true
+    },
+    "wfWR": 55.6,
+    "wfPF": 4.33
+  },
+  "gridAudit": {
+    "corrections": [
+      {
+        "signal": "ind_trend",
+        "interval": "10m",
+        "reported": 23.7,
+        "jsonExact": 23.96,
+        "oosTrades": 62,
+        "delta": 0.26
+      },
+      {
+        "signal": "ind_trend",
+        "interval": "15m",
+        "reported": -0.3,
+        "jsonExact": -0.24,
+        "oosTrades": 39,
+        "delta": 0.06
+      },
+      {
+        "signal": "ind_momentum",
+        "interval": "15m",
+        "reported": 14.1,
+        "jsonExact": 14.42,
+        "oosTrades": 31,
+        "delta": 0.32
+      },
+      {
+        "signal": "ind_momentum",
+        "interval": "30m",
+        "reported": 28.1,
+        "jsonExact": 27.93,
+        "oosTrades": 34,
+        "delta": -0.17
+      },
+      {
+        "signal": "ind_pressure",
+        "interval": "5m",
+        "reported": 4.1,
+        "jsonExact": 4.34,
+        "oosTrades": 73,
+        "delta": 0.24
+      },
+      {
+        "signal": "ind_pressure",
+        "interval": "10m",
+        "reported": 9.8,
+        "jsonExact": 10.37,
+        "oosTrades": 65,
+        "delta": 0.57
+      },
+      {
+        "signal": "ind_pressure",
+        "interval": "15m",
+        "reported": 12.6,
+        "jsonExact": 13.1,
+        "oosTrades": 40,
+        "delta": 0.5
+      },
+      {
+        "signal": "ind_flow",
+        "interval": "5m",
+        "reported": 21.6,
+        "jsonExact": 22.02,
+        "oosTrades": 78,
+        "delta": 0.42
+      },
+      {
+        "signal": "ind_flow",
+        "interval": "15m",
+        "reported": 26.3,
+        "jsonExact": 25.89,
+        "oosTrades": 42,
+        "delta": -0.41
+      },
+      {
+        "signal": "liq_grab",
+        "interval": "5m",
+        "reported": -6.8,
+        "jsonExact": -7.36,
+        "oosTrades": 73,
+        "delta": -0.56
+      },
+      {
+        "signal": "liq_grab",
+        "interval": "15m",
+        "reported": 2.3,
+        "jsonExact": 2.38,
+        "oosTrades": 41,
+        "delta": 0.08
+      },
+      {
+        "signal": "liq_sweep",
+        "interval": "5m",
+        "reported": -11.2,
+        "jsonExact": -10.83,
+        "oosTrades": 68,
+        "delta": 0.37
+      },
+      {
+        "signal": "liq_sweep",
+        "interval": "10m",
+        "reported": -11.8,
+        "jsonExact": -12.36,
+        "oosTrades": 68,
+        "delta": -0.56
+      },
+      {
+        "signal": "liq_sweep",
+        "interval": "15m",
+        "reported": 3.2,
+        "jsonExact": 3.06,
+        "oosTrades": 34,
+        "delta": -0.14
+      },
+      {
+        "signal": "liq_buy_side",
+        "interval": "5m",
+        "reported": 2.8,
+        "jsonExact": 2.69,
+        "oosTrades": 66,
+        "delta": -0.11
+      },
+      {
+        "signal": "liq_buy_side",
+        "interval": "10m",
+        "reported": 24.1,
+        "jsonExact": 23.67,
+        "oosTrades": 58,
+        "delta": -0.43
+      },
+      {
+        "signal": "liq_buy_side",
+        "interval": "15m",
+        "reported": 2.1,
+        "jsonExact": 2.16,
+        "oosTrades": 32,
+        "delta": 0.06
+      },
+      {
+        "signal": "liq_sell_side",
+        "interval": "5m",
+        "reported": -1.2,
+        "jsonExact": -1.42,
+        "oosTrades": 66,
+        "delta": -0.22
+      },
+      {
+        "signal": "liq_sell_side",
+        "interval": "10m",
+        "reported": 11.6,
+        "jsonExact": 12.11,
+        "oosTrades": 55,
+        "delta": 0.51
+      },
+      {
+        "signal": "liq_sell_side",
+        "interval": "15m",
+        "reported": -12.1,
+        "jsonExact": -12.38,
+        "oosTrades": 34,
+        "delta": -0.28
+      },
+      {
+        "signal": "liq_sell_side",
+        "interval": "30m",
+        "reported": -9.8,
+        "jsonExact": -9.75,
+        "oosTrades": 30,
+        "delta": 0.05
+      }
+    ],
+    "caveat": "Prior grid hooks returned direction not dir; longs may have been mishandled before harness fix. Display deltas mostly rounding."
+  }
+}

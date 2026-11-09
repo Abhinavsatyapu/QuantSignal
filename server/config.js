@@ -49,18 +49,18 @@ const BINANCE_DEFAULTS = {
   limitOffsetPct: 0.02,
   assets: [], // filled by liquid-universe refresh (62 US equity TradFi perps)
   assetsAuto: true,
-  interval: '1h',
+  interval: '30m',
   minScore: 6,
   scannerEnabled: true,
   autoTrade: true,
   killSwitch: false,
   allowSignedOrders: false,
   allowTestnetOrders: false,
-  signalMode: 'confirm_window',
-  liqKinds: [], // any liquidity kind; AND with indicators within window
+  signalMode: 'combo_and3',
+  liqKinds: ['buy_side_liquidity_taken'],
   liqWindowBars: 3,
   entryFilters: {},
-  activePreset: 'combine_1h_and_window_3_uscash',
+  activePreset: 'combo_30m_trend_flow_buyside_and3_uscash',
   studyPresets: {
     study_best_4h_liq_buy_side: {
       id: 'study_best_4h_liq_buy_side',
@@ -74,9 +74,15 @@ const BINANCE_DEFAULTS = {
     },
     combine_1h_and_window_3_uscash: {
       id: 'combine_1h_and_window_3_uscash',
-      label: 'Active · 1h AND window 3 + US cash only (postmortem Setup B)',
+      label: 'Setup B · 1h AND window 3 + US cash only',
       interval: '1h', signalMode: 'confirm_window', liqKinds: [], liqWindowBars: 3, minScore: 6,
       entryFilters: { usCashOnly: true },
+    },
+    combo_30m_trend_flow_buyside_and3_uscash: {
+      id: 'combo_30m_trend_flow_buyside_and3_uscash',
+      label: 'Adopted · 30m trend+flow+buy-side AND-w3 + US cash + maxStop 2.5ATR',
+      interval: '30m', signalMode: 'combo_and3', liqKinds: ['buy_side_liquidity_taken'], liqWindowBars: 3, minScore: 6,
+      entryFilters: { usCashOnly: true, noFridayEntry: false, maxStopAtr: 2.5 },
     },
     legacy_15m_indicators: {
       id: 'legacy_15m_indicators',
@@ -151,8 +157,8 @@ function load() {
   // Re-apply study preset fields (interval/mode/filters) so disk overlays stay consistent
   applyActivePreset(current.binance);
   // User-approved dry-run default: Setup B + US cash
-  if (current.binance.activePreset === 'combine_1h_and_window_3') {
-    current.binance.activePreset = 'combine_1h_and_window_3_uscash';
+  if (current.binance.activePreset === 'combine_1h_and_window_3' || current.binance.activePreset === 'combine_1h_and_window_3_uscash') {
+    current.binance.activePreset = 'combo_30m_trend_flow_buyside_and3_uscash';
     applyActivePreset(current.binance);
   }
   if (process.env.NETWORK) current.network = process.env.NETWORK.trim().toLowerCase();
@@ -231,7 +237,7 @@ function update(patch) {
     if (b.killSwitch !== undefined) B.killSwitch = !!b.killSwitch;
     if (b.allowSignedOrders !== undefined) B.allowSignedOrders = !!b.allowSignedOrders;
     if (b.allowTestnetOrders !== undefined) B.allowTestnetOrders = !!b.allowTestnetOrders;
-    if (b.signalMode !== undefined) { if (!['indicators','liquidity','confirm','confirm_window','any'].includes(b.signalMode)) throw Error('signalMode invalid'); B.signalMode = b.signalMode; }
+    if (b.signalMode !== undefined) { if (!['indicators','liquidity','confirm','confirm_window','any','combo_and3'].includes(b.signalMode)) throw Error('signalMode invalid'); B.signalMode = b.signalMode; }
     if (b.liqWindowBars !== undefined) B.liqWindowBars = Math.round(num(b.liqWindowBars, 0, 24, 'liq window bars'));
     if (b.liqKinds !== undefined) {
       const kinds = Array.isArray(b.liqKinds) ? b.liqKinds : String(b.liqKinds).split(',').map(x => x.trim()).filter(Boolean);

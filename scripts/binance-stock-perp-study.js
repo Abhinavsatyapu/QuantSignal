@@ -341,13 +341,15 @@ function runPortfolio(series, interval, variant, opts = {}) {
 
     const sig = (typeof globalThis.__qsSignalAt === "function" ? globalThis.__qsSignalAt : signalAt)(bars, ev.i, variant);
     if (!sig) continue;
+    const dir = sig.dir || sig.direction;
+    if (dir !== 'LONG' && dir !== 'SHORT') continue;
 
     // Limit-then-market after 2 min: next bar
     if (ev.i + 1 >= bars.length) continue;
     const next = bars[ev.i + 1];
     let fillPx = null, entryType = 'limit';
     const limitPx = sig.entry;
-    if (sig.dir === 'LONG') {
+    if (dir === 'LONG') {
       if (next.l <= limitPx) fillPx = limitPx;
       else { fillPx = next.o * (1 + SLIP_BPS / 1e4); entryType = 'market_fallback'; }
     } else {
@@ -356,13 +358,13 @@ function runPortfolio(series, interval, variant, opts = {}) {
     }
     // Recompute stop/tp relative to fill
     const risk = Math.abs(sig.entry - sig.stop);
-    const stop = sig.dir === 'LONG' ? fillPx - risk : fillPx + risk;
-    const tp = sig.dir === 'LONG' ? fillPx + 2 * risk : fillPx - 2 * risk;
+    const stop = dir === 'LONG' ? fillPx - risk : fillPx + risk;
+    const tp = dir === 'LONG' ? fillPx + 2 * risk : fillPx - 2 * risk;
     const qty = sizeQty(equity, fillPx, stop, 0);
     if (!(qty > 0)) continue;
     const entryFee = qty * fillPx * (entryType === 'limit' ? FEE_RT / 4 : FEE_RT / 2);
     open.push({
-      symbol: ev.symbol, dir: sig.dir, qty, entry: fillPx, stop, tp,
+      symbol: ev.symbol, dir, qty, entry: fillPx, stop, tp,
       entryBar: ev.i + 1, entryTs: next.t, entryFee, source: sig.source, entryType,
     });
   }

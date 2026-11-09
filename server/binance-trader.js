@@ -4,6 +4,7 @@
 // MARKET for unfilled qty after entryTimeoutSec (default 120). Restart-safe via bn_pending.
 const crypto = require('crypto');
 const config = require('./config');
+const presetSignals = require('./binance-preset-signals');
 const store = require('./db');
 const bn = require('./binance');
 const { Prices, DEFAULT_SYMBOLS } = require('./binance-prices');
@@ -827,6 +828,19 @@ async function scanOnce(reason) {
             }
           }
           if (matched) { dir = a.direction; sourceTag = 'confirm_window'; }
+        } else if (mode === 'combo_and3') {
+          const filters = c.entryFilters || {};
+          const sig = presetSignals.signalComboAnd3(kl, kl.length - 1, Technicals, LiquiditySignals, {
+            windowBars: Math.max(1, Number(c.liqWindowBars) || 3),
+            usCashOnly: false, // applied below via entryFilters / UTC now
+            noFridayEntry: false,
+            maxStopAtr: filters.maxStopAtr != null ? filters.maxStopAtr : 2.5,
+            interval: c.interval,
+          });
+          if (sig && sig.dir) {
+            dir = sig.dir; score = sig.score || 7; sourceTag = 'combo_and3';
+            a.entry = sig.entry; a.stop = sig.stop; a.target = sig.tp;
+          }
         } else if (mode === 'any') {
           if (['LONG','SHORT'].includes(a.direction) && (a.score||0) >= c.minScore) dir = a.direction;
           else if (liq.direction) { dir = liq.direction; score = 6 + liq.score; sourceTag = 'liquidity'; }
@@ -835,13 +849,11 @@ async function scanOnce(reason) {
         const ruleset = (c.studyRulesets && c.activeStudyRuleset && c.studyRulesets[c.activeStudyRuleset]) || null;
         const filters = { ...(c.entryFilters || {}), ...((ruleset && ruleset.rules) || {}) };
         if (dir && filters.noFridayEntry) {
-          const istDow = new Date(Date.now() + 5.5 * 3600e3).getUTCDay();
-          if (istDow === 5) dir = null;
+          if (presetSignals.isFridayUTC(Date.now())) dir = null;
         }
         if (dir && filters.noLiquidityOnly && sourceTag === 'liquidity') dir = null;
         if (dir && filters.usCashOnly) {
-          const h = new Date(Date.now() + 5.5 * 3600e3).getUTCHours();
-          if (!(h >= 19 || h <= 2)) dir = null;
+          if (!presetSignals.usCashUTC(Date.now())) dir = null;
         }
         if (dir && filters.minScore != null && (score || 0) < filters.minScore && sourceTag !== 'liquidity') dir = null;
         if (dir) {

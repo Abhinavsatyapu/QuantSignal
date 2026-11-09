@@ -1,0 +1,321 @@
+{
+  "generatedAt": "2026-11-09T21:14:09.860Z",
+  "baselinePreset": "combo_30m_trend_flow_buyside_and3_uscash",
+  "lossCauses": {
+    "correlated_cluster": 22,
+    "unclassified_stop_or_thesis": 5,
+    "weekend_risk_window": 5,
+    "noise_stop_out": 10,
+    "late_entry_extended": 5,
+    "illiquid_session": 2
+  },
+  "lossCount": 32,
+  "baseline": {
+    "oos": {
+      "trades": 21,
+      "winRate": 57.1,
+      "profitFactor": 1.97,
+      "netPct": 20.44,
+      "maxDdPct": 0.58,
+      "avgDailyPct": 1.7944,
+      "avgTradesPerDay": 1.909,
+      "lowN": true
+    },
+    "sixty": {
+      "trades": 63,
+      "winRate": 49.2,
+      "profitFactor": 1.67,
+      "netPct": 50.18,
+      "maxDdPct": 8.77,
+      "avgDailyPct": 1.7397,
+      "avgTradesPerDay": 2.423,
+      "lowN": false
+    },
+    "wfMeanWR": 51.4,
+    "wfMeanPF": 1.77,
+    "train": {
+      "trades": 25,
+      "winRate": 56,
+      "profitFactor": 1.79,
+      "netPct": 18.85,
+      "maxDdPct": 8.77
+    }
+  },
+  "fixes": [
+    {
+      "id": "noFridayEntry",
+      "desc": "Skip Friday UTC entries",
+      "adopt": false,
+      "reason": "oos_wr_down",
+      "oos": {
+        "trades": 20,
+        "winRate": 55,
+        "profitFactor": 1.94,
+        "netPct": 19.76,
+        "maxDdPct": 0.58,
+        "avgDailyPct": 1.7426,
+        "avgTradesPerDay": 1.818,
+        "lowN": true
+      },
+      "sixty": {
+        "trades": 55,
+        "winRate": 50.9,
+        "profitFactor": 1.74,
+        "netPct": 51.18,
+        "maxDdPct": 8.77,
+        "avgDailyPct": 1.7346,
+        "avgTradesPerDay": 2.115,
+        "lowN": false
+      },
+      "wfMeanWR": 51.6,
+      "wfMeanPF": 2.02,
+      "train": {
+        "trades": 19,
+        "winRate": 47.4,
+        "profitFactor": 1.56,
+        "netPct": 12.32,
+        "maxDdPct": 8.77
+      },
+      "trainBetter": false
+    },
+    {
+      "id": "max_stop_2_5atr",
+      "desc": "Skip late entries stop>2.5 ATR",
+      "adopt": true,
+      "reason": "oos+wf WR/PF up, N/DD ok",
+      "oos": {
+        "trades": 18,
+        "winRate": 61.1,
+        "profitFactor": 2.36,
+        "netPct": 21.15,
+        "maxDdPct": 0,
+        "avgDailyPct": 1.8475,
+        "avgTradesPerDay": 1.636,
+        "lowN": true
+      },
+      "sixty": {
+        "trades": 56,
+        "winRate": 51.8,
+        "profitFactor": 1.87,
+        "netPct": 54.84,
+        "maxDdPct": 8.77,
+        "avgDailyPct": 1.8682,
+        "avgTradesPerDay": 2.154,
+        "lowN": false
+      },
+      "wfMeanWR": 56.4,
+      "wfMeanPF": 2.23,
+      "train": {
+        "trades": 24,
+        "winRate": 58.3,
+        "profitFactor": 1.98,
+        "netPct": 21.42,
+        "maxDdPct": 8.77
+      },
+      "trainBetter": true
+    },
+    {
+      "id": "wider_stop_2atr",
+      "desc": "Wider 2×ATR stops",
+      "adopt": false,
+      "reason": "oos_wr_down",
+      "oos": {
+        "trades": 15,
+        "winRate": 46.7,
+        "profitFactor": 2.01,
+        "netPct": 13.54,
+        "maxDdPct": 2.11,
+        "avgDailyPct": 1.3017,
+        "avgTradesPerDay": 1.364,
+        "lowN": true
+      },
+      "sixty": {
+        "trades": 53,
+        "winRate": 49.1,
+        "profitFactor": 1.92,
+        "netPct": 54.21,
+        "maxDdPct": 6.55,
+        "avgDailyPct": 1.8225,
+        "avgTradesPerDay": 2.038,
+        "lowN": false
+      },
+      "wfMeanWR": 49.7,
+      "wfMeanPF": 1.99,
+      "train": {
+        "trades": 22,
+        "winRate": 54.5,
+        "profitFactor": 2.09,
+        "netPct": 21.26,
+        "maxDdPct": 6.55
+      },
+      "trainBetter": false
+    },
+    {
+      "id": "atr_regime_0_3_3",
+      "desc": "ATR% regime 0.3–3.0",
+      "adopt": false,
+      "reason": "oos_wr_down",
+      "oos": {
+        "trades": 18,
+        "winRate": 55.6,
+        "profitFactor": 1.68,
+        "netPct": 12.92,
+        "maxDdPct": 4.5,
+        "avgDailyPct": 1.1933,
+        "avgTradesPerDay": 1.636,
+        "lowN": true
+      },
+      "sixty": {
+        "trades": 58,
+        "winRate": 48.3,
+        "profitFactor": 1.56,
+        "netPct": 39.08,
+        "maxDdPct": 8.77,
+        "avgDailyPct": 1.4167,
+        "avgTradesPerDay": 2.231,
+        "lowN": false
+      },
+      "wfMeanWR": 50.8,
+      "wfMeanPF": 1.75,
+      "train": {
+        "trades": 24,
+        "winRate": 54.2,
+        "profitFactor": 1.62,
+        "netPct": 14.75,
+        "maxDdPct": 8.77
+      },
+      "trainBetter": false
+    },
+    {
+      "id": "atr_regime_0_4_2_5",
+      "desc": "ATR% regime 0.4–2.5",
+      "adopt": false,
+      "reason": "oos_wr_down",
+      "oos": {
+        "trades": 16,
+        "winRate": 43.8,
+        "profitFactor": 1.1,
+        "netPct": 2.08,
+        "maxDdPct": 4.5,
+        "avgDailyPct": 0.2037,
+        "avgTradesPerDay": 1.455,
+        "lowN": true
+      },
+      "sixty": {
+        "trades": 55,
+        "winRate": 45.5,
+        "profitFactor": 1.41,
+        "netPct": 28.42,
+        "maxDdPct": 8.77,
+        "avgDailyPct": 1.0771,
+        "avgTradesPerDay": 2.115,
+        "lowN": false
+      },
+      "wfMeanWR": 48.4,
+      "wfMeanPF": 1.76,
+      "train": {
+        "trades": 23,
+        "winRate": 52.2,
+        "profitFactor": 1.61,
+        "netPct": 14.46,
+        "maxDdPct": 8.77
+      },
+      "trainBetter": false
+    },
+    {
+      "id": "cluster_cap_2",
+      "desc": "placeholder cluster (noop unless scanner sets count)",
+      "adopt": true,
+      "reason": "oos+wf WR/PF up, N/DD ok",
+      "oos": {
+        "trades": 21,
+        "winRate": 57.1,
+        "profitFactor": 1.97,
+        "netPct": 20.44,
+        "maxDdPct": 0.58,
+        "avgDailyPct": 1.7944,
+        "avgTradesPerDay": 1.909,
+        "lowN": true
+      },
+      "sixty": {
+        "trades": 63,
+        "winRate": 49.2,
+        "profitFactor": 1.67,
+        "netPct": 50.18,
+        "maxDdPct": 8.77,
+        "avgDailyPct": 1.7397,
+        "avgTradesPerDay": 2.423,
+        "lowN": false
+      },
+      "wfMeanWR": 51.4,
+      "wfMeanPF": 1.77,
+      "train": {
+        "trades": 25,
+        "winRate": 56,
+        "profitFactor": 1.79,
+        "netPct": 18.85,
+        "maxDdPct": 8.77
+      },
+      "trainBetter": true
+    }
+  ],
+  "adoptedFixes": [
+    "max_stop_2_5atr",
+    "cluster_cap_2"
+  ],
+  "rejectedFixes": [
+    {
+      "id": "noFridayEntry",
+      "reason": "oos_wr_down"
+    },
+    {
+      "id": "wider_stop_2atr",
+      "reason": "oos_wr_down"
+    },
+    {
+      "id": "atr_regime_0_3_3",
+      "reason": "oos_wr_down"
+    },
+    {
+      "id": "atr_regime_0_4_2_5",
+      "reason": "oos_wr_down"
+    }
+  ],
+  "finalFilters": {
+    "maxStopAtr": 2.5,
+    "maxCluster": 2
+  },
+  "final": {
+    "oos": {
+      "trades": 18,
+      "winRate": 61.1,
+      "profitFactor": 2.36,
+      "netPct": 21.15,
+      "maxDdPct": 0,
+      "avgDailyPct": 1.8475,
+      "avgTradesPerDay": 1.636,
+      "lowN": true
+    },
+    "sixty": {
+      "trades": 56,
+      "winRate": 51.8,
+      "profitFactor": 1.87,
+      "netPct": 54.84,
+      "maxDdPct": 8.77,
+      "avgDailyPct": 1.8682,
+      "avgTradesPerDay": 2.154,
+      "lowN": false
+    },
+    "wfMeanWR": 56.4,
+    "wfMeanPF": 2.23
+  },
+  "note": "cluster_cap_2 was a noop (clusterCount always 0) — not shipped. Only maxStopAtr:2.5 adopted into live dry-run preset.",
+  "shippedFilters": {
+    "usCashOnly": true,
+    "noFridayEntry": false,
+    "maxStopAtr": 2.5
+  },
+  "adoptedFixesShipped": [
+    "max_stop_2_5atr"
+  ]
+}

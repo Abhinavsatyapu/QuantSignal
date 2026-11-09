@@ -1,0 +1,338 @@
+{
+  "generatedAt": "2026-11-09T21:08:45.432Z",
+  "sources": [
+    {
+      "id": "ORB",
+      "title": "Opening Range Breakout",
+      "url": "https://en.wikipedia.org/wiki/Opening_range",
+      "note": "Classic first-hour / opening-range breakout used by day traders (Crabel-style ORB folklore; Wikipedia Opening range)."
+    },
+    {
+      "id": "VWAP",
+      "title": "VWAP reclaim / rejection",
+      "url": "https://www.investopedia.com/terms/v/vwap.asp",
+      "note": "Institutional VWAP as fair-value anchor; reclaim/rejection entries (Investopedia VWAP)."
+    },
+    {
+      "id": "RS_SPY",
+      "title": "Relative strength vs SPY",
+      "url": "https://www.investopedia.com/terms/r/relativestrength.asp",
+      "note": "Relative strength vs benchmark (Investopedia Relative Strength)."
+    },
+    {
+      "id": "BOS",
+      "title": "Break of structure",
+      "url": "https://www.babypips.com/learn/forex/market-structure",
+      "note": "Market-structure swing break (BabyPips market structure / ICT BOS vernacular)."
+    },
+    {
+      "id": "LIQ_MR",
+      "title": "Mean-reversion at liquidity grab",
+      "url": "https://www.investopedia.com/terms/m/meanreversion.asp",
+      "note": "Fade liquidity grabs (mean reversion after stop-run; Investopedia Mean Reversion + ICT liquidity ideas)."
+    },
+    {
+      "id": "SPY_REGIME",
+      "title": "SPY trend regime filter",
+      "url": "https://www.investopedia.com/articles/trading/07/adx.shtml",
+      "note": "Trade only with SPY EMA trend / ADX-style regime (Investopedia ADX / trend regime)."
+    }
+  ],
+  "universe": 62,
+  "baselineId": "combo_and3_baseline",
+  "baseline": {
+    "oos": {
+      "trades": 21,
+      "winRate": 57.1,
+      "profitFactor": 1.97,
+      "netPct": 20.44,
+      "maxDdPct": 0.58,
+      "avgDailyPct": 1.7944,
+      "avgTradesPerDay": 1.909,
+      "lowN": true
+    },
+    "sixty": {
+      "trades": 63,
+      "winRate": 49.2,
+      "profitFactor": 1.67,
+      "netPct": 50.18,
+      "maxDdPct": 8.77,
+      "avgDailyPct": 1.7397,
+      "avgTradesPerDay": 2.423,
+      "lowN": false
+    },
+    "wfMeanWR": 51.4,
+    "wfMeanPF": 1.77
+  },
+  "results": [
+    {
+      "id": "orb_spy_agree",
+      "source": "ORB",
+      "oos": {
+        "trades": 30,
+        "winRate": 30,
+        "profitFactor": 0.37,
+        "netPct": -23.98,
+        "maxDdPct": 24.51,
+        "avgDailyPct": -2.3973,
+        "avgTradesPerDay": 2.727,
+        "lowN": true
+      },
+      "sixty": {
+        "trades": 102,
+        "winRate": 34.3,
+        "profitFactor": 0.79,
+        "netPct": -26.84,
+        "maxDdPct": 31.14,
+        "avgDailyPct": -0.9532,
+        "avgTradesPerDay": 3.923,
+        "lowN": false
+      },
+      "wfMeanWR": 34.8,
+      "wfMeanPF": 0.88,
+      "wfMeanDD": 20.48,
+      "train": {
+        "trades": 54,
+        "winRate": 37,
+        "profitFactor": 0.97,
+        "netPct": -2.05,
+        "maxDdPct": 24.46,
+        "avgDailyPct": 0.1227,
+        "avgTradesPerDay": 3.375,
+        "lowN": true
+      },
+      "ms": 1574
+    },
+    {
+      "id": "vwap_reclaim",
+      "source": "VWAP",
+      "oos": {
+        "trades": 37,
+        "winRate": 37.8,
+        "profitFactor": 0.94,
+        "netPct": -2.48,
+        "maxDdPct": 9.49,
+        "avgDailyPct": -0.1417,
+        "avgTradesPerDay": 3.364,
+        "lowN": true
+      },
+      "sixty": {
+        "trades": 110,
+        "winRate": 36.4,
+        "profitFactor": 0.94,
+        "netPct": -7.58,
+        "maxDdPct": 15.63,
+        "avgDailyPct": -0.1909,
+        "avgTradesPerDay": 4.231,
+        "lowN": false
+      },
+      "wfMeanWR": 35.6,
+      "wfMeanPF": 0.77,
+      "wfMeanDD": 13.77,
+      "train": {
+        "trades": 53,
+        "winRate": 30.2,
+        "profitFactor": 0.79,
+        "netPct": -14.26,
+        "maxDdPct": 15.63,
+        "avgDailyPct": -0.8397,
+        "avgTradesPerDay": 3.313,
+        "lowN": true
+      },
+      "ms": 4172
+    },
+    {
+      "id": "rs_vs_spy",
+      "source": "RS_SPY",
+      "oos": {
+        "trades": 41,
+        "winRate": 39,
+        "profitFactor": 0.91,
+        "netPct": -4.57,
+        "maxDdPct": 20.03,
+        "avgDailyPct": -0.2571,
+        "avgTradesPerDay": 3.727,
+        "lowN": true
+      },
+      "sixty": {
+        "trades": 132,
+        "winRate": 33.3,
+        "profitFactor": 0.72,
+        "netPct": -41.84,
+        "maxDdPct": 50.16,
+        "avgDailyPct": -1.7816,
+        "avgTradesPerDay": 5.077,
+        "lowN": false
+      },
+      "wfMeanWR": 35.8,
+      "wfMeanPF": 0.64,
+      "wfMeanDD": 25.93,
+      "train": {
+        "trades": 66,
+        "winRate": 36.4,
+        "profitFactor": 0.95,
+        "netPct": -4.42,
+        "maxDdPct": 16.78,
+        "avgDailyPct": -0.0401,
+        "avgTradesPerDay": 4.125,
+        "lowN": true
+      },
+      "ms": 398
+    },
+    {
+      "id": "bos_swing10",
+      "source": "BOS",
+      "oos": {
+        "trades": 30,
+        "winRate": 43.3,
+        "profitFactor": 1.08,
+        "netPct": 2.98,
+        "maxDdPct": 8.72,
+        "avgDailyPct": 0.3353,
+        "avgTradesPerDay": 2.727,
+        "lowN": true
+      },
+      "sixty": {
+        "trades": 110,
+        "winRate": 39.1,
+        "profitFactor": 1.03,
+        "netPct": 3.93,
+        "maxDdPct": 17.75,
+        "avgDailyPct": 0.3305,
+        "avgTradesPerDay": 4.231,
+        "lowN": false
+      },
+      "wfMeanWR": 36.7,
+      "wfMeanPF": 0.75,
+      "wfMeanDD": 13.51,
+      "train": {
+        "trades": 55,
+        "winRate": 41.8,
+        "profitFactor": 1.26,
+        "netPct": 17.74,
+        "maxDdPct": 13.41,
+        "avgDailyPct": 1.2752,
+        "avgTradesPerDay": 3.438,
+        "lowN": true
+      },
+      "ms": 406
+    },
+    {
+      "id": "liq_grab_mr",
+      "source": "LIQ_MR",
+      "oos": {
+        "trades": 32,
+        "winRate": 43.8,
+        "profitFactor": 1.08,
+        "netPct": 2.56,
+        "maxDdPct": 8.39,
+        "avgDailyPct": 0.2777,
+        "avgTradesPerDay": 2.909,
+        "lowN": true
+      },
+      "sixty": {
+        "trades": 115,
+        "winRate": 31.3,
+        "profitFactor": 0.57,
+        "netPct": -45.3,
+        "maxDdPct": 51.14,
+        "avgDailyPct": -2.1389,
+        "avgTradesPerDay": 4.423,
+        "lowN": false
+      },
+      "wfMeanWR": 31.9,
+      "wfMeanPF": 0.75,
+      "wfMeanDD": 22.66,
+      "train": {
+        "trades": 61,
+        "winRate": 24.6,
+        "profitFactor": 0.36,
+        "netPct": -42.93,
+        "maxDdPct": 43.92,
+        "avgDailyPct": -3.2943,
+        "avgTradesPerDay": 3.813,
+        "lowN": true
+      },
+      "ms": 646
+    },
+    {
+      "id": "combo_plus_spy_regime",
+      "source": "SPY_REGIME",
+      "oos": {
+        "trades": 12,
+        "winRate": 50,
+        "profitFactor": 1.33,
+        "netPct": 4.43,
+        "maxDdPct": 4.5,
+        "avgDailyPct": 0.4212,
+        "avgTradesPerDay": 1.091,
+        "lowN": true
+      },
+      "sixty": {
+        "trades": 38,
+        "winRate": 52.6,
+        "profitFactor": 1.92,
+        "netPct": 38.84,
+        "maxDdPct": 7.47,
+        "avgDailyPct": 1.3761,
+        "avgTradesPerDay": 1.462,
+        "lowN": false
+      },
+      "wfMeanWR": 58.3,
+      "wfMeanPF": 2.6,
+      "wfMeanDD": 3.99,
+      "train": {
+        "trades": 20,
+        "winRate": 70,
+        "profitFactor": 3.41,
+        "netPct": 32.95,
+        "maxDdPct": 2.23,
+        "avgDailyPct": 1.9261,
+        "avgTradesPerDay": 1.25,
+        "lowN": true
+      },
+      "ms": 60556
+    },
+    {
+      "id": "combo_and3_baseline",
+      "source": "INTERNAL",
+      "oos": {
+        "trades": 21,
+        "winRate": 57.1,
+        "profitFactor": 1.97,
+        "netPct": 20.44,
+        "maxDdPct": 0.58,
+        "avgDailyPct": 1.7944,
+        "avgTradesPerDay": 1.909,
+        "lowN": true
+      },
+      "sixty": {
+        "trades": 63,
+        "winRate": 49.2,
+        "profitFactor": 1.67,
+        "netPct": 50.18,
+        "maxDdPct": 8.77,
+        "avgDailyPct": 1.7397,
+        "avgTradesPerDay": 2.423,
+        "lowN": false
+      },
+      "wfMeanWR": 51.4,
+      "wfMeanPF": 1.77,
+      "wfMeanDD": 4.71,
+      "train": {
+        "trades": 25,
+        "winRate": 56,
+        "profitFactor": 1.79,
+        "netPct": 18.85,
+        "maxDdPct": 8.77,
+        "avgDailyPct": 1.2572,
+        "avgTradesPerDay": 1.563,
+        "lowN": true
+      },
+      "ms": 64647
+    }
+  ],
+  "robustWinners": [],
+  "adoptExternal": null,
+  "verdict": "No external approach robustly beat combo_and3 baseline; keep combo."
+}
