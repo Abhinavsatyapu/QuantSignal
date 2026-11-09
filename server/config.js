@@ -49,17 +49,17 @@ const BINANCE_DEFAULTS = {
   limitOffsetPct: 0.02,
   assets: [], // filled by liquid-universe refresh (62 US equity TradFi perps)
   assetsAuto: true,
-  interval: '4h',
+  interval: '1h',
   minScore: 6,
   scannerEnabled: true,
   autoTrade: true,
   killSwitch: false,
   allowSignedOrders: false,
   allowTestnetOrders: false,
-  signalMode: 'liquidity',
-  liqKinds: ['buy_side_liquidity_taken'], // study-best: liq_buy_side
-  liqWindowBars: 0,
-  activePreset: 'study_best_4h_liq_buy_side',
+  signalMode: 'confirm_window',
+  liqKinds: [], // any liquidity kind; AND with indicators within window
+  liqWindowBars: 3,
+  activePreset: 'combine_1h_and_window_3',
   studyPresets: {
     study_best_4h_liq_buy_side: {
       id: 'study_best_4h_liq_buy_side',

@@ -5,10 +5,12 @@ const config = require('../server/config');
 
 test('BINANCE_DEFAULTS use study-best 4h liq_buy_side with legacy preset selectable', () => {
   const b = config.BINANCE_DEFAULTS;
-  assert.equal(b.interval, '4h');
-  assert.equal(b.signalMode, 'liquidity');
-  assert.deepEqual(b.liqKinds, ['buy_side_liquidity_taken']);
-  assert.equal(b.activePreset, 'study_best_4h_liq_buy_side');
+  assert.equal(b.interval, '1h');
+  assert.equal(b.signalMode, 'confirm_window');
+  assert.deepEqual(b.liqKinds, []);
+  assert.equal(b.liqWindowBars, 3);
+  assert.equal(b.activePreset, 'combine_1h_and_window_3');
+  assert.ok(b.studyPresets.study_best_4h_liq_buy_side);
   assert.ok(b.studyPresets.legacy_15m_indicators);
   assert.equal(b.studyPresets.legacy_15m_indicators.interval, '15m');
   assert.equal(b.studyPresets.legacy_15m_indicators.signalMode, 'indicators');
@@ -21,10 +23,10 @@ test('update({binance:{activePreset}}) switches to legacy 15m indicators', () =>
     assert.equal(c.binance.interval, '15m');
     assert.equal(c.binance.signalMode, 'indicators');
     // restore study best
-    config.update({ binance: { activePreset: 'study_best_4h_liq_buy_side' } });
+    config.update({ binance: { activePreset: 'combine_1h_and_window_3' } });
   } catch (e) {
     // restore best-effort
-    try { config.update({ binance: { activePreset: 'study_best_4h_liq_buy_side' } }); } catch {}
+    try { config.update({ binance: { activePreset: 'combine_1h_and_window_3' } }); } catch {}
     throw e;
   }
 });
