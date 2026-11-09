@@ -1007,6 +1007,7 @@ function status() {
       autoTrade: c.autoTrade, killSwitch: c.killSwitch, allowSignedOrders: !!c.allowSignedOrders,
       allowTestnetOrders: !!c.allowTestnetOrders,
       signalMode: c.signalMode, liqKinds: c.liqKinds || [], liqWindowBars: c.liqWindowBars || 0, activePreset: c.activePreset || null,
+      entryFilters: c.entryFilters || {},
       studyPresets: c.studyPresets || {}, assetsAuto: c.assetsAuto !== false,
       universeCount: (state.universeSymbols || c.assets || []).length,
     },

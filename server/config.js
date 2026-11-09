@@ -59,7 +59,8 @@ const BINANCE_DEFAULTS = {
   signalMode: 'confirm_window',
   liqKinds: [], // any liquidity kind; AND with indicators within window
   liqWindowBars: 3,
-  activePreset: 'combine_1h_and_window_3',
+  entryFilters: {},
+  activePreset: 'combine_1h_and_window_3_uscash',
   studyPresets: {
     study_best_4h_liq_buy_side: {
       id: 'study_best_4h_liq_buy_side',
@@ -73,9 +74,8 @@ const BINANCE_DEFAULTS = {
     },
     combine_1h_and_window_3_uscash: {
       id: 'combine_1h_and_window_3_uscash',
-      label: 'Suggested · 1h AND window 3 + US cash only (postmortem; not auto-on)',
+      label: 'Active · 1h AND window 3 + US cash only (postmortem Setup B)',
       interval: '1h', signalMode: 'confirm_window', liqKinds: [], liqWindowBars: 3, minScore: 6,
-      // entryFilters.usCashOnly applied when selected via activeStudyRuleset / entryFilters
       entryFilters: { usCashOnly: true },
     },
     legacy_15m_indicators: {
@@ -125,6 +125,22 @@ function envSeed() {
   if (e.UPSTREAM_API !== undefined) o.upstreamApi = e.UPSTREAM_API;
   return o;
 }
+
+function applyActivePreset(B) {
+  if (!B || !B.activePreset) return B;
+  const presets = { ...(BINANCE_DEFAULTS.studyPresets || {}), ...(B.studyPresets || {}) };
+  const P = presets[B.activePreset];
+  if (!P) return B;
+  if (P.interval) B.interval = P.interval;
+  if (P.signalMode) B.signalMode = P.signalMode;
+  if (P.liqKinds) B.liqKinds = [...P.liqKinds];
+  if (P.liqWindowBars != null) B.liqWindowBars = P.liqWindowBars;
+  if (P.minScore != null) B.minScore = P.minScore;
+  if (P.entryFilters) B.entryFilters = { ...(B.entryFilters || {}), ...P.entryFilters };
+  else if (B.activePreset === 'combine_1h_and_window_3') B.entryFilters = { ...(B.entryFilters || {}), usCashOnly: false };
+  return B;
+}
+
 function load() {
   let file = null;
   try { file = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') throw e; }
@@ -132,6 +148,13 @@ function load() {
   if (!file) { try { file = JSON.parse(fs.readFileSync(SEED_PATH, 'utf8')); } catch { file = {}; } file = merge(file, envSeed()); }
   current = merge(DEFAULTS, file);
   current.binance = { ...BINANCE_DEFAULTS, ...(current.binance || {}) };
+  // Re-apply study preset fields (interval/mode/filters) so disk overlays stay consistent
+  applyActivePreset(current.binance);
+  // User-approved dry-run default: Setup B + US cash
+  if (current.binance.activePreset === 'combine_1h_and_window_3') {
+    current.binance.activePreset = 'combine_1h_and_window_3_uscash';
+    applyActivePreset(current.binance);
+  }
   if (process.env.NETWORK) current.network = process.env.NETWORK.trim().toLowerCase();
   if (process.env.HOST) current.host = process.env.HOST;
   if (seeded) { try { save(); } catch {} }

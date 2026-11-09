@@ -9,7 +9,8 @@ test('BINANCE_DEFAULTS use study-best 4h liq_buy_side with legacy preset selecta
   assert.equal(b.signalMode, 'confirm_window');
   assert.deepEqual(b.liqKinds, []);
   assert.equal(b.liqWindowBars, 3);
-  assert.equal(b.activePreset, 'combine_1h_and_window_3');
+  assert.equal(b.activePreset, 'combine_1h_and_window_3_uscash');
+  assert.equal(b.studyPresets.combine_1h_and_window_3_uscash.entryFilters.usCashOnly, true);
   assert.ok(b.studyPresets.study_best_4h_liq_buy_side);
   assert.ok(b.studyPresets.legacy_15m_indicators);
   assert.equal(b.studyPresets.legacy_15m_indicators.interval, '15m');
@@ -23,10 +24,10 @@ test('update({binance:{activePreset}}) switches to legacy 15m indicators', () =>
     assert.equal(c.binance.interval, '15m');
     assert.equal(c.binance.signalMode, 'indicators');
     // restore study best
-    config.update({ binance: { activePreset: 'combine_1h_and_window_3' } });
+    config.update({ binance: { activePreset: 'combine_1h_and_window_3_uscash' } });
   } catch (e) {
     // restore best-effort
-    try { config.update({ binance: { activePreset: 'combine_1h_and_window_3' } }); } catch {}
+    try { config.update({ binance: { activePreset: 'combine_1h_and_window_3_uscash' } }); } catch {}
     throw e;
   }
 });
@@ -46,4 +47,13 @@ test('confirm_window signal hook fires when liq within N bars of indicators', ()
   const sig = study.signalAt(bars, 250, { mode: 'confirm_window', windowBars: 3, kinds: null });
   // May be null; must not throw
   assert.ok(sig === null || (sig.direction === 'LONG' || sig.direction === 'SHORT'));
+});
+
+test('uscash applies entryFilters.usCashOnly', () => {
+  const c = config.update({ binance: { activePreset: 'combine_1h_and_window_3_uscash' } });
+  assert.equal(c.binance.interval, '1h');
+  assert.equal(c.binance.signalMode, 'confirm_window');
+  assert.equal(c.binance.liqWindowBars, 3);
+  assert.equal(c.binance.entryFilters.usCashOnly, true);
+  assert.equal(c.binance.activePreset, 'combine_1h_and_window_3_uscash');
 });
