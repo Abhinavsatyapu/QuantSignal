@@ -1021,7 +1021,7 @@ function status() {
 function start() {
   ensureTables();
   const mi = modeInfo(), c = cfgBn();
-  blog('info', `Binance trader starting mode=${mi.placingOn} dryRun=${mi.dryRun}`, { problems: mi.problems, assets: c.assets });
+  blog('info', `Binance trader starting mode=${mi.placingOn} dryRun=${mi.dryRun} preset=${c.activePreset||'none'} usCashOnly=${!!(c.entryFilters&&c.entryFilters.usCashOnly)}`, { problems: mi.problems, assets: c.assets, entryFilters: c.entryFilters || {} });
   // Resolve live TradFi equity perps (US-stock-linked) from exchangeInfo — never invent symbols
   ensureClient().then(async (cl) => {
     try {
