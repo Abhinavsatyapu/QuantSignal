@@ -281,6 +281,7 @@ app.use(express.static(PUB, { extensions: ['html'], index: 'index.html', etag: t
 for (const p of ['/options', '/gamma', '/hedge', '/ratio', '/live-hedge', '/options-studio', '/gamma-book']) app.get(p, (req, res) => res.redirect(301, '/builder'));
 for (const p of ['/signals', '/news', '/webhook', '/risk', '/paper', '/autotrader']) app.get(p, (req, res) => res.sendFile(path.join(PUB, 'index.html')));
 app.get('/positions', (req, res) => res.sendFile(path.join(PUB, 'positions.html')));
+app.get('/futures', (req, res) => res.sendFile(path.join(PUB, 'futures.html')));
 app.get('/manual', (req, res) => res.sendFile(path.join(PUB, 'manual.html')));
 app.get('/builder', (req, res) => res.sendFile(path.join(PUB, 'builder.html')));
 app.get('/docs/four-leg-methodology.md', (req, res) => res.type('text/markdown; charset=utf-8').sendFile(path.join(__dirname, '..', 'docs', 'four-leg-methodology.md')));

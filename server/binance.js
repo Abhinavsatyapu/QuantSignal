@@ -63,8 +63,13 @@ function Client(opts = {}) {
       const wait = state.rateLimitedUntil - Date.now();
       await sleep(Math.min(wait, 5000));
     }
-    // Unsigned market-data GETs prefer publicRest (www.binance.com) to survive geo-blocks on fapi.binance.com.
-    const base = (!signed && (publicOk || method === 'GET') && urls().publicRest) ? urls().publicRest : urls().rest;
+    // Unsigned market-data GETs ALWAYS use live www.binance.com — even in dry-run/testnet mode —
+    // so exchangeInfo/klines see the full TRADIFI equity universe (testnet lists are truncated).
+    // Signed trading calls still use urls().rest (testnet or live per keys).
+    const livePublic = URLS.live.publicRest || URLS.live.rest;
+    const base = (!signed && method === 'GET')
+      ? ((publicOk || state.network !== 'live') ? livePublic : (urls().publicRest || livePublic))
+      : urls().rest;
     const u = new URL(path, base);
     const params = { ...query };
     if (signed) {

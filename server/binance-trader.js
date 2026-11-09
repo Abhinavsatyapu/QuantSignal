@@ -163,6 +163,33 @@ async function ensureClient() {
   try { await state.client.syncTime(); } catch (e) { blog('warn', 'time sync: ' + e.message); }
   return state.client;
 }
+async function refreshUniverse(force = false) {
+  const c = cfgBn();
+  try {
+    const client = await ensureClient();
+    const list = await universe.listEquityPerpsCached(client, { force, ttlMs: c.universeRefreshMs || 6 * 3600e3 });
+    const liqOpts = {
+      minQuoteVolume24h: c.minQuoteVolume24h, maxSpreadBps: c.maxSpreadBps,
+      minDepthUsd: c.minDepthUsd, minOpenInterestUsd: c.minOpenInterestUsd,
+      maxNotionalPctOfDepth: c.maxNotionalPctOfDepth,
+    };
+    const ok = [];
+    for (const e of list) {
+      try {
+        const snap = await universe.liquiditySnapshot(client, e.symbol, liqOpts);
+        if (snap.ok) ok.push(e.symbol);
+        await new Promise((r) => setTimeout(r, 40));
+      } catch {}
+    }
+    if (ok.length) {
+      state.universeSymbols = ok;
+      if (c.assetsAuto !== false) config.update({ binance: { assets: ok, assetsAuto: true } });
+      blog('info', 'Universe refresh: ' + ok.length + '/' + list.length + ' liquid US equity perps');
+    }
+    return { listed: list.length, liquid: ok.length, symbols: ok };
+  } catch (e) { blog('warn', 'universe refresh: ' + e.message); return { error: e.message }; }
+}
+
 async function loadExchangeInfo() {
   try { state.symbolInfo = await (await ensureClient()).exchangeInfo(); return state.symbolInfo; }
   catch (e) { state.lastError = e.message; blog('warn', 'exchangeInfo: ' + e.message); return null; }
@@ -583,6 +610,59 @@ function liqPrice(t) {
   return t.direction === 'LONG' ? entry * (1 - 1 / lev + mmr) : entry * (1 + 1 / lev - mmr);
 }
 
+function toISTDate(ms) {
+  const d = new Date(Number(ms) + 5.5 * 3600e3);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Avg daily returns from actual closed bn_trades (dry-run or live) — not study backtest. */
+function actualDailyReturns(lookbackDays = 60) {
+  const since = Date.now() - lookbackDays * 86400e3;
+  const rows = store.db.prepare("SELECT pnl, exit_ts FROM bn_trades WHERE status='closed' AND exit_ts>=? ORDER BY exit_ts").all(since);
+  const byDay = new Map();
+  for (const r of rows) {
+    const d = toISTDate(r.exit_ts);
+    const g = byDay.get(d) || { date: d, pnl: 0, trades: 0 };
+    g.pnl += Number(r.pnl) || 0; g.trades += 1;
+    byDay.set(d, g);
+  }
+  // Build calendar span from first trade day or lookback
+  const days = [];
+  const startEq = Number(cfgBn().capital) || 800;
+  let eq = startEq;
+  const sorted = [...byDay.keys()].sort();
+  if (!sorted.length) {
+    return { lookbackDays, meanDailyPctAllDays: 0, medianDailyPctAllDays: 0, geoAvgDailyPct: 0,
+      meanDailyPctTradeDays: 0, medianDailyPctTradeDays: 0, tradeDays: 0, calendarDays: 0, endEquity: startEq, netPnl: 0 };
+  }
+  // All calendar days from first to last trade day
+  const t0 = Date.parse(sorted[0] + 'T00:00:00+05:30');
+  const t1 = Date.parse(sorted[sorted.length - 1] + 'T00:00:00+05:30');
+  for (let t = t0; t <= t1; t += 86400e3) {
+    const d = toISTDate(t);
+    const g = byDay.get(d) || { date: d, pnl: 0, trades: 0 };
+    const dayStart = eq;
+    eq += g.pnl;
+    const pct = dayStart ? (g.pnl / dayStart) * 100 : 0;
+    days.push({ date: d, pnl: g.pnl, trades: g.trades, equity: eq, dayStartEquity: dayStart, pnlPct: pct });
+  }
+  const allPct = days.map((d) => d.pnlPct);
+  const tradePct = days.filter((d) => d.trades > 0).map((d) => d.pnlPct);
+  const mean = (a) => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+  const median = (a) => { if (!a.length) return 0; const b=[...a].sort((x,y)=>x-y); const m=Math.floor(b.length/2); return b.length%2?b[m]:(b[m-1]+b[m])/2; };
+  const n = Math.max(1, allPct.length);
+  const geo = startEq > 0 && eq > 0 ? (Math.pow(eq / startEq, 1 / n) - 1) * 100 : 0;
+  return {
+    lookbackDays, calendarDays: allPct.length, tradeDays: tradePct.length,
+    meanDailyPctAllDays: +mean(allPct).toFixed(4),
+    medianDailyPctAllDays: +median(allPct).toFixed(4),
+    geoAvgDailyPct: +geo.toFixed(4),
+    meanDailyPctTradeDays: +mean(tradePct).toFixed(4),
+    medianDailyPctTradeDays: +median(tradePct).toFixed(4),
+    endEquity: +eq.toFixed(2), netPnl: +(eq - startEq).toFixed(2),
+  };
+}
+
 function positionsView() {
   const c = cfgBn(), mi = modeInfo(), equity = equityNow();
   refreshDay(equity);
@@ -626,6 +706,7 @@ function positionsView() {
     },
     open, pending, closed,
     missingStops: state.positionsMissingStops,
+    actualReturns: actualDailyReturns(60),
   };
 }
 
@@ -697,6 +778,8 @@ function start() {
   const boot = async () => {
     try { await loadExchangeInfo(); } catch {}
     try { await reconcile(); } catch (e) { blog('warn', 'startup reconcile: ' + e.message); }
+    try { await refreshUniverse(false); } catch (e) { blog('warn', 'startup universe: ' + e.message); }
+    every(6 * 3600e3, async () => { await refreshUniverse(false); });
     try { await scanOnce('startup'); } catch (e) { blog('warn', 'startup scan: ' + e.message); }
   };
   boot();
@@ -718,7 +801,7 @@ function stop() {
 }
 
 module.exports = {
-  state, start, stop, handleSignal, reconcile, scanOnce, health, status, setKill, modeInfo,
+  state, start, stop, handleSignal, reconcile, scanOnce, refreshUniverse, health, status, setKill, modeInfo,
   positionsView, processPendings, finalizeEntry, attachProtection, protectiveOrders,
   sizePosition: bn.sizePosition, ensureTables, openTrades, pendingRows, equityNow, markOf,
   _insertTrade: insertTrade, _closeTrade: closeTrade, _rememberCid: rememberCid, _cidTaken: cidTaken,

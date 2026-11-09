@@ -1,0 +1,1504 @@
+{
+  "generatedAt": "2026-11-09T19:11:30.231Z",
+  "thresholds": {
+    "minQuoteVolume24h": 5000000,
+    "maxSpreadBps": 20,
+    "minDepthUsd": 10000,
+    "minOpenInterestUsd": 0,
+    "maxNotionalPctOfDepth": 10,
+    "targetOrderNotionalUsd": 1000
+  },
+  "listed": 194,
+  "passCount": 62,
+  "skipCount": 132,
+  "pass": [
+    "AAOIUSDT",
+    "AAPLUSDT",
+    "ALABUSDT",
+    "AMATUSDT",
+    "AMDUSDT",
+    "AMZNUSDT",
+    "ARMUSDT",
+    "ASTSUSDT",
+    "AVGOUSDT",
+    "AXTIUSDT",
+    "BABAUSDT",
+    "BEUSDT",
+    "BMNRUSDT",
+    "BNCUSDT",
+    "CBRSUSDT",
+    "COHRUSDT",
+    "COINUSDT",
+    "CRCLUSDT",
+    "CRDOUSDT",
+    "CRWVUSDT",
+    "DRAMUSDT",
+    "GLWUSDT",
+    "GOOGLUSDT",
+    "HIMSUSDT",
+    "HOODUSDT",
+    "INTCUSDT",
+    "INTWUSDT",
+    "IRENUSDT",
+    "KSTRUSDT",
+    "METAUSDT",
+    "MRVLUSDT",
+    "MSFTUSDT",
+    "MSTRUSDT",
+    "MSTUUSDT",
+    "MUUSDT",
+    "MUUUSDT",
+    "MVLLUSDT",
+    "NBISUSDT",
+    "NVDAUSDT",
+    "NVDLUSDT",
+    "ORCLUSDT",
+    "PLTRUSDT",
+    "QCOMUSDT",
+    "QQQUSDT",
+    "RAMUSDT",
+    "RKLBUSDT",
+    "SKDDUSDT",
+    "SKHYUSDT",
+    "SKUUUSDT",
+    "SMCIUSDT",
+    "SNDKUSDT",
+    "SOXLUSDT",
+    "SOXSUSDT",
+    "SPCXUSDT",
+    "SPYUSDT",
+    "SQQQUSDT",
+    "TQQQUSDT",
+    "TSLAUSDT",
+    "TSMUSDT",
+    "USARUSDT",
+    "UVXYUSDT",
+    "WDCUSDT"
+  ],
+  "passDetails": [
+    {
+      "symbol": "AAOIUSDT",
+      "ok": true,
+      "spread": 1.92,
+      "volM": 47.83,
+      "depth": 72363,
+      "maxNotional": 7236,
+      "reasons": []
+    },
+    {
+      "symbol": "AAPLUSDT",
+      "ok": true,
+      "spread": 0.28,
+      "volM": 69.67,
+      "depth": 106736,
+      "maxNotional": 10674,
+      "reasons": []
+    },
+    {
+      "symbol": "ALABUSDT",
+      "ok": true,
+      "spread": 14.58,
+      "volM": 5.74,
+      "depth": 12757,
+      "maxNotional": 1276,
+      "reasons": []
+    },
+    {
+      "symbol": "AMATUSDT",
+      "ok": true,
+      "spread": 2.43,
+      "volM": 7.25,
+      "depth": 10412,
+      "maxNotional": 1041,
+      "reasons": []
+    },
+    {
+      "symbol": "AMDUSDT",
+      "ok": true,
+      "spread": 0.2,
+      "volM": 192.97,
+      "depth": 19275,
+      "maxNotional": 1928,
+      "reasons": []
+    },
+    {
+      "symbol": "AMZNUSDT",
+      "ok": true,
+      "spread": 0.37,
+      "volM": 38.73,
+      "depth": 44501,
+      "maxNotional": 4450,
+      "reasons": []
+    },
+    {
+      "symbol": "ARMUSDT",
+      "ok": true,
+      "spread": 4.3,
+      "volM": 17.81,
+      "depth": 26117,
+      "maxNotional": 2612,
+      "reasons": []
+    },
+    {
+      "symbol": "ASTSUSDT",
+      "ok": true,
+      "spread": 2.74,
+      "volM": 13.19,
+      "depth": 55177,
+      "maxNotional": 5518,
+      "reasons": []
+    },
+    {
+      "symbol": "AVGOUSDT",
+      "ok": true,
+      "spread": 0.31,
+      "volM": 35.19,
+      "depth": 22449,
+      "maxNotional": 2245,
+      "reasons": []
+    },
+    {
+      "symbol": "AXTIUSDT",
+      "ok": true,
+      "spread": 2.35,
+      "volM": 33.76,
+      "depth": 334166,
+      "maxNotional": 33417,
+      "reasons": []
+    },
+    {
+      "symbol": "BABAUSDT",
+      "ok": true,
+      "spread": 0.95,
+      "volM": 14.24,
+      "depth": 73770,
+      "maxNotional": 7377,
+      "reasons": []
+    },
+    {
+      "symbol": "BEUSDT",
+      "ok": true,
+      "spread": 2.06,
+      "volM": 65.76,
+      "depth": 23930,
+      "maxNotional": 2393,
+      "reasons": []
+    },
+    {
+      "symbol": "BMNRUSDT",
+      "ok": true,
+      "spread": 5.3,
+      "volM": 38.42,
+      "depth": 399695,
+      "maxNotional": 39969,
+      "reasons": []
+    },
+    {
+      "symbol": "BNCUSDT",
+      "ok": true,
+      "spread": 2.08,
+      "volM": 8.81,
+      "depth": 22806,
+      "maxNotional": 2281,
+      "reasons": []
+    },
+    {
+      "symbol": "CBRSUSDT",
+      "ok": true,
+      "spread": 1.06,
+      "volM": 28.02,
+      "depth": 71584,
+      "maxNotional": 7158,
+      "reasons": []
+    },
+    {
+      "symbol": "COHRUSDT",
+      "ok": true,
+      "spread": 3.53,
+      "volM": 38.3,
+      "depth": 12440,
+      "maxNotional": 1244,
+      "reasons": []
+    },
+    {
+      "symbol": "COINUSDT",
+      "ok": true,
+      "spread": 0.73,
+      "volM": 64.36,
+      "depth": 132599,
+      "maxNotional": 13260,
+      "reasons": []
+    },
+    {
+      "symbol": "CRCLUSDT",
+      "ok": true,
+      "spread": 1.48,
+      "volM": 172.65,
+      "depth": 1155653,
+      "maxNotional": 115565,
+      "reasons": []
+    },
+    {
+      "symbol": "CRDOUSDT",
+      "ok": true,
+      "spread": 5.28,
+      "volM": 8.53,
+      "depth": 20523,
+      "maxNotional": 2052,
+      "reasons": []
+    },
+    {
+      "symbol": "CRWVUSDT",
+      "ok": true,
+      "spread": 2.06,
+      "volM": 60.02,
+      "depth": 550083,
+      "maxNotional": 55008,
+      "reasons": []
+    },
+    {
+      "symbol": "DRAMUSDT",
+      "ok": true,
+      "spread": 2.41,
+      "volM": 182.39,
+      "depth": 1631746,
+      "maxNotional": 163175,
+      "reasons": []
+    },
+    {
+      "symbol": "GLWUSDT",
+      "ok": true,
+      "spread": 1.74,
+      "volM": 12.81,
+      "depth": 38852,
+      "maxNotional": 3885,
+      "reasons": []
+    },
+    {
+      "symbol": "GOOGLUSDT",
+      "ok": true,
+      "spread": 0.34,
+      "volM": 292.11,
+      "depth": 168534,
+      "maxNotional": 16853,
+      "reasons": []
+    },
+    {
+      "symbol": "HIMSUSDT",
+      "ok": true,
+      "spread": 8.62,
+      "volM": 5.73,
+      "depth": 99920,
+      "maxNotional": 9992,
+      "reasons": []
+    },
+    {
+      "symbol": "HOODUSDT",
+      "ok": true,
+      "spread": 1.19,
+      "volM": 33.07,
+      "depth": 132714,
+      "maxNotional": 13271,
+      "reasons": []
+    },
+    {
+      "symbol": "INTCUSDT",
+      "ok": true,
+      "spread": 1.71,
+      "volM": 258.7,
+      "depth": 1849662,
+      "maxNotional": 184966,
+      "reasons": []
+    },
+    {
+      "symbol": "INTWUSDT",
+      "ok": true,
+      "spread": 17.2,
+      "volM": 54.63,
+      "depth": 394718,
+      "maxNotional": 39472,
+      "reasons": []
+    },
+    {
+      "symbol": "IRENUSDT",
+      "ok": true,
+      "spread": 9.27,
+      "volM": 30.87,
+      "depth": 104209,
+      "maxNotional": 10421,
+      "reasons": []
+    },
+    {
+      "symbol": "KSTRUSDT",
+      "ok": true,
+      "spread": 5.38,
+      "volM": 7.37,
+      "depth": 51166,
+      "maxNotional": 5117,
+      "reasons": []
+    },
+    {
+      "symbol": "METAUSDT",
+      "ok": true,
+      "spread": 0.16,
+      "volM": 62.79,
+      "depth": 16181,
+      "maxNotional": 1618,
+      "reasons": []
+    },
+    {
+      "symbol": "MRVLUSDT",
+      "ok": true,
+      "spread": 1.3,
+      "volM": 120.13,
+      "depth": 98305,
+      "maxNotional": 9830,
+      "reasons": []
+    },
+    {
+      "symbol": "MSFTUSDT",
+      "ok": true,
+      "spread": 0.18,
+      "volM": 32.11,
+      "depth": 29546,
+      "maxNotional": 2955,
+      "reasons": []
+    },
+    {
+      "symbol": "MSTRUSDT",
+      "ok": true,
+      "spread": 0.8,
+      "volM": 235,
+      "depth": 358425,
+      "maxNotional": 35842,
+      "reasons": []
+    },
+    {
+      "symbol": "MSTUUSDT",
+      "ok": true,
+      "spread": 4.08,
+      "volM": 5.22,
+      "depth": 25853,
+      "maxNotional": 2585,
+      "reasons": []
+    },
+    {
+      "symbol": "MUUSDT",
+      "ok": true,
+      "spread": 0.14,
+      "volM": 1127.48,
+      "depth": 78977,
+      "maxNotional": 7898,
+      "reasons": []
+    },
+    {
+      "symbol": "MUUUSDT",
+      "ok": true,
+      "spread": 6.54,
+      "volM": 169.99,
+      "depth": 520091,
+      "maxNotional": 52009,
+      "reasons": []
+    },
+    {
+      "symbol": "MVLLUSDT",
+      "ok": true,
+      "spread": 9.8,
+      "volM": 48.97,
+      "depth": 129182,
+      "maxNotional": 12918,
+      "reasons": []
+    },
+    {
+      "symbol": "NBISUSDT",
+      "ok": true,
+      "spread": 1.43,
+      "volM": 149.51,
+      "depth": 74551,
+      "maxNotional": 7455,
+      "reasons": []
+    },
+    {
+      "symbol": "NVDAUSDT",
+      "ok": true,
+      "spread": 0.57,
+      "volM": 1662.6,
+      "depth": 701673,
+      "maxNotional": 70167,
+      "reasons": []
+    },
+    {
+      "symbol": "NVDLUSDT",
+      "ok": true,
+      "spread": 4.73,
+      "volM": 10.13,
+      "depth": 31177,
+      "maxNotional": 3118,
+      "reasons": []
+    },
+    {
+      "symbol": "ORCLUSDT",
+      "ok": true,
+      "spread": 0.84,
+      "volM": 35.94,
+      "depth": 116840,
+      "maxNotional": 11684,
+      "reasons": []
+    },
+    {
+      "symbol": "PLTRUSDT",
+      "ok": true,
+      "spread": 1.78,
+      "volM": 30.65,
+      "depth": 66185,
+      "maxNotional": 6619,
+      "reasons": []
+    },
+    {
+      "symbol": "QCOMUSDT",
+      "ok": true,
+      "spread": 1.14,
+      "volM": 22.3,
+      "depth": 37676,
+      "maxNotional": 3768,
+      "reasons": []
+    },
+    {
+      "symbol": "QQQUSDT",
+      "ok": true,
+      "spread": 0.15,
+      "volM": 532.36,
+      "depth": 442755,
+      "maxNotional": 44275,
+      "reasons": []
+    },
+    {
+      "symbol": "RAMUSDT",
+      "ok": true,
+      "spread": 17.42,
+      "volM": 5.49,
+      "depth": 32291,
+      "maxNotional": 3229,
+      "reasons": []
+    },
+    {
+      "symbol": "RKLBUSDT",
+      "ok": true,
+      "spread": 1.71,
+      "volM": 24.56,
+      "depth": 204349,
+      "maxNotional": 20435,
+      "reasons": []
+    },
+    {
+      "symbol": "SKDDUSDT",
+      "ok": true,
+      "spread": 1.88,
+      "volM": 17.22,
+      "depth": 25267,
+      "maxNotional": 2527,
+      "reasons": []
+    },
+    {
+      "symbol": "SKHYUSDT",
+      "ok": true,
+      "spread": 0.75,
+      "volM": 576.39,
+      "depth": 727639,
+      "maxNotional": 72764,
+      "reasons": []
+    },
+    {
+      "symbol": "SKUUUSDT",
+      "ok": true,
+      "spread": 7.56,
+      "volM": 18.37,
+      "depth": 58904,
+      "maxNotional": 5890,
+      "reasons": []
+    },
+    {
+      "symbol": "SMCIUSDT",
+      "ok": true,
+      "spread": 6.93,
+      "volM": 16.01,
+      "depth": 174112,
+      "maxNotional": 17411,
+      "reasons": []
+    },
+    {
+      "symbol": "SNDKUSDT",
+      "ok": true,
+      "spread": 0.11,
+      "volM": 2624.95,
+      "depth": 13072,
+      "maxNotional": 1307,
+      "reasons": []
+    },
+    {
+      "symbol": "SOXLUSDT",
+      "ok": true,
+      "spread": 1.81,
+      "volM": 4560.31,
+      "depth": 2241830,
+      "maxNotional": 224183,
+      "reasons": []
+    },
+    {
+      "symbol": "SOXSUSDT",
+      "ok": true,
+      "spread": 1.77,
+      "volM": 973.66,
+      "depth": 282876,
+      "maxNotional": 28288,
+      "reasons": []
+    },
+    {
+      "symbol": "SPCXUSDT",
+      "ok": true,
+      "spread": 0.71,
+      "volM": 685.17,
+      "depth": 970720,
+      "maxNotional": 97072,
+      "reasons": []
+    },
+    {
+      "symbol": "SPYUSDT",
+      "ok": true,
+      "spread": 0.13,
+      "volM": 204.06,
+      "depth": 234414,
+      "maxNotional": 23441,
+      "reasons": []
+    },
+    {
+      "symbol": "SQQQUSDT",
+      "ok": true,
+      "spread": 2.32,
+      "volM": 97.01,
+      "depth": 508393,
+      "maxNotional": 50839,
+      "reasons": []
+    },
+    {
+      "symbol": "TQQQUSDT",
+      "ok": true,
+      "spread": 1.74,
+      "volM": 228.88,
+      "depth": 1044948,
+      "maxNotional": 104495,
+      "reasons": []
+    },
+    {
+      "symbol": "TSLAUSDT",
+      "ok": true,
+      "spread": 0.26,
+      "volM": 141.47,
+      "depth": 93186,
+      "maxNotional": 9319,
+      "reasons": []
+    },
+    {
+      "symbol": "TSMUSDT",
+      "ok": true,
+      "spread": 1.28,
+      "volM": 32.89,
+      "depth": 12581,
+      "maxNotional": 1258,
+      "reasons": []
+    },
+    {
+      "symbol": "USARUSDT",
+      "ok": true,
+      "spread": 11.19,
+      "volM": 5.83,
+      "depth": 40923,
+      "maxNotional": 4092,
+      "reasons": []
+    },
+    {
+      "symbol": "UVXYUSDT",
+      "ok": true,
+      "spread": 10.54,
+      "volM": 19.83,
+      "depth": 264389,
+      "maxNotional": 26439,
+      "reasons": []
+    },
+    {
+      "symbol": "WDCUSDT",
+      "ok": true,
+      "spread": 0.34,
+      "volM": 37.82,
+      "depth": 16741,
+      "maxNotional": 1674,
+      "reasons": []
+    }
+  ],
+  "skip": [
+    {
+      "symbol": "ABBVUSDT",
+      "reasons": [
+        "24h quote vol $307,104 < $5,000,000",
+        "±0.5% depth $1,804 < $10,000"
+      ]
+    },
+    {
+      "symbol": "ACNUSDT",
+      "reasons": [
+        "24h quote vol $983,046 < $5,000,000",
+        "±0.5% depth $1,581 < $10,000"
+      ]
+    },
+    {
+      "symbol": "ADBEUSDT",
+      "reasons": [
+        "24h quote vol $890,752 < $5,000,000",
+        "±0.5% depth $8,882 < $10,000"
+      ]
+    },
+    {
+      "symbol": "AGPUUSDT",
+      "reasons": [
+        "24h quote vol $2,343,254 < $5,000,000",
+        "spread 40.24 bps > 20",
+        "±0.5% depth $2,469 < $10,000"
+      ]
+    },
+    {
+      "symbol": "AKAMUSDT",
+      "reasons": [
+        "24h quote vol $754,665 < $5,000,000",
+        "±0.5% depth $5,240 < $10,000"
+      ]
+    },
+    {
+      "symbol": "AMCUSDT",
+      "reasons": [
+        "24h quote vol $680,378 < $5,000,000",
+        "±0.5% depth $5,733 < $10,000"
+      ]
+    },
+    {
+      "symbol": "AMGNUSDT",
+      "reasons": [
+        "24h quote vol $170,641 < $5,000,000",
+        "±0.5% depth $794 < $10,000"
+      ]
+    },
+    {
+      "symbol": "ANETUSDT",
+      "reasons": [
+        "24h quote vol $358,948 < $5,000,000",
+        "±0.5% depth $4,166 < $10,000"
+      ]
+    },
+    {
+      "symbol": "APLDUSDT",
+      "reasons": [
+        "24h quote vol $722,235 < $5,000,000",
+        "spread 30.62 bps > 20"
+      ]
+    },
+    {
+      "symbol": "APPUSDT",
+      "reasons": [
+        "±0.5% depth $6,232 < $10,000"
+      ]
+    },
+    {
+      "symbol": "ASMLUSDT",
+      "reasons": [
+        "±0.5% depth $3,314 < $10,000"
+      ]
+    },
+    {
+      "symbol": "BACUSDT",
+      "reasons": [
+        "24h quote vol $441,760 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "BBXUSDT",
+      "reasons": [
+        "24h quote vol $1,580,694 < $5,000,000",
+        "±0.5% depth $8,874 < $10,000"
+      ]
+    },
+    {
+      "symbol": "BITOUSDT",
+      "reasons": [
+        "24h quote vol $530,308 < $5,000,000",
+        "spread 20.12 bps > 20"
+      ]
+    },
+    {
+      "symbol": "BOTUSDT",
+      "reasons": [
+        "24h quote vol $642,951 < $5,000,000",
+        "spread 22.73 bps > 20",
+        "±0.5% depth $4,384 < $10,000"
+      ]
+    },
+    {
+      "symbol": "BRKBUSDT",
+      "reasons": [
+        "24h quote vol $1,301,850 < $5,000,000",
+        "±0.5% depth $2,090 < $10,000"
+      ]
+    },
+    {
+      "symbol": "BSPUSDT",
+      "reasons": [
+        "24h quote vol $1,716,380 < $5,000,000",
+        "spread 21.49 bps > 20"
+      ]
+    },
+    {
+      "symbol": "BWETUSDT",
+      "reasons": [
+        "24h quote vol $1,510,141 < $5,000,000",
+        "±0.5% depth $2,392 < $10,000"
+      ]
+    },
+    {
+      "symbol": "BXUSDT",
+      "reasons": [
+        "24h quote vol $975,702 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "CATUSDT",
+      "reasons": [
+        "24h quote vol $955,761 < $5,000,000",
+        "±0.5% depth $7,090 < $10,000"
+      ]
+    },
+    {
+      "symbol": "CEGUSDT",
+      "reasons": [
+        "24h quote vol $1,197,194 < $5,000,000",
+        "±0.5% depth $750 < $10,000"
+      ]
+    },
+    {
+      "symbol": "CIENUSDT",
+      "reasons": [
+        "24h quote vol $1,548,415 < $5,000,000",
+        "±0.5% depth $9,097 < $10,000"
+      ]
+    },
+    {
+      "symbol": "COSTUSDT",
+      "reasons": [
+        "24h quote vol $1,447,494 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "CRMLUSDT",
+      "reasons": [
+        "24h quote vol $633,989 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "CRMUSDT",
+      "reasons": [
+        "24h quote vol $663,666 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "CRWDUSDT",
+      "reasons": [
+        "24h quote vol $2,405,931 < $5,000,000",
+        "±0.5% depth $9,531 < $10,000"
+      ]
+    },
+    {
+      "symbol": "CSCOUSDT",
+      "reasons": [
+        "24h quote vol $522,276 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "CVNAUSDT",
+      "reasons": [
+        "24h quote vol $651,577 < $5,000,000",
+        "±0.5% depth $9,555 < $10,000"
+      ]
+    },
+    {
+      "symbol": "CYPHUSDT",
+      "reasons": [
+        "24h quote vol $1,902,895 < $5,000,000",
+        "spread 20.34 bps > 20",
+        "±0.5% depth $2,005 < $10,000"
+      ]
+    },
+    {
+      "symbol": "DDOGUSDT",
+      "reasons": [
+        "24h quote vol $311,630 < $5,000,000",
+        "±0.5% depth $6,379 < $10,000"
+      ]
+    },
+    {
+      "symbol": "DELLUSDT",
+      "reasons": [
+        "±0.5% depth $9,233 < $10,000"
+      ]
+    },
+    {
+      "symbol": "DISUSDT",
+      "reasons": [
+        "24h quote vol $489,139 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "DJTUSDT",
+      "reasons": [
+        "24h quote vol $2,181,372 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "DKNGUSDT",
+      "reasons": [
+        "24h quote vol $1,493,934 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "EBAYUSDT",
+      "reasons": [
+        "24h quote vol $274,516 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "EIDOUSDT",
+      "reasons": [
+        "24h quote vol $586,558 < $5,000,000",
+        "spread 29.14 bps > 20",
+        "±0.5% depth $7,815 < $10,000"
+      ]
+    },
+    {
+      "symbol": "EQTUSDT",
+      "reasons": [
+        "24h quote vol $111,045 < $5,000,000",
+        "±0.5% depth $4,064 < $10,000"
+      ]
+    },
+    {
+      "symbol": "EWTUSDT",
+      "reasons": [
+        "24h quote vol $2,316,385 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "EWZSUSDT",
+      "reasons": [
+        "24h quote vol $146,972 < $5,000,000",
+        "spread 27.07 bps > 20",
+        "±0.5% depth $1,351 < $10,000"
+      ]
+    },
+    {
+      "symbol": "EWZUSDT",
+      "reasons": [
+        "24h quote vol $934,977 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "FLEXUSDT",
+      "reasons": [
+        "24h quote vol $1,131,085 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "FLNCUSDT",
+      "reasons": [
+        "24h quote vol $4,095,180 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "FWDIUSDT",
+      "reasons": [
+        "24h quote vol $2,052,228 < $5,000,000",
+        "spread 23.75 bps > 20"
+      ]
+    },
+    {
+      "symbol": "GDXUSDT",
+      "reasons": [
+        "24h quote vol $562,517 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "GEVUSDT",
+      "reasons": [
+        "24h quote vol $1,749,058 < $5,000,000",
+        "±0.5% depth $5,135 < $10,000"
+      ]
+    },
+    {
+      "symbol": "GMEUSDT",
+      "reasons": [
+        "24h quote vol $1,313,278 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "GPROUSDT",
+      "reasons": [
+        "24h quote vol $1,257,092 < $5,000,000",
+        "spread 22.30 bps > 20",
+        "±0.5% depth $5,803 < $10,000"
+      ]
+    },
+    {
+      "symbol": "GSUSDT",
+      "reasons": [
+        "24h quote vol $651,893 < $5,000,000",
+        "±0.5% depth $7,701 < $10,000"
+      ]
+    },
+    {
+      "symbol": "GTLBUSDT",
+      "reasons": [
+        "24h quote vol $235,522 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "HDUSDT",
+      "reasons": [
+        "24h quote vol $636,922 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "HPEUSDT",
+      "reasons": [
+        "24h quote vol $1,435,191 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "HUTUSDT",
+      "reasons": [
+        "24h quote vol $559,179 < $5,000,000",
+        "±0.5% depth $8,107 < $10,000"
+      ]
+    },
+    {
+      "symbol": "IBKRUSDT",
+      "reasons": [
+        "24h quote vol $194,875 < $5,000,000",
+        "±0.5% depth $1,410 < $10,000"
+      ]
+    },
+    {
+      "symbol": "IBMUSDT",
+      "reasons": [
+        "±0.5% depth $9,414 < $10,000"
+      ]
+    },
+    {
+      "symbol": "IONQUSDT",
+      "reasons": [
+        "24h quote vol $3,908,820 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "IWMUSDT",
+      "reasons": [
+        "24h quote vol $806,189 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "JPMUSDT",
+      "reasons": [
+        "24h quote vol $909,082 < $5,000,000",
+        "±0.5% depth $9,314 < $10,000"
+      ]
+    },
+    {
+      "symbol": "KLACUSDT",
+      "reasons": [
+        "24h quote vol $2,068,940 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "KOUSDT",
+      "reasons": [
+        "24h quote vol $1,578,610 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "LITEUSDT",
+      "reasons": [
+        "±0.5% depth $7,343 < $10,000"
+      ]
+    },
+    {
+      "symbol": "LLYUSDT",
+      "reasons": [
+        "±0.5% depth $2,038 < $10,000"
+      ]
+    },
+    {
+      "symbol": "LRCXUSDT",
+      "reasons": [
+        "24h quote vol $3,922,995 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "LYTEUSDT",
+      "reasons": [
+        "24h quote vol $915,960 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "MARAUSDT",
+      "reasons": [
+        "24h quote vol $895,049 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "MCDUSDT",
+      "reasons": [
+        "24h quote vol $902,305 < $5,000,000",
+        "±0.5% depth $4,328 < $10,000"
+      ]
+    },
+    {
+      "symbol": "MDBUSDT",
+      "reasons": [
+        "24h quote vol $1,221,112 < $5,000,000",
+        "spread 20.44 bps > 20",
+        "±0.5% depth $6,306 < $10,000"
+      ]
+    },
+    {
+      "symbol": "MDTUSDT",
+      "reasons": [
+        "24h quote vol $147,177 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "MELIUSDT",
+      "reasons": [
+        "24h quote vol $236,352 < $5,000,000",
+        "spread 26.68 bps > 20",
+        "±0.5% depth $2,368 < $10,000"
+      ]
+    },
+    {
+      "symbol": "MPUSDT",
+      "reasons": [
+        "24h quote vol $317,290 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "MRKUSDT",
+      "reasons": [
+        "24h quote vol $304,073 < $5,000,000",
+        "±0.5% depth $7,415 < $10,000"
+      ]
+    },
+    {
+      "symbol": "MRNAUSDT",
+      "reasons": [
+        "±0.5% depth $3,608 < $10,000"
+      ]
+    },
+    {
+      "symbol": "NETUSDT",
+      "reasons": [
+        "24h quote vol $1,932,316 < $5,000,000",
+        "±0.5% depth $8,870 < $10,000"
+      ]
+    },
+    {
+      "symbol": "NFLXUSDT",
+      "reasons": [
+        "24h quote vol $2,588,906 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "NKEUSDT",
+      "reasons": [
+        "24h quote vol $878,329 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "NOKUSDT",
+      "reasons": [
+        "24h quote vol $2,561,452 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "NOWUSDT",
+      "reasons": [
+        "24h quote vol $1,636,658 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "NVOUSDT",
+      "reasons": [
+        "24h quote vol $725,191 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "OKLOUSDT",
+      "reasons": [
+        "24h quote vol $2,054,966 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "ONDSUSDT",
+      "reasons": [
+        "24h quote vol $4,658,961 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "OXYUSDT",
+      "reasons": [
+        "24h quote vol $212,222 < $5,000,000",
+        "±0.5% depth $5,680 < $10,000"
+      ]
+    },
+    {
+      "symbol": "PANWUSDT",
+      "reasons": [
+        "24h quote vol $2,175,992 < $5,000,000",
+        "±0.5% depth $9,855 < $10,000"
+      ]
+    },
+    {
+      "symbol": "PATHUSDT",
+      "reasons": [
+        "24h quote vol $77,326 < $5,000,000",
+        "spread 23.14 bps > 20",
+        "±0.5% depth $180 < $10,000"
+      ]
+    },
+    {
+      "symbol": "PAYPUSDT",
+      "reasons": [
+        "24h quote vol $527,059 < $5,000,000",
+        "±0.5% depth $8,537 < $10,000"
+      ]
+    },
+    {
+      "symbol": "PDDUSDT",
+      "reasons": [
+        "24h quote vol $1,312,985 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "PENGUSDT",
+      "reasons": [
+        "24h quote vol $960,915 < $5,000,000",
+        "spread 26.25 bps > 20"
+      ]
+    },
+    {
+      "symbol": "PFEUSDT",
+      "reasons": [
+        "24h quote vol $468,363 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "PYPLUSDT",
+      "reasons": [
+        "24h quote vol $441,624 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "QNTXUSDT",
+      "reasons": [
+        "24h quote vol $2,493,851 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "RDDTUSDT",
+      "reasons": [
+        "24h quote vol $1,088,502 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "RDWUSDT",
+      "reasons": [
+        "24h quote vol $733,648 < $5,000,000",
+        "spread 24.94 bps > 20"
+      ]
+    },
+    {
+      "symbol": "RIVNUSDT",
+      "reasons": [
+        "24h quote vol $784,413 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "RUMUSDT",
+      "reasons": [
+        "24h quote vol $221,692 < $5,000,000",
+        "±0.5% depth $7,822 < $10,000"
+      ]
+    },
+    {
+      "symbol": "SECZUSDT",
+      "reasons": [
+        "24h quote vol $436,211 < $5,000,000",
+        "±0.5% depth $3,738 < $10,000"
+      ]
+    },
+    {
+      "symbol": "SHAZUSDT",
+      "reasons": [
+        "24h quote vol $3,207,614 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "SHOPUSDT",
+      "reasons": [
+        "24h quote vol $276,829 < $5,000,000",
+        "±0.5% depth $9,557 < $10,000"
+      ]
+    },
+    {
+      "symbol": "SMHUSDT",
+      "reasons": [
+        "24h quote vol $3,103,162 < $5,000,000",
+        "±0.5% depth $8,818 < $10,000"
+      ]
+    },
+    {
+      "symbol": "SMRUSDT",
+      "reasons": [
+        "24h quote vol $646,077 < $5,000,000",
+        "±0.5% depth $3,251 < $10,000"
+      ]
+    },
+    {
+      "symbol": "SNOWUSDT",
+      "reasons": [
+        "24h quote vol $958,543 < $5,000,000",
+        "±0.5% depth $8,697 < $10,000"
+      ]
+    },
+    {
+      "symbol": "SNPSUSDT",
+      "reasons": [
+        "24h quote vol $112,857 < $5,000,000",
+        "spread 21.34 bps > 20",
+        "±0.5% depth $3,623 < $10,000"
+      ]
+    },
+    {
+      "symbol": "SNXXUSDT",
+      "reasons": [
+        "spread 27.44 bps > 20"
+      ]
+    },
+    {
+      "symbol": "SOFIUSDT",
+      "reasons": [
+        "24h quote vol $681,175 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "SONYUSDT",
+      "reasons": [
+        "24h quote vol $642,926 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "SPCXUSD1",
+      "reasons": [
+        "24h quote vol $911,459 < $5,000,000",
+        "±0.5% depth $3,235 < $10,000"
+      ]
+    },
+    {
+      "symbol": "STMUSDT",
+      "reasons": [
+        "24h quote vol $81,162 < $5,000,000",
+        "spread 20.27 bps > 20"
+      ]
+    },
+    {
+      "symbol": "STRCUSDT",
+      "reasons": [
+        "24h quote vol $2,933,787 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "STXXUSDT",
+      "reasons": [
+        "±0.5% depth $2,033 < $10,000"
+      ]
+    },
+    {
+      "symbol": "TBTUSDT",
+      "reasons": [
+        "24h quote vol $102,674 < $5,000,000",
+        "±0.5% depth $7,615 < $10,000"
+      ]
+    },
+    {
+      "symbol": "TEAMUSDT",
+      "reasons": [
+        "24h quote vol $254,027 < $5,000,000",
+        "±0.5% depth $4,899 < $10,000"
+      ]
+    },
+    {
+      "symbol": "TEMUSDT",
+      "reasons": [
+        "24h quote vol $1,815,868 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "TERUSDT",
+      "reasons": [
+        "24h quote vol $968,910 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "TMFUSDT",
+      "reasons": [
+        "24h quote vol $616,046 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "TSLLUSDT",
+      "reasons": [
+        "24h quote vol $2,051,086 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "TTWOUSDT",
+      "reasons": [
+        "24h quote vol $4,213,628 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "TWSTUSDT",
+      "reasons": [
+        "24h quote vol $633,047 < $5,000,000",
+        "±0.5% depth $4,095 < $10,000"
+      ]
+    },
+    {
+      "symbol": "TXNUSDT",
+      "reasons": [
+        "24h quote vol $1,497,938 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "TZAUSDT",
+      "reasons": [
+        "24h quote vol $597,390 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "UBERUSDT",
+      "reasons": [
+        "24h quote vol $728,874 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "UNHUSDT",
+      "reasons": [
+        "24h quote vol $528,365 < $5,000,000",
+        "±0.5% depth $8,756 < $10,000"
+      ]
+    },
+    {
+      "symbol": "URNMUSDT",
+      "reasons": [
+        "24h quote vol $1,350,249 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "USDEXUSDT",
+      "reasons": [
+        "24h quote vol $797,060 < $5,000,000",
+        "spread 33.17 bps > 20",
+        "±0.5% depth $2,839 < $10,000"
+      ]
+    },
+    {
+      "symbol": "VKTXUSDT",
+      "reasons": [
+        "24h quote vol $150,007 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "VRTUSDT",
+      "reasons": [
+        "24h quote vol $1,274,828 < $5,000,000",
+        "±0.5% depth $9,775 < $10,000"
+      ]
+    },
+    {
+      "symbol": "VSTUSDT",
+      "reasons": [
+        "24h quote vol $782,070 < $5,000,000",
+        "±0.5% depth $7,612 < $10,000"
+      ]
+    },
+    {
+      "symbol": "VUSDT",
+      "reasons": [
+        "24h quote vol $901,484 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "WENUSDT",
+      "reasons": [
+        "24h quote vol $411,302 < $5,000,000",
+        "spread 24.03 bps > 20",
+        "±0.5% depth $8,991 < $10,000"
+      ]
+    },
+    {
+      "symbol": "WMTUSDT",
+      "reasons": [
+        "24h quote vol $1,256,954 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "XBIUSDT",
+      "reasons": [
+        "24h quote vol $350,742 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "XLEUSDT",
+      "reasons": [
+        "24h quote vol $356,540 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "XOMUSDT",
+      "reasons": [
+        "±0.5% depth $5,629 < $10,000"
+      ]
+    },
+    {
+      "symbol": "ZCSHUSDT",
+      "reasons": [
+        "24h quote vol $2,099,132 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "ZMUSDT",
+      "reasons": [
+        "24h quote vol $487,186 < $5,000,000"
+      ]
+    },
+    {
+      "symbol": "ZSUSDT",
+      "reasons": [
+        "24h quote vol $214,498 < $5,000,000"
+      ]
+    }
+  ]
+}

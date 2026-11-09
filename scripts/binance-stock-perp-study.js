@@ -23,7 +23,7 @@ const MAX_POS = 4;
 const RISK_PCT = 2;          // % capital risked per trade via stop
 const DAILY_LOSS_PCT = 6;
 const FEE_RT = 0.0008;       // taker+taker approx round-trip (limit maker + market taker mixed → ~8 bps RT)
-const SLIP_BPS = 3;          // market fallback / stop slip
+const SLIP_BPS = 12;         // market/stop slip ≈ half of 20bps max spread + impact
 const FUNDING_8H = 0.0001;   // ~1 bp per 8h funding period (conservative avg)
 const ENTRY_TIMEOUT_MS = 120_000;
 const MIN_SCORE = 6;
@@ -52,10 +52,12 @@ const VARIANTS = [
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 async function fetchAllKlines(client, symbol, interval, sinceMs) {
-  // Paginate forward from sinceMs (or earliest) up to now. Cap ~3000 bars.
+  // Paginate forward from sinceMs until near-now (or empty). Enough pages for 5m ~120d+.
   const out = [];
   let start = sinceMs || 0;
-  for (let page = 0; page < 20; page++) {
+  const now = Date.now();
+  const step = TF_MS[interval] || 60000;
+  for (let page = 0; page < 80; page++) {
     const rows = await client.publicGet('/fapi/v1/klines', {
       symbol, interval, limit: 1500, startTime: start || undefined,
     });
@@ -68,7 +70,8 @@ async function fetchAllKlines(client, symbol, interval, sinceMs) {
     const lastT = +rows.at(-1)[0];
     if (rows.length < 1500) break;
     start = lastT + 1;
-    await sleep(80);
+    if (lastT >= now - step * 2) break;
+    await sleep(60);
   }
   return out;
 }
@@ -390,6 +393,43 @@ function runPortfolio(series, interval, variant, opts = {}) {
     theoretical5, theoretical5pct, realisticVsTheo,
     days, curve, tradeList: trades, lowSample, maxHoldBars: maxHold,
     avgHoldBars: trades.length ? trades.reduce((s, t) => s + Math.max(1, Math.round((t.exitTs - t.entryTs) / barMs)), 0) / trades.length : 0,
+    dailyReturns: dailyReturnStats(days, CAPITAL),
+  };
+}
+
+
+/** Daily return stats from day rows (pnlPct or pnl/dayStartEquity). */
+function dailyReturnStats(days, startEquity) {
+  const rows = days || [];
+  const allPct = rows.map((d) => {
+    if (d.pnlPct != null) return d.pnlPct;
+    const base = d.dayStartEquity || startEquity || CAPITAL;
+    return base ? (d.pnl / base) * 100 : 0;
+  });
+  const tradePct = rows.filter((d) => (d.trades || 0) > 0).map((d) => {
+    if (d.pnlPct != null) return d.pnlPct;
+    const base = d.dayStartEquity || startEquity || CAPITAL;
+    return base ? (d.pnl / base) * 100 : 0;
+  });
+  const mean = (arr) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+  const median = (arr) => {
+    if (!arr.length) return 0;
+    const a = [...arr].sort((x, y) => x - y);
+    const m = Math.floor(a.length / 2);
+    return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+  };
+  const endEq = rows.length ? rows[rows.length - 1].equity : (startEquity || CAPITAL);
+  const startEq = startEquity || CAPITAL;
+  const n = Math.max(1, allPct.length);
+  const geoDaily = startEq > 0 && endEq > 0 ? (Math.pow(endEq / startEq, 1 / n) - 1) * 100 : 0;
+  return {
+    meanDailyPctAllDays: +mean(allPct).toFixed(4),
+    medianDailyPctAllDays: +median(allPct).toFixed(4),
+    geoAvgDailyPct: +geoDaily.toFixed(4),
+    meanDailyPctTradeDays: +mean(tradePct).toFixed(4),
+    medianDailyPctTradeDays: +median(tradePct).toFixed(4),
+    tradeDays: tradePct.length,
+    calendarDays: allPct.length,
   };
 }
 
@@ -411,22 +451,32 @@ async function main() {
   let eqs = await universe.listEquityPerps(client);
   console.log('Found', eqs.length, eqs.map((e) => e.symbol).join(', '));
 
-  // Liquidity screen (live snapshot) — keep top liquid
-  const liqOk = [];
+  // Liquidity screen (live) — loosened defaults (20bps / $5M vol / $10k depth)
+  const LIQ_OPTS = {
+    minQuoteVolume24h: universe.DEFAULT_LIQ.minQuoteVolume24h,
+    maxSpreadBps: universe.DEFAULT_LIQ.maxSpreadBps,
+    minDepthUsd: universe.DEFAULT_LIQ.minDepthUsd,
+    minOpenInterestUsd: universe.DEFAULT_LIQ.minOpenInterestUsd,
+    maxNotionalPctOfDepth: universe.DEFAULT_LIQ.maxNotionalPctOfDepth,
+  };
+  console.log('Liquidity thresholds', LIQ_OPTS, 'SLIP_BPS', SLIP_BPS);
+  const liqRows = [];
   for (const e of eqs) {
     try {
-      const snap = await universe.liquiditySnapshot(client, e.symbol);
-      console.log(e.symbol, snap.ok ? 'OK' : 'SKIP', 'vol', Math.round(snap.quoteVolume / 1e6) + 'M', 'spread', snap.spreadBps.toFixed(2), snap.reasons.join('; '));
-      if (snap.ok || snap.quoteVolume >= 10_000_000) liqOk.push({ ...e, liq: snap });
+      const snap = await universe.liquiditySnapshot(client, e.symbol, LIQ_OPTS);
+      console.log(e.symbol, snap.ok ? 'OK' : 'SKIP', 'vol', Math.round(snap.quoteVolume / 1e6) + 'M',
+        'spread', snap.spreadBps.toFixed(2), 'depth', Math.round(snap.depthUsd),
+        snap.ok ? '' : snap.reasons.join('; '));
+      liqRows.push({ ...e, liq: snap });
       await sleep(100);
     } catch (err) { console.log(e.symbol, 'liq err', err.message); }
   }
-  // Prefer liquidity-OK names; fill with high-vol if fewer than 6
-  const ok = liqOk.filter((x) => x.liq.ok).sort((a, b) => b.liq.quoteVolume - a.liq.quoteVolume);
-  const rest = liqOk.filter((x) => !x.liq.ok).sort((a, b) => b.liq.quoteVolume - a.liq.quoteVolume);
-  const picked = [...ok, ...rest].slice(0, 8);
+  const picked = liqRows.filter((x) => x.liq.ok).sort((a, b) => b.liq.quoteVolume - a.liq.quoteVolume);
+  const skipped = liqRows.filter((x) => !x.liq.ok).map((x) => x.symbol);
   const symbols = picked.map((x) => x.symbol);
-  console.log('Study universe:', symbols.join(', '));
+  console.log('PASS', symbols.length, symbols.join(', '));
+  console.log('SKIP', skipped.length, skipped.join(', '));
+  if (!symbols.length) throw new Error('No symbols passed loosened liquidity filter');
 
   // Fetch klines — need history for 1d (220 bars) where available; for 60d section need 60d
   const since60 = Date.now() - 60 * 86400e3;
@@ -553,6 +603,9 @@ async function main() {
       theoretical5: res.theoretical5, theoretical5pct: res.theoretical5pct, realisticVsTheo: res.realisticVsTheo,
       days: res.days, curve: res.curve, lowSample: res.lowSample,
       trades: res.trades, tradeList: res.tradeList.slice(0, 500),
+      endEquity: res.endEquity, totalPnl: res.totalPnl, totalPnlPct: res.totalPnlPct,
+      winRate: res.winRate, profitFactor: res.profitFactor,
+      dailyReturns: res.dailyReturns || dailyReturnStats(res.days || [], CAPITAL),
     };
   }
 
@@ -569,7 +622,43 @@ async function main() {
 
   // CSV: daily P&L for both
   const csvPath = path.join('/workspace', 'binance-equity-perp-60d-daily-pnl.csv');
-  const csvLines = ['run,date_ist,trades,pnl_usd,pnl_pct_of_day_start,cumulative_equity,would_have_6pct_loss_halt,would_have_5pct_profit_mark,day_start_equity'];
+  const csvLines = [];
+  csvLines.push('section,run,metric,value');
+  for (const [name, pack] of [['current', pack60.current], ['recommended', pack60.recommended]]) {
+    const dr = pack.dailyReturns || {};
+    const rows = [
+      ['summary', name, 'end_equity', pack.endEquity],
+      ['summary', name, 'net_pnl', pack.totalPnl],
+      ['summary', name, 'net_pnl_pct', pack.totalPnlPct],
+      ['summary', name, 'trades', pack.trades],
+      ['summary', name, 'win_rate', pack.winRate],
+      ['summary', name, 'profit_factor', pack.profitFactor],
+      ['summary', name, 'max_dd_usd', pack.maxDd],
+      ['summary', name, 'max_dd_pct', pack.maxDdPct],
+      ['summary', name, 'mean_daily_pct_all_days', dr.meanDailyPctAllDays],
+      ['summary', name, 'median_daily_pct_all_days', dr.medianDailyPctAllDays],
+      ['summary', name, 'geo_avg_daily_pct', dr.geoAvgDailyPct],
+      ['summary', name, 'mean_daily_pct_trade_days', dr.meanDailyPctTradeDays],
+      ['summary', name, 'median_daily_pct_trade_days', dr.medianDailyPctTradeDays],
+      ['summary', name, 'trade_days', dr.tradeDays],
+      ['summary', name, 'calendar_days', dr.calendarDays],
+      ['summary', name, 'days_ge_5pct', pack.hit5plus],
+      ['summary', name, 'days_5_to_6pct_band', pack.hit56],
+    ];
+    for (const r of rows) csvLines.push(r.join(','));
+  }
+  // Top OOS combos daily-return summary
+  for (const m of ranked.slice(0, 8)) {
+    const dr = (m.test && m.test.dailyReturns) || {};
+    csvLines.push(['summary', `oos_${m.interval}_${m.variant}`, 'mean_daily_pct_all_days', dr.meanDailyPctAllDays].join(','));
+    csvLines.push(['summary', `oos_${m.interval}_${m.variant}`, 'median_daily_pct_all_days', dr.medianDailyPctAllDays].join(','));
+    csvLines.push(['summary', `oos_${m.interval}_${m.variant}`, 'geo_avg_daily_pct', dr.geoAvgDailyPct].join(','));
+    csvLines.push(['summary', `oos_${m.interval}_${m.variant}`, 'mean_daily_pct_trade_days', dr.meanDailyPctTradeDays].join(','));
+    csvLines.push(['summary', `oos_${m.interval}_${m.variant}`, 'trades', m.test && m.test.trades].join(','));
+    csvLines.push(['summary', `oos_${m.interval}_${m.variant}`, 'net_pnl_pct', m.test && m.test.totalPnlPct].join(','));
+  }
+  csvLines.push('');
+  csvLines.push('run,date_ist,trades,pnl_usd,pnl_pct_of_day_start,cumulative_equity,would_have_6pct_loss_halt,would_have_5pct_profit_mark,day_start_equity');
   for (const [name, pack] of [['current', pack60.current], ['recommended', pack60.recommended]]) {
     for (const d of pack.days) {
       const base = d.dayStartEquity || CAPITAL;
@@ -606,7 +695,7 @@ async function main() {
     feesRoundTrip: FEE_RT, slippageBps: SLIP_BPS, fundingPer8h: FUNDING_8H,
     entryTimeoutSec: ENTRY_TIMEOUT_MS / 1000,
     universe: symbols,
-    universeNote: 'Binance USDⓈ-M TRADIFI_PERPETUAL underlyingType=EQUITY only; liquidity-filtered',
+    universeNote: 'Binance USDⓈ-M TRADIFI_PERPETUAL EQUITY only; liquidity maxSpread~20bps, minVol~$5M, minDepth~$10k (≈$1k≤10% of ±0.5% depth); slip '+SLIP_BPS+'bps',
     historyNote: 'US stock perps have short listing history (onboarded 2026). 1d and late-listed names (e.g. QQQ) often fall below the 220-bar indicator warm-up — flagged as low sample.',
     flags,
     matrix,
@@ -690,6 +779,7 @@ function summarize(r) {
     realisticVsTheo: r.realisticVsTheo != null ? +r.realisticVsTheo.toFixed(3) : null,
     lowSample: r.lowSample,
     avgHoldBars: +((r.avgHoldBars || 0).toFixed(1)), maxHoldBars: r.maxHoldBars,
+    dailyReturns: r.dailyReturns || dailyReturnStats(r.days || [], CAPITAL),
   };
 }
 
@@ -699,5 +789,5 @@ if (require.main === module) {
 
 module.exports = {
   CAPITAL, LEVERAGE, MAX_POS, RISK_PCT, TRAIN_FRAC, TFS, TF_MS, VARIANTS, OUT,
-  signalAt, runPortfolio, splitTrainTest, maxHoldBars, summarize, toISTDate, agg10m, sizeQty, setActiveRules, getActiveRules,
+  signalAt, runPortfolio, splitTrainTest, maxHoldBars, summarize, toISTDate, agg10m, sizeQty, setActiveRules, getActiveRules, dailyReturnStats,
 };

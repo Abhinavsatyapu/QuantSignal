@@ -231,6 +231,7 @@ function guestAllowed(req) {
   }
   if (p.startsWith('/api/binance')) {
     if (p === '/api/binance/prices' || p === '/api/binance/prices/stream' || p === '/api/binance/positions') return true;
+    if (p === '/futures') return true;
     // status/health/events/trades/settings — no settings; allow status/events/trades read
     if (p === '/api/binance/status' || p === '/api/binance/events' || p === '/api/binance/trades') return true;
     return false;
