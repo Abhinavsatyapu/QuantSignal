@@ -600,7 +600,7 @@ function positionsView() {
       reason: t.exit_reason, pnl: t.pnl, fees: t.fees, entryType: t.entry_type, openedAt: t.ts, closedAt: t.exit_ts, mode: t.mode,
     }));
   return {
-    source: pricesSnap.source, transport: pricesSnap.transport, lastUpdateAt: pricesSnap.lastUpdateAt,
+    source: pricesSnap.source, transport: pricesSnap.transport, lastUpdateAt: pricesSnap.lastUpdateAt, ageMs: pricesSnap.ageMs, stale: pricesSnap.stale, serverNow: pricesSnap.serverNow,
     geoBlocked: !!pricesSnap.geoBlocked, priceNote: pricesSnap.note || null,
     mode: mi.placingOn, dryRun: mi.dryRun, capital: c.capital, equity,
     daily: {

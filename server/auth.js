@@ -14,13 +14,44 @@ const LOGIN_MAX = 10;
 
 const loginHits = new Map();
 
+/** Resolve OWNER/GUEST secrets. Supports plain, `b64:<base64>`, `hex:<hex>`, or NAME_HEX / NAME_HEX_A+NAME_HEX_B (deployer-safe encodings). */
+function resolveEnvSecret(name) {
+  const fromParts = () => {
+    const a = process.env[name + '_HEX_A'];
+    const b = process.env[name + '_HEX_B'];
+    if (typeof a === 'string' && typeof b === 'string' && a.length && b.length) {
+      try { return Buffer.from(a + b, 'hex').toString('utf8'); } catch { return ''; }
+    }
+    const h = process.env[name + '_HEX'];
+    if (typeof h === 'string' && h.length) {
+      try { return Buffer.from(h, 'hex').toString('utf8'); } catch { return ''; }
+    }
+    const b64 = process.env[name + '_B64'];
+    if (typeof b64 === 'string' && b64.length) {
+      try { return Buffer.from(b64, 'base64').toString('utf8'); } catch { return ''; }
+    }
+    return '';
+  };
+  const raw = process.env[name];
+  if (typeof raw === 'string' && raw.length) {
+    if (raw.startsWith('b64:')) {
+      try { return Buffer.from(raw.slice(4), 'base64').toString('utf8'); } catch { return fromParts(); }
+    }
+    if (raw.startsWith('hex:')) {
+      try { return Buffer.from(raw.slice(4), 'hex').toString('utf8'); } catch { return fromParts(); }
+    }
+    return raw;
+  }
+  return fromParts();
+}
+function ownerPassword() { return resolveEnvSecret('OWNER_PASSWORD'); }
+function guestPassword() { return resolveEnvSecret('GUEST_PASSWORD'); }
+
 function ownerConfigured() {
-  const p = process.env.OWNER_PASSWORD;
-  return typeof p === 'string' && p.length > 0;
+  return ownerPassword().length > 0;
 }
 function guestConfigured() {
-  const p = process.env.GUEST_PASSWORD;
-  return typeof p === 'string' && p.length > 0;
+  return guestPassword().length > 0;
 }
 
 function sessionSecret() {
@@ -57,8 +88,8 @@ function verifyToken(token) {
   if (!(payload.exp > Date.now())) return null;
   // Invalidate when env password changed
   const wantPv = payload.role === 'owner'
-    ? passwordVersion(process.env.OWNER_PASSWORD)
-    : passwordVersion(process.env.GUEST_PASSWORD);
+    ? passwordVersion(ownerPassword())
+    : passwordVersion(guestPassword());
   if (!payload.pv || !safeEqStr(payload.pv, wantPv)) return null;
   if (payload.role === 'owner' && !ownerConfigured()) return null;
   if (payload.role === 'guest' && !guestConfigured()) return null;
@@ -137,7 +168,7 @@ function rateLimitLogin(ip) {
 }
 
 function mintSession(role) {
-  const pw = role === 'owner' ? process.env.OWNER_PASSWORD : process.env.GUEST_PASSWORD;
+  const pw = role === 'owner' ? ownerPassword() : guestPassword();
   return signPayload({
     role,
     pv: passwordVersion(pw),
@@ -297,8 +328,8 @@ function mountRoutes(app, { wrap }) {
     if (!rateLimitLogin(ip)) return res.status(429).json({ error: 'Too many login attempts — try again shortly' });
     const password = req.body && req.body.password;
     // Owner match first, then guest (constant-time-ish: always check both lengths via verify)
-    const asOwner = verifyAgainstEnv(password, process.env.OWNER_PASSWORD);
-    const asGuest = guestConfigured() && verifyAgainstEnv(password, process.env.GUEST_PASSWORD);
+    const asOwner = verifyAgainstEnv(password, ownerPassword());
+    const asGuest = guestConfigured() && verifyAgainstEnv(password, guestPassword());
     if (asOwner) {
       setSessionCookie(res, mintSession('owner'));
       return res.json({ ok: true, role: 'owner', readOnly: false });
@@ -319,6 +350,6 @@ function mountRoutes(app, { wrap }) {
 module.exports = {
   COOKIE, attachUser, gateMiddleware, requireAuth, requireOwner, mountRoutes,
   publicHealth, publicVersion, publicPath, guestAllowed, redactSecrets,
-  ownerConfigured, guestConfigured, passwordVersion,
+  ownerConfigured, guestConfigured, ownerPassword, guestPassword, resolveEnvSecret, passwordVersion,
   verifyAgainstEnv, mintSession, verifyToken, setSessionCookie, clearSessionCookie, readSession,
 };

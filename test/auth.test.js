@@ -38,6 +38,21 @@ describe('auth dual password', () => {
     assert.equal(auth.guestAllowed({ method: 'GET', path: '/positions' }), true);
   });
 
+  it('resolves b64: and HEX env passwords', () => {
+    process.env.GUEST_PASSWORD = 'b64:' + Buffer.from('guest-secret-test', 'utf8').toString('base64');
+    delete require.cache[require.resolve('../server/auth')];
+    let auth = require('../server/auth');
+    assert.equal(auth.guestPassword(), 'guest-secret-test');
+    delete process.env.GUEST_PASSWORD;
+    process.env.GUEST_PASSWORD_HEX = Buffer.from('guest-via-hex', 'utf8').toString('hex');
+    delete require.cache[require.resolve('../server/auth')];
+    auth = require('../server/auth');
+    assert.equal(auth.guestPassword(), 'guest-via-hex');
+    delete process.env.GUEST_PASSWORD_HEX;
+    process.env.GUEST_PASSWORD = 'guest-secret-test';
+    delete require.cache[require.resolve('../server/auth')];
+  });
+
   it('redacts secret-looking keys', () => {
     const auth = require('../server/auth');
     const out = auth.redactSecrets({ apiKey: 'abc', nested: { privateKey: 'x', ok: 1 } });

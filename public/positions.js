@@ -17,10 +17,14 @@
     for (const m of Object.values(snap.marks || {})) {
       if (m.ts && snap.serverNow) { const l = snap.serverNow - m.ts; if (pushLat == null || l < pushLat) pushLat = l; }
     }
+    const ageMs = snap.ageMs != null ? snap.ageMs : (snap.lastUpdateAt ? Math.max(0, Date.now() - snap.lastUpdateAt) : null);
+    const stale = snap.stale === true || (ageMs != null && ageMs > 10000) || snap.lastUpdateAt == null;
+    const lastAbs = snap.lastUpdateAt ? new Date(snap.lastUpdateAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
     $('srcLine').innerHTML = `Source: <b>${esc(snap.source || 'Binance')}</b> · transport <b>${esc(snap.transport || '—')}</b>` +
-      (snap.lastUpdateAt ? ` · last update ${esc(ago(snap.lastUpdateAt))}` : '') +
+      ` · last update <b>${esc(lastAbs)}</b> (${esc(ago(snap.lastUpdateAt))})` +
+      (stale ? ' · <span class="badge bad">STALE</span>' : ' · <span class="badge">LIVE</span>') +
       (pushLat != null ? ` · <span class="lat">feed lag <b>${Math.round(pushLat)} ms</b></span>` : '') +
-      (lat != null && pushLat == null ? ` · <span class="lat">age <b>${Math.round(lat)} ms</b></span>` : '');
+      (ageMs != null ? ` · <span class="lat">age <b>${Math.round(ageMs)} ms</b></span>` : '');
     if (snap.geoBlocked || snap.note) { $('geoNote').hidden = false; $('geoNote').textContent = snap.note || 'Binance geo-blocked from this host (HTTP 451). Move Render to Frankfurt or Singapore.'; }
     else $('geoNote').hidden = true;
   }
@@ -119,5 +123,5 @@
   }
 
   refresh(); connectSSE();
-  setInterval(refresh, 3000);
+  setInterval(refresh, 5000);
 })();

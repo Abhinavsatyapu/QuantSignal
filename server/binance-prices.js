@@ -20,6 +20,8 @@ function Prices(opts = {}) {
     ws: null,
     timers: [],
   };
+  const MAX_REFRESH_MS = Number(opts.maxRefreshMs) > 0 ? Number(opts.maxRefreshMs) : 5000;
+  const STALE_MS = Number(opts.staleMs) > 0 ? Number(opts.staleMs) : 10000;
 
   async function restTick() {
     try {
@@ -104,6 +106,8 @@ function Prices(opts = {}) {
   }
 
   function snapshot() {
+    const now = Date.now();
+    const ageMs = state.lastUpdateAt ? Math.max(0, now - state.lastUpdateAt) : null;
     return {
       source: state.source,
       transport: state.transport,
@@ -112,6 +116,11 @@ function Prices(opts = {}) {
       geoBlocked: state.geoBlocked,
       marks: { ...state.marks },
       symbols,
+      serverNow: now,
+      ageMs,
+      stale: ageMs == null || ageMs > STALE_MS,
+      maxRefreshMs: MAX_REFRESH_MS,
+      staleMs: STALE_MS,
       note: state.geoBlocked
         ? 'Binance returned HTTP 451 (geo-restricted) from this host. Move the Render service to Frankfurt or Singapore, or use a non-US egress IP.'
         : null,
@@ -119,8 +128,13 @@ function Prices(opts = {}) {
   }
 
   function start() {
+    // Always keep a REST heartbeat ≤5s so UI + bot stay fresh even if WS stalls.
     restTick();
-    state.timers.push(setInterval(restTick, 3000));
+    state.timers.push(setInterval(restTick, MAX_REFRESH_MS));
+    state.timers.push(setInterval(() => {
+      const age = state.lastUpdateAt ? Date.now() - state.lastUpdateAt : Infinity;
+      if (age >= MAX_REFRESH_MS) restTick();
+    }, 1000));
     connectWs();
   }
   function stop() {
