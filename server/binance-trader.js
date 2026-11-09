@@ -8,6 +8,7 @@ const store = require('./db');
 const bn = require('./binance');
 const { Prices, DEFAULT_SYMBOLS } = require('./binance-prices');
 const universe = require('./binance-universe');
+const sm = require('./binance-order-sm');
 require('../public/indicators.js');
 require('../public/strategy-liquidity-signals.js');
 const { Technicals, LiquiditySignals } = globalThis;
@@ -68,6 +69,13 @@ CREATE TABLE IF NOT EXISTS bn_scans(
 CREATE INDEX IF NOT EXISTS idx_bn_trades_status ON bn_trades(status);
 CREATE INDEX IF NOT EXISTS idx_bn_pending_status ON bn_pending(status);
 `);
+  // Additive lifecycle columns (idempotent ALTER)
+  for (const col of [
+    "ALTER TABLE bn_trades ADD COLUMN filled_at INTEGER",
+    "ALTER TABLE bn_trades ADD COLUMN unprotected_since INTEGER",
+    "ALTER TABLE bn_trades ADD COLUMN protect_qty REAL",
+    "ALTER TABLE bn_trades ADD COLUMN lifecycle_note TEXT",
+  ]) { try { store.db.exec(col); } catch {} }
 }
 
 function blog(level, msg, data) {
@@ -93,15 +101,49 @@ function insertTrade(t) {
     }).lastInsertRowid;
 }
 function closeTrade(id, status, px, reason, pnl, fees) {
+  const row = store.db.prepare('SELECT status FROM bn_trades WHERE id=?').get(id);
+  const target = status === 'closed' ? sm.STATES.CLOSED : status === 'cancelled' ? sm.STATES.CANCELLED : (status || sm.STATES.CLOSED);
+  if (row) {
+    const tr = sm.transition(row.status, target, { reason });
+    if (!tr.ok && !tr.noop) { blog('warn', `closeTrade illegal ${row.status}→${target}: ${tr.reason}`); }
+  }
   store.db.prepare('UPDATE bn_trades SET status=?, exit_px=?, exit_ts=?, exit_reason=?, pnl=?, fees=COALESCE(?,fees) WHERE id=?')
-    .run(status, px, Date.now(), reason, pnl, fees == null ? null : fees, id);
+    .run(target, px, Date.now(), reason, pnl, fees == null ? null : fees, id);
+  try { require('./persist').mark('bn_trades', id); } catch {}
+}
+/** Idempotent persisted state transition. Returns transition result. */
+function transitionTrade(id, to, meta = {}) {
+  const row = store.db.prepare('SELECT * FROM bn_trades WHERE id=?').get(id);
+  if (!row) return { ok: false, reason: 'missing trade' };
+  const tr = sm.transition(row.status, to, meta);
+  if (!tr.ok) { blog('warn', `SM reject #${id} ${tr.from}→${tr.to}: ${tr.reason}`); return tr; }
+  if (tr.noop) return tr;
+  const sets = ['status=?'];
+  const vals = [tr.to];
+  if (tr.to === sm.STATES.FILLED || tr.to === sm.STATES.PARTIAL) {
+    sets.push('filled_at=COALESCE(filled_at,?)', 'unprotected_since=COALESCE(unprotected_since,?)');
+    vals.push(Date.now(), Date.now());
+  }
+  if (tr.to === sm.STATES.PROTECTED) {
+    sets.push('unprotected_since=NULL', 'protect_qty=?');
+    vals.push(meta.protectQty != null ? meta.protectQty : (row.filled_qty || row.qty));
+  }
+  if (meta.note) { sets.push('lifecycle_note=?'); vals.push(meta.note); }
+  vals.push(id);
+  store.db.prepare(`UPDATE bn_trades SET ${sets.join(',')} WHERE id=?`).run(...vals);
+  try { require('./persist').mark('bn_trades', id); } catch {}
+  return tr;
 }
 function rememberCid(cid, tradeId, kind, symbol, exchangeOrderId, status) {
   store.db.prepare('INSERT OR REPLACE INTO bn_client_orders(client_order_id,trade_id,kind,symbol,ts,exchange_order_id,status) VALUES(?,?,?,?,?,?,?)')
     .run(cid, tradeId, kind, symbol, Date.now(), exchangeOrderId || null, status || 'new');
+  try { require('./persist').mark('bn_client_orders', cid); } catch {}
 }
 function cidTaken(cid) { return !!store.db.prepare('SELECT 1 FROM bn_client_orders WHERE client_order_id=?').get(cid); }
-function openTrades() { return store.db.prepare("SELECT * FROM bn_trades WHERE status IN ('open','pending') ORDER BY id DESC").all(); }
+function openTrades() {
+  return store.db.prepare('SELECT * FROM bn_trades ORDER BY id DESC').all()
+    .filter((t) => sm.isActiveStatus(t.status));
+}
 function pendingRows() { return store.db.prepare("SELECT * FROM bn_pending WHERE status='waiting' ORDER BY id").all(); }
 
 function refreshDay(equity) {
@@ -115,7 +157,7 @@ function refreshDay(equity) {
   }
   state.day = day; state.dayStartEquity = row.start_equity;
   const dayStart = istDayStartMs(day) || 0;
-  const closed = store.db.prepare("SELECT COALESCE(SUM(pnl),0) p FROM bn_trades WHERE status='closed' AND exit_ts>=?").get(dayStart);
+  const closed = store.db.prepare("SELECT COALESCE(SUM(pnl),0) p FROM bn_trades WHERE status IN ('closed','CLOSED') AND exit_ts>=?").get(dayStart);
   state.dayRealizedPnl = closed.p;
   return row;
 }
@@ -141,10 +183,10 @@ function checkDailyLimits(equity) {
 }
 function equityNow() {
   const c = cfgBn();
-  const realized = store.db.prepare("SELECT COALESCE(SUM(pnl),0) p FROM bn_trades WHERE status='closed' AND mode='dry_run'").get().p;
+  const realized = store.db.prepare("SELECT COALESCE(SUM(pnl),0) p FROM bn_trades WHERE status IN ('closed','CLOSED') AND mode='dry_run'").get().p;
   let unreal = 0;
   for (const t of openTrades()) {
-    if (t.mode !== 'dry_run' || t.status !== 'open') continue;
+    const st = sm.normalize(t.status); if (t.mode !== 'dry_run' || !(st === sm.STATES.PROTECTED || st === sm.STATES.FILLED || st === sm.STATES.PARTIAL)) continue;
     const mark = markOf(t.symbol);
     if (mark > 0 && t.entry_px > 0) unreal += (mark - t.entry_px) * (t.filled_qty || t.qty) * dirSign(t.direction);
   }
@@ -199,52 +241,114 @@ function filt(symbol) {
 }
 
 function protectiveOrders({ symbol, direction, stopPx, tpPx, stopCid, tpCid, qty }) {
-  const closeSide = direction === 'LONG' ? 'SELL' : 'BUY';
   const f = filt(symbol);
-  const stop = bn.roundTick(stopPx, f.tickSize);
-  const tp = bn.roundTick(tpPx, f.tickSize);
-  // Prefer closePosition when fully flat-or-fill; otherwise reduceOnly qty sized to filled amount
-  const base = { symbol, side: closeSide, workingType: 'MARK_PRICE', priceProtect: 'true' };
-  const stopOrder = qty != null
-    ? { ...base, type: 'STOP_MARKET', stopPrice: String(stop), quantity: String(qty), reduceOnly: 'true', newClientOrderId: stopCid }
-    : { ...base, type: 'STOP_MARKET', stopPrice: String(stop), closePosition: 'true', newClientOrderId: stopCid };
-  const tpOrder = qty != null
-    ? { ...base, type: 'TAKE_PROFIT_MARKET', stopPrice: String(tp), quantity: String(qty), reduceOnly: 'true', newClientOrderId: tpCid }
-    : { ...base, type: 'TAKE_PROFIT_MARKET', stopPrice: String(tp), closePosition: 'true', newClientOrderId: tpCid };
-  return { stop: stopOrder, tp: tpOrder, stopPx: stop, tpPx: tp, stopCid, tpCid };
+  const mark = markOf(symbol);
+  return sm.buildProtectiveOrders({
+    symbol, direction, stopPx, tpPx, stopCid, tpCid, qty, filters: f, mark,
+  });
+}
+
+/** Place one protective order with retries for -2022/-2021/-1021/rate-limit. */
+async function placeProtectiveWithRetry(client, order, { trade, kind, mark }) {
+  let attempt = 0, lastErr = null, params = { ...order };
+  while (attempt < 4) {
+    attempt += 1;
+    try {
+      const r = await client.placeOrder(params);
+      return { ok: true, result: r, params };
+    } catch (e) {
+      lastErr = e;
+      const cls = sm.classifyError(e);
+      blog('warn', `protect ${kind} attempt ${attempt}: ${cls.kind} ${e.message}`);
+      if (cls.action === 'sync_time') { try { await client.syncTime(); } catch {} continue; }
+      if (cls.action === 'backoff') { await new Promise((r) => setTimeout(r, 250 * attempt * attempt)); continue; }
+      if (cls.action === 'refresh_qty') {
+        // -2022 reduceOnly: re-read position and shrink qty
+        try {
+          const pos = (await client.positionRisk()).find((p) => p.symbol === trade.symbol);
+          const amt = Math.abs(Number(pos && pos.positionAmt) || 0);
+          const f = filt(trade.symbol);
+          const q = bn.roundStep(amt, f.stepSize);
+          if (!(q > 0)) return { ok: false, error: e, kind: cls.kind, flat: true };
+          params = { ...params, quantity: String(q) };
+          continue;
+        } catch { return { ok: false, error: e, kind: cls.kind }; }
+      }
+      if (cls.action === 'nudge_stop_tp') {
+        const f = filt(trade.symbol);
+        const m = mark || markOf(trade.symbol) || Number(params.stopPrice);
+        const nudged = sm.nudgeAwayFromMark({
+          direction: trade.direction,
+          stopPx: kind === 'stop' ? Number(params.stopPrice) : trade.stop_px,
+          tpPx: kind === 'tp' ? Number(params.stopPrice || params.price) : trade.tp_px,
+          mark: m, tickSize: f.tickSize,
+        });
+        if (kind === 'stop') params = { ...params, stopPrice: String(nudged.stopPx) };
+        else params = { ...params, stopPrice: String(nudged.tpPx), price: String(nudged.tpPx) };
+        continue;
+      }
+      if (cls.action === 'ignore') return { ok: false, error: e, kind: cls.kind, ignore: true };
+      return { ok: false, error: e, kind: cls.kind };
+    }
+  }
+  return { ok: false, error: lastErr, kind: 'retries_exhausted' };
 }
 
 /** Attach (or re-attach) exchange-side SL/TP sized to filled qty. Idempotent via clientOrderId. */
 async function attachProtection(trade, filledQty) {
   const mi = modeInfo();
-  const stopCid = trade.stop_cid || bn.clientOrderId([trade.id, 's', crypto.randomBytes(2).toString('hex')]);
-  const tpCid = trade.tp_cid || bn.clientOrderId([trade.id, 't', crypto.randomBytes(2).toString('hex')]);
-  const prot = protectiveOrders({ symbol: trade.symbol, direction: trade.direction, stopPx: trade.stop_px, tpPx: trade.tp_px, stopCid, tpCid, qty: filledQty });
+  let stopCid = trade.stop_cid || bn.clientOrderId([trade.id, 's', crypto.randomBytes(2).toString('hex')]);
+  let tpCid = trade.tp_cid || bn.clientOrderId([trade.id, 't', crypto.randomBytes(2).toString('hex')]);
+  // New cids if previous attach failed (MISSING) so we do not skip due to cidTaken
+  if (trade.stop_status === 'MISSING') stopCid = bn.clientOrderId([trade.id, 's', crypto.randomBytes(2).toString('hex')]);
+  if (trade.tp_status === 'MISSING') tpCid = bn.clientOrderId([trade.id, 't', crypto.randomBytes(2).toString('hex')]);
+  const f = filt(trade.symbol);
+  const q = bn.roundStep(filledQty, f.stepSize);
+  const prot = protectiveOrders({ symbol: trade.symbol, direction: trade.direction, stopPx: trade.stop_px, tpPx: trade.tp_px, stopCid, tpCid, qty: q });
   if (mi.dryRun) {
-    store.db.prepare('UPDATE bn_trades SET stop_cid=?, tp_cid=?, stop_status=?, tp_status=?, filled_qty=? WHERE id=?')
-      .run(stopCid, tpCid, 'ATTACHED', 'ATTACHED', filledQty, trade.id);
+    store.db.prepare('UPDATE bn_trades SET stop_cid=?, tp_cid=?, stop_status=?, tp_status=?, filled_qty=?, protect_qty=?, stop_px=?, tp_px=? WHERE id=?')
+      .run(stopCid, tpCid, 'ATTACHED', 'ATTACHED', filledQty, q, prot.stopPx, prot.tpPx, trade.id);
     rememberCid(stopCid, trade.id, 'stop', trade.symbol, 'DRY-SL-' + trade.id, 'NEW');
     rememberCid(tpCid, trade.id, 'tp', trade.symbol, 'DRY-TP-' + trade.id, 'NEW');
+    transitionTrade(trade.id, sm.STATES.PROTECTED, { protectQty: q, note: 'dry_run_protect' });
     return { stopStatus: 'ATTACHED', tpStatus: 'ATTACHED', dryRun: true };
   }
   const client = await ensureClient();
   let stopStatus = trade.stop_status, tpStatus = trade.tp_status, stopOid = trade.stop_oid, tpOid = trade.tp_oid;
-  try {
-    if (stopStatus !== 'ATTACHED' && !cidTaken(stopCid)) {
-      const r = await client.placeOrder(prot.stop);
-      stopOid = String(r.orderId); stopStatus = 'ATTACHED';
-      rememberCid(stopCid, trade.id, 'stop', trade.symbol, stopOid, r.status);
+  const mark = markOf(trade.symbol);
+  if (stopStatus !== 'ATTACHED') {
+    const already = cidTaken(stopCid) && stopStatus === 'ATTACHED';
+    if (!already) {
+      const placed = await placeProtectiveWithRetry(client, prot.stop, { trade, kind: 'stop', mark });
+      if (placed.ok) {
+        stopOid = String(placed.result.orderId); stopStatus = 'ATTACHED';
+        rememberCid(stopCid, trade.id, 'stop', trade.symbol, stopOid, placed.result.status);
+        if (placed.params.stopPrice) store.db.prepare('UPDATE bn_trades SET stop_px=? WHERE id=?').run(Number(placed.params.stopPrice), trade.id);
+      } else if (placed.flat) {
+        transitionTrade(trade.id, sm.STATES.CLOSED, { note: 'flat_on_protect' });
+        closeTrade(trade.id, 'closed', mark || trade.entry_px, 'flat before protect', 0);
+        return { stopStatus: 'MISSING', tpStatus: 'MISSING', flat: true };
+      } else { stopStatus = 'MISSING'; blog('error', `STOP attach failed ${trade.symbol}: ${(placed.error && placed.error.message) || placed.kind}`); }
     }
-  } catch (e) { stopStatus = 'MISSING'; blog('error', `STOP attach failed ${trade.symbol}: ${e.message}`); }
-  try {
-    if (tpStatus !== 'ATTACHED' && !cidTaken(tpCid)) {
-      const r = await client.placeOrder(prot.tp);
-      tpOid = String(r.orderId); tpStatus = 'ATTACHED';
-      rememberCid(tpCid, trade.id, 'tp', trade.symbol, tpOid, r.status);
+  }
+  if (tpStatus !== 'ATTACHED') {
+    const already = cidTaken(tpCid) && tpStatus === 'ATTACHED';
+    if (!already) {
+      const placed = await placeProtectiveWithRetry(client, prot.tp, { trade, kind: 'tp', mark });
+      if (placed.ok) {
+        tpOid = String(placed.result.orderId); tpStatus = 'ATTACHED';
+        rememberCid(tpCid, trade.id, 'tp', trade.symbol, tpOid, placed.result.status);
+        if (placed.params.price) store.db.prepare('UPDATE bn_trades SET tp_px=? WHERE id=?').run(Number(placed.params.price), trade.id);
+      } else { tpStatus = 'MISSING'; blog('error', `TP attach failed ${trade.symbol}: ${(placed.error && placed.error.message) || placed.kind}`); }
     }
-  } catch (e) { tpStatus = 'MISSING'; blog('error', `TP attach failed ${trade.symbol}: ${e.message}`); }
-  store.db.prepare('UPDATE bn_trades SET stop_cid=?, tp_cid=?, stop_oid=?, tp_oid=?, stop_status=?, tp_status=?, filled_qty=? WHERE id=?')
-    .run(stopCid, tpCid, stopOid, tpOid, stopStatus, tpStatus, filledQty, trade.id);
+  }
+  store.db.prepare('UPDATE bn_trades SET stop_cid=?, tp_cid=?, stop_oid=?, tp_oid=?, stop_status=?, tp_status=?, filled_qty=?, protect_qty=? WHERE id=?')
+    .run(stopCid, tpCid, stopOid, tpOid, stopStatus, tpStatus, filledQty, q, trade.id);
+  if (stopStatus === 'ATTACHED' && tpStatus === 'ATTACHED') {
+    transitionTrade(trade.id, sm.STATES.PROTECTED, { protectQty: q, note: 'sl_tp_attached' });
+  } else {
+    transitionTrade(trade.id, sm.STATES.FILLED, { note: 'protection_incomplete' });
+  }
   return { stopStatus, tpStatus };
 }
 
@@ -252,7 +356,7 @@ async function attachProtection(trade, filledQty) {
 async function finalizeEntry(pending, { forceMarket = false } = {}) {
   const mi = modeInfo();
   const trade = store.db.prepare('SELECT * FROM bn_trades WHERE id=?').get(pending.trade_id);
-  if (!trade || trade.status === 'closed') {
+  if (!trade || sm.TERMINAL.has(sm.normalize(trade.status))) {
     store.db.prepare("UPDATE bn_pending SET status='done', updated_at=? WHERE id=?").run(Date.now(), pending.id);
     return { skipped: true };
   }
@@ -314,26 +418,36 @@ async function finalizeEntry(pending, { forceMarket = false } = {}) {
       }
     } else if (filled < pending.target_qty && Date.now() < pending.deadline_ts) {
       store.db.prepare('UPDATE bn_pending SET filled_qty=?, updated_at=? WHERE id=?').run(filled, Date.now(), pending.id);
+      if (filled > 0) {
+        store.db.prepare('UPDATE bn_trades SET filled_qty=?, entry_px=COALESCE(?,entry_px) WHERE id=?').run(filled, avgPx, trade.id);
+        transitionTrade(trade.id, sm.STATES.PARTIAL, { note: 'partial_fill' });
+        // Protect partial immediately so position is never naked
+        const updatedPartial = store.db.prepare('SELECT * FROM bn_trades WHERE id=?').get(trade.id);
+        await attachProtection(updatedPartial, filled);
+      }
       return { waiting: true, filled, remainSec: Math.max(0, Math.round((pending.deadline_ts - Date.now()) / 1000)) };
     }
   }
 
   if (!(filled > 0)) {
     store.db.prepare("UPDATE bn_pending SET status='cancelled', updated_at=? WHERE id=?").run(Date.now(), pending.id);
-    store.db.prepare("UPDATE bn_trades SET status='cancelled', exit_reason=? WHERE id=?").run('limit expired, no fill', trade.id);
+    transitionTrade(trade.id, sm.STATES.CANCELLED, { note: 'limit_expired_no_fill' });
+    store.db.prepare('UPDATE bn_trades SET exit_reason=?, exit_ts=? WHERE id=?').run('limit expired, no fill', Date.now(), trade.id);
     blog('warn', `Entry cancelled (no fill) ${pending.symbol}`);
     return { cancelled: true };
   }
 
   const notional = filled * avgPx;
   const margin = notional / (trade.leverage || cfgBn().leverage);
-  store.db.prepare(`UPDATE bn_trades SET status='open', filled_qty=?, entry_px=?, notional=?, margin=?, entry_type=?, qty=? WHERE id=?`)
+  const nextState = filled + 1e-12 < pending.target_qty ? sm.STATES.PARTIAL : sm.STATES.FILLED;
+  store.db.prepare('UPDATE bn_trades SET filled_qty=?, entry_px=?, notional=?, margin=?, entry_type=?, qty=? WHERE id=?')
     .run(filled, avgPx, notional, margin, entryType, filled, trade.id);
+  transitionTrade(trade.id, nextState, { note: entryType });
   store.db.prepare("UPDATE bn_pending SET status='done', filled_qty=?, updated_at=? WHERE id=?").run(filled, Date.now(), pending.id);
   const updated = store.db.prepare('SELECT * FROM bn_trades WHERE id=?').get(trade.id);
   await attachProtection(updated, filled);
-  blog('info', `Entry finalized ${pending.direction} ${filled} ${pending.symbol} @ ${avgPx} (${entryType})`);
-  return { ok: true, filled, avgPx, entryType };
+  blog('info', `Entry finalized ${pending.direction} ${filled} ${pending.symbol} @ ${avgPx} (${entryType}) → ${nextState}`);
+  return { ok: true, filled, avgPx, entryType, state: nextState };
 }
 
 async function processPendings() {
@@ -438,7 +552,7 @@ async function handleSignal(sig) {
     const tradeId = insertTrade({
       signal_id: id, symbol: sig.symbol, direction: sig.direction, mode: mi.placingOn === 'dry_run' ? 'dry_run' : mi.placingOn,
       network: mi.network, qty: sized.qty, filled_qty: 0, entry_px: limitPx, stop_px: stopPx, tp_px: tpPx,
-      notional: sized.notional, leverage: c.leverage, margin: sized.margin, status: 'pending', entry_type: 'limit',
+      notional: sized.notional, leverage: c.leverage, margin: sized.margin, status: sm.STATES.ENTRY_PENDING, entry_type: 'limit',
       entry_cid: entryCid, stop_cid: stopCid, tp_cid: tpCid, stop_status: 'PENDING', tp_status: 'PENDING',
       orders: { limit: limitParams, deadline, timeoutSec },
     });
@@ -478,43 +592,78 @@ async function handleSignal(sig) {
 
 async function reconcile() {
   const mi = modeInfo();
+  const c = cfgBn();
+  const maxUnprot = (c.maxUnprotectedSec != null ? c.maxUnprotectedSec : 5) * 1000;
   state.lastReconcileAt = Date.now();
   await processPendings();
 
   if (mi.dryRun) {
     const holdMs = universe.maxHoldMs(cfgBn().interval, cfgBn().maxHoldHours);
-    for (const t of openTrades().filter((x) => x.mode === 'dry_run' && x.status === 'open')) {
+    for (const t of openTrades().filter((x) => x.mode === 'dry_run')) {
+      const st = sm.normalize(t.status);
+      // Unprotected timeout → re-attach
+      if ((st === sm.STATES.FILLED || st === sm.STATES.PARTIAL) && (t.stop_status !== 'ATTACHED' || t.tp_status !== 'ATTACHED')) {
+        const since = t.unprotected_since || t.filled_at || t.ts;
+        if (Date.now() - since > maxUnprot) {
+          await attachProtection(t, t.filled_qty || t.qty);
+        }
+      }
+      if (!(st === sm.STATES.PROTECTED || st === sm.STATES.FILLED || st === sm.STATES.PARTIAL || st === 'open')) continue;
       if (Date.now() - t.ts >= holdMs) {
         const mark = markOf(t.symbol) || t.entry_px;
         const qty = t.filled_qty || t.qty;
+        transitionTrade(t.id, sm.STATES.EXITING, { note: 'max_hold' });
         closeTrade(t.id, 'closed', mark, 'max hold time', (mark - t.entry_px) * qty * dirSign(t.direction));
         continue;
       }
       const mark = markOf(t.symbol);
       if (!(mark > 0)) continue;
       const sign = dirSign(t.direction), qty = t.filled_qty || t.qty;
-      if (sign > 0 && mark <= t.stop_px) closeTrade(t.id, 'closed', mark, 'SL', (mark - t.entry_px) * qty * sign);
-      else if (sign > 0 && mark >= t.tp_px) closeTrade(t.id, 'closed', mark, 'TP', (mark - t.entry_px) * qty * sign);
-      else if (sign < 0 && mark >= t.stop_px) closeTrade(t.id, 'closed', mark, 'SL', (mark - t.entry_px) * qty * sign);
-      else if (sign < 0 && mark <= t.tp_px) closeTrade(t.id, 'closed', mark, 'TP', (mark - t.entry_px) * qty * sign);
+      let hit = null;
+      if (sign > 0 && mark <= t.stop_px) hit = 'SL';
+      else if (sign > 0 && mark >= t.tp_px) hit = 'TP';
+      else if (sign < 0 && mark >= t.stop_px) hit = 'SL';
+      else if (sign < 0 && mark <= t.tp_px) hit = 'TP';
+      if (hit) {
+        const kind = hit === 'SL' ? 'stop' : 'tp';
+        const oco = sm.onProtectiveFill(t, kind);
+        transitionTrade(t.id, oco.nextState || sm.STATES.EXITING, { note: hit });
+        closeTrade(t.id, 'closed', mark, hit, (mark - t.entry_px) * qty * sign);
+      }
     }
-    state.positionsMissingStops = openTrades().filter((t) => t.status === 'open' && (t.stop_status === 'MISSING' || t.tp_status === 'MISSING'))
-      .map((t) => ({ symbol: t.symbol, stop: t.stop_status, tp: t.tp_status, tradeId: t.id }));
-    return { mode: 'dry_run', open: openTrades().filter((t) => t.status === 'open').length };
+    state.positionsMissingStops = openTrades().filter((t) => {
+      const st = sm.normalize(t.status);
+      return (st === sm.STATES.PROTECTED || st === sm.STATES.FILLED || st === sm.STATES.PARTIAL) && (t.stop_status === 'MISSING' || t.tp_status === 'MISSING');
+    }).map((t) => ({ symbol: t.symbol, stop: t.stop_status, tp: t.tp_status, tradeId: t.id }));
+    return { mode: 'dry_run', open: openTrades().filter((t) => sm.normalize(t.status) === sm.STATES.PROTECTED).length };
   }
   if (!mi.keyPresent) return { mode: 'no_keys' };
   const client = await ensureClient();
   let positions = [], orders = [];
   try { positions = await client.positionRisk(); orders = await client.openOrders(); }
-  catch (e) { state.lastError = e.message; blog('warn', 'reconcile: ' + e.message); return { error: e.message }; }
+  catch (e) {
+    const cls = sm.classifyError(e);
+    if (cls.action === 'sync_time') { try { await client.syncTime(); } catch {} }
+    if (cls.action === 'backoff') { state.lastError = e.message; }
+    // WS disconnect mid-fill: REST is source of truth — keep going next tick
+    state.lastError = e.message; blog('warn', 'reconcile: ' + e.message); return { error: e.message, kind: cls.kind };
+  }
 
   const missing = [];
+  const posBySym = new Map();
   for (const p of positions) {
     const amt = Number(p.positionAmt); if (!(Math.abs(amt) > 0)) continue;
-    const symbol = p.symbol, direction = amt > 0 ? 'LONG' : 'SHORT', closeSide = amt > 0 ? 'SELL' : 'BUY';
-    const hasStop = orders.some((o) => o.symbol === symbol && o.type === 'STOP_MARKET' && o.side === closeSide);
-    const hasTp = orders.some((o) => o.symbol === symbol && o.type === 'TAKE_PROFIT_MARKET' && o.side === closeSide);
-    let local = openTrades().find((t) => t.symbol === symbol && t.status === 'open');
+    posBySym.set(p.symbol, p);
+  }
+
+  for (const [symbol, p] of posBySym) {
+    const amt = Number(p.positionAmt);
+    const direction = amt > 0 ? 'LONG' : 'SHORT', closeSide = amt > 0 ? 'SELL' : 'BUY';
+    const isStop = (o) => o.symbol === symbol && o.type === 'STOP_MARKET' && o.side === closeSide;
+    const isTp = (o) => o.symbol === symbol && (o.type === 'TAKE_PROFIT' || o.type === 'TAKE_PROFIT_MARKET') && o.side === closeSide;
+    const hasStop = orders.some(isStop);
+    const hasTp = orders.some(isTp);
+    let local = openTrades().find((t) => t.symbol === symbol);
     if (!local) {
       const entry = Number(p.entryPrice);
       const stopPct = cfgBn().defaultStopPct / 100, sign = dirSign(direction);
@@ -522,24 +671,99 @@ async function reconcile() {
         symbol, direction, mode: mi.placingOn, network: mi.network, qty: Math.abs(amt), filled_qty: Math.abs(amt),
         entry_px: entry, stop_px: entry * (1 - sign * stopPct), tp_px: entry * (1 + sign * stopPct * cfgBn().takeProfitR),
         notional: Math.abs(amt) * entry, leverage: cfgBn().leverage, margin: Math.abs(amt) * entry / cfgBn().leverage,
-        status: 'open', entry_type: 'adopted', stop_status: hasStop ? 'ATTACHED' : 'MISSING', tp_status: hasTp ? 'ATTACHED' : 'MISSING',
+        status: sm.STATES.FILLED, entry_type: 'adopted', stop_status: hasStop ? 'ATTACHED' : 'MISSING', tp_status: hasTp ? 'ATTACHED' : 'MISSING',
         orders: { orphan: true },
       });
+      transitionTrade(tradeId, sm.STATES.FILLED, { note: 'adopted_orphan_position' });
       local = store.db.prepare('SELECT * FROM bn_trades WHERE id=?').get(tradeId);
       blog('warn', `Adopted orphan ${direction} ${symbol} as #${tradeId}`);
     }
+    // Detect SL/TP fill race via order absence while still in PROTECTED
+    if (sm.normalize(local.status) === sm.STATES.PROTECTED) {
+      const stopGone = local.stop_cid && !orders.some((o) => o.clientOrderId === local.stop_cid || String(o.orderId) === String(local.stop_oid));
+      const tpGone = local.tp_cid && !orders.some((o) => o.clientOrderId === local.tp_cid || String(o.orderId) === String(local.tp_oid));
+      if (stopGone || tpGone) {
+        // Query both to see which filled
+        let stopFill = null, tpFill = null;
+        try {
+          if (local.stop_cid) stopFill = await client.signedGet('/fapi/v1/order', { symbol, origClientOrderId: local.stop_cid });
+        } catch (e) { if (sm.classifyError(e).kind !== 'order_not_exist' && sm.classifyError(e).kind !== 'unknown_order') blog('warn', e.message); }
+        try {
+          if (local.tp_cid) tpFill = await client.signedGet('/fapi/v1/order', { symbol, origClientOrderId: local.tp_cid });
+        } catch (e) { if (sm.classifyError(e).kind !== 'order_not_exist' && sm.classifyError(e).kind !== 'unknown_order') blog('warn', e.message); }
+        const stopFilled = stopFill && ['FILLED', 'PARTIALLY_FILLED'].includes(stopFill.status);
+        const tpFilled = tpFill && ['FILLED', 'PARTIALLY_FILLED'].includes(tpFill.status);
+        const winner = sm.resolveProtectiveRace(stopFilled ? stopFill : null, tpFilled ? tpFill : null);
+        if (winner) {
+          const oco = sm.onProtectiveFill(local, winner);
+          transitionTrade(local.id, oco.nextState, { note: oco.closeReason });
+          // Cancel sibling (OCO)
+          if (oco.cancelSibling && oco.siblingCid) {
+            try { await client.cancelOrder({ symbol, origClientOrderId: oco.siblingCid }); }
+            catch (e) {
+              const cls = sm.classifyError(e);
+              if (!cls.ignore && cls.kind !== 'unknown_order' && cls.kind !== 'order_not_exist') blog('warn', `OCO cancel ${oco.siblingKind}: ${e.message}`);
+            }
+          }
+          const exitPx = Number((winner === 'stop' ? stopFill : tpFill).avgPrice) || markOf(symbol) || local.entry_px;
+          const qty = local.filled_qty || local.qty;
+          closeTrade(local.id, 'closed', exitPx, oco.closeReason, (exitPx - local.entry_px) * qty * dirSign(local.direction));
+          // Cancel any leftover entry orders
+          for (const o of orders.filter((x) => x.symbol === symbol)) {
+            try { await client.cancelOrder({ symbol, orderId: o.orderId }); } catch {}
+          }
+          continue;
+        }
+      }
+    }
     if (!hasStop || !hasTp) {
       missing.push({ symbol, hasStop, hasTp, tradeId: local.id });
-      if (mi.allowOrders || mi.allowTestnetOrders) await attachProtection({ ...local, stop_status: hasStop ? 'ATTACHED' : 'MISSING', tp_status: hasTp ? 'ATTACHED' : 'MISSING' }, Math.abs(amt));
-      else store.db.prepare('UPDATE bn_trades SET stop_status=?, tp_status=? WHERE id=?').run(hasStop ? 'ATTACHED' : 'MISSING', hasTp ? 'ATTACHED' : 'MISSING', local.id);
-    } else store.db.prepare('UPDATE bn_trades SET stop_status=?, tp_status=? WHERE id=?').run('ATTACHED', 'ATTACHED', local.id);
+      if (mi.allowOrders || mi.allowTestnetOrders) {
+        await attachProtection({ ...local, stop_status: hasStop ? 'ATTACHED' : 'MISSING', tp_status: hasTp ? 'ATTACHED' : 'MISSING' }, Math.abs(amt));
+      } else store.db.prepare('UPDATE bn_trades SET stop_status=?, tp_status=? WHERE id=?').run(hasStop ? 'ATTACHED' : 'MISSING', hasTp ? 'ATTACHED' : 'MISSING', local.id);
+    } else {
+      store.db.prepare('UPDATE bn_trades SET stop_status=?, tp_status=?, protect_qty=? WHERE id=?').run('ATTACHED', 'ATTACHED', Math.abs(amt), local.id);
+      if (sm.normalize(local.status) !== sm.STATES.PROTECTED) transitionTrade(local.id, sm.STATES.PROTECTED, { protectQty: Math.abs(amt) });
+    }
   }
-  for (const t of openTrades().filter((x) => x.status === 'open' && x.mode !== 'dry_run')) {
-    if (!positions.find((p) => p.symbol === t.symbol && Math.abs(Number(p.positionAmt)) > 0))
-      closeTrade(t.id, 'closed', t.entry_px, 'reconcile: flat on exchange', 0);
+
+  // Flat on exchange: manual close, liquidation, or full protective fill already handled
+  for (const t of openTrades().filter((x) => x.mode !== 'dry_run')) {
+    if (posBySym.has(t.symbol)) continue;
+    const st = sm.normalize(t.status);
+    if (st === sm.STATES.ENTRY_PENDING || st === sm.STATES.PARTIAL) continue; // still entering
+    // Cancel any leftover reduceOnly / entry orders for this symbol (no orphans)
+    for (const o of orders.filter((x) => x.symbol === t.symbol)) {
+      try { await client.cancelOrder({ symbol: t.symbol, orderId: o.orderId }); }
+      catch (e) { const cls = sm.classifyError(e); if (!cls.ignore) blog('warn', `orphan cancel: ${e.message}`); }
+    }
+    let reason = 'reconcile: flat on exchange';
+    // Heuristic: if liq price was breached recently call it liquidation
+    const mark = markOf(t.symbol);
+    const liq = liqPrice(t);
+    if (mark > 0 && liq > 0) {
+      if (t.direction === 'LONG' && mark <= liq * 1.002) reason = 'liquidation';
+      if (t.direction === 'SHORT' && mark >= liq * 0.998) reason = 'liquidation';
+    }
+    if (/manual|user/i.test(String(t.lifecycle_note || ''))) reason = 'manual close';
+    transitionTrade(t.id, sm.STATES.EXITING, { note: reason });
+    closeTrade(t.id, 'closed', mark || t.entry_px, reason, 0);
   }
+
+  // Unprotected timeout for live FILLED
+  for (const t of openTrades()) {
+    const st = sm.normalize(t.status);
+    if (st === sm.STATES.FILLED || (st === sm.STATES.PARTIAL && (t.stop_status !== 'ATTACHED' || t.tp_status !== 'ATTACHED'))) {
+      const since = t.unprotected_since || t.filled_at || t.ts;
+      if (Date.now() - since > maxUnprot && (mi.allowOrders || mi.allowTestnetOrders)) {
+        blog('warn', `Unprotected >${c.maxUnprotectedSec || 5}s — re-attaching ${t.symbol}`);
+        await attachProtection(t, t.filled_qty || t.qty);
+      }
+    }
+  }
+
   state.positionsMissingStops = missing;
-  return { mode: mi.placingOn, positions: positions.length, missingStops: missing.length };
+  return { mode: mi.placingOn, positions: posBySym.size, missingStops: missing.length };
 }
 
 async function scanOnce(reason) {
@@ -618,7 +842,7 @@ function toISTDate(ms) {
 /** Avg daily returns from actual closed bn_trades (dry-run or live) — not study backtest. */
 function actualDailyReturns(lookbackDays = 60) {
   const since = Date.now() - lookbackDays * 86400e3;
-  const rows = store.db.prepare("SELECT pnl, exit_ts FROM bn_trades WHERE status='closed' AND exit_ts>=? ORDER BY exit_ts").all(since);
+  const rows = store.db.prepare("SELECT pnl, exit_ts FROM bn_trades WHERE status IN ('closed','CLOSED') AND exit_ts>=? ORDER BY exit_ts").all(since);
   const byDay = new Map();
   for (const r of rows) {
     const d = toISTDate(r.exit_ts);
@@ -668,7 +892,7 @@ function positionsView() {
   refreshDay(equity);
   const day = checkDailyLimits(equity);
   const pricesSnap = state.prices ? state.prices.snapshot() : { source: 'Binance USDⓈ-M', transport: 'idle', lastUpdateAt: 0, marks: {} };
-  const open = openTrades().filter((t) => t.status === 'open').map((t) => {
+  const open = openTrades().filter((t) => { const s = sm.normalize(t.status); return s === sm.STATES.PROTECTED || s === sm.STATES.FILLED || s === sm.STATES.PARTIAL; }).map((t) => {
     const mark = markOf(t.symbol) || (pricesSnap.marks[t.symbol] && pricesSnap.marks[t.symbol].markPrice) || null;
     const qty = t.filled_qty || t.qty;
     const upnl = mark > 0 && t.entry_px > 0 ? (mark - t.entry_px) * qty * dirSign(t.direction) : null;
@@ -687,7 +911,7 @@ function positionsView() {
     remainSec: Math.max(0, Math.round((p.deadline_ts - Date.now()) / 1000)),
     stopPx: p.stop_px, tpPx: p.tp_px, leverage: p.leverage, createdAt: p.created_at,
   }));
-  const closed = store.db.prepare("SELECT * FROM bn_trades WHERE status='closed' ORDER BY exit_ts DESC LIMIT 50").all()
+  const closed = store.db.prepare("SELECT * FROM bn_trades WHERE status IN ('closed','CLOSED') ORDER BY exit_ts DESC LIMIT 50").all()
     .map((t) => ({
       id: t.id, symbol: t.symbol, side: t.direction, entryPx: t.entry_px, exitPx: t.exit_px, qty: t.filled_qty || t.qty,
       reason: t.exit_reason, pnl: t.pnl, fees: t.fees, entryType: t.entry_type, openedAt: t.ts, closedAt: t.exit_ts, mode: t.mode,
@@ -721,7 +945,7 @@ function health() {
     capital: c.capital, leverage: c.leverage, maxConcurrent: c.maxConcurrentPositions,
     riskPerTradePct: c.riskPerTradePct, dailyLossLimitPct: c.dailyLossLimitPct, dailyProfitTargetPct: c.dailyProfitTargetPct,
     entryTimeoutSec: c.entryTimeoutSec || 120, killSwitch: !!c.killSwitch, pausedReason: state.pausedReason,
-    equity, dayPnl: day.dayPnl, dayPnlPct: day.dayPct, openPositions: openTrades().filter((t) => t.status === 'open').length,
+    equity, dayPnl: day.dayPnl, dayPnlPct: day.dayPct, openPositions: openTrades().filter((t) => sm.normalize(t.status) === sm.STATES.PROTECTED || sm.normalize(t.status) === sm.STATES.FILLED).length,
     pendingEntries: pendingRows().length,
     lastSignalAt: state.lastSignalAt || null, lastScanAt: state.lastScanAt || null, lastReconcileAt: state.lastReconcileAt || null,
     streamStatus: state.streamStatus, priceTransport: ps.transport || null, priceLastUpdateAt: ps.lastUpdateAt || null,
@@ -749,7 +973,7 @@ function status() {
     },
     marks: { ...state.marks, ...(state.prices ? Object.fromEntries(Object.entries(state.prices.state.marks).map(([k, v]) => [k, v.markPrice])) : {}) },
     positions: positionsView(),
-    stats: store.db.prepare("SELECT COUNT(*) n, COALESCE(SUM(CASE WHEN pnl>0 THEN 1 ELSE 0 END),0) wins, COALESCE(SUM(pnl),0) pnl FROM bn_trades WHERE status='closed'").get(),
+    stats: store.db.prepare("SELECT COUNT(*) n, COALESCE(SUM(CASE WHEN pnl>0 THEN 1 ELSE 0 END),0) wins, COALESCE(SUM(pnl),0) pnl FROM bn_trades WHERE status IN ('closed','CLOSED')").get(),
     keyHint: bn.runtime().keyHint,
   };
 }
@@ -802,7 +1026,7 @@ function stop() {
 
 module.exports = {
   state, start, stop, handleSignal, reconcile, scanOnce, refreshUniverse, health, status, setKill, modeInfo,
-  positionsView, processPendings, finalizeEntry, attachProtection, protectiveOrders,
-  sizePosition: bn.sizePosition, ensureTables, openTrades, pendingRows, equityNow, markOf,
+  positionsView, processPendings, finalizeEntry, attachProtection, protectiveOrders, transitionTrade, placeProtectiveWithRetry,
+  sizePosition: bn.sizePosition, ensureTables, openTrades, pendingRows, equityNow, markOf, sm,
   _insertTrade: insertTrade, _closeTrade: closeTrade, _rememberCid: rememberCid, _cidTaken: cidTaken,
 };

@@ -45,6 +45,7 @@ const BINANCE_DEFAULTS = {
   defaultStopPct: 1.5,
   slippagePct: 0.5,
   entryTimeoutSec: 120,
+  maxUnprotectedSec: 5,
   limitOffsetPct: 0.02,
   assets: ['TSLAUSDT','NVDAUSDT','HOODUSDT','MSTRUSDT','COINUSDT','PLTRUSDT','AMZNUSDT','METAUSDT','GOOGLUSDT','CRCLUSDT','INTCUSDT','QQQUSDT','SPYUSDT','MUUSDT'],
   interval: '15m',

@@ -222,13 +222,20 @@ function filtersOf(info, symbol) {
   if (!s) return null;
   const lot = (s.filters || []).find((f) => f.filterType === 'LOT_SIZE') || {};
   const price = (s.filters || []).find((f) => f.filterType === 'PRICE_FILTER') || {};
-  const minNotional = (s.filters || []).find((f) => f.filterType === 'MIN_NOTIONAL') || {};
+  const minNotional = (s.filters || []).find((f) => f.filterType === 'MIN_NOTIONAL' || f.filterType === 'NOTIONAL') || {};
+  const pct = (s.filters || []).find((f) => f.filterType === 'PERCENT_PRICE' || f.filterType === 'PERCENT_PRICE_BY_SIDE') || {};
   return {
     symbol, status: s.status, pricePrecision: s.pricePrecision, quantityPrecision: s.quantityPrecision,
     stepSize: Number(lot.stepSize || Math.pow(10, -(s.quantityPrecision || 3))),
     tickSize: Number(price.tickSize || Math.pow(10, -(s.pricePrecision || 2))),
     minQty: Number(lot.minQty || 0),
     minNotional: Number(minNotional.notional || minNotional.minNotional || 5),
+    multiplierUp: pct.multiplierUp != null ? Number(pct.multiplierUp) : undefined,
+    multiplierDown: pct.multiplierDown != null ? Number(pct.multiplierDown) : undefined,
+    bidMultiplierUp: pct.bidMultiplierUp != null ? Number(pct.bidMultiplierUp) : undefined,
+    bidMultiplierDown: pct.bidMultiplierDown != null ? Number(pct.bidMultiplierDown) : undefined,
+    askMultiplierUp: pct.askMultiplierUp != null ? Number(pct.askMultiplierUp) : undefined,
+    askMultiplierDown: pct.askMultiplierDown != null ? Number(pct.askMultiplierDown) : undefined,
   };
 }
 

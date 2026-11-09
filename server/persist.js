@@ -61,16 +61,23 @@ async function init(sqlite) {
   db = sqlite;
   if (backend() !== 'postgres') return (restoreInfo = { backend: 'sqlite', restored: false });
   try {
-    const p = await getPool(), localRuns = db.prepare('SELECT COUNT(*) n FROM strategy_runs').get().n;
+    const p = await getPool();
+    const tableExists = (t) => { try { return !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(t); } catch { return false; } };
+    const present = Object.keys(TABLES).filter(tableExists);
+    const localRuns = tableExists('strategy_runs') ? db.prepare('SELECT COUNT(*) n FROM strategy_runs').get().n : 0;
     const { rows } = await p.query('SELECT tbl, data FROM qs_rows ORDER BY tbl, id');
     let restored = 0;
     if (!localRuns && rows.length) {
-      const cols = {}; for (const t of Object.keys(TABLES)) cols[t] = new Set(db.prepare(`PRAGMA table_info(${t})`).all().map((c) => c.name));
-      db.transaction(() => { for (const { tbl, data } of rows) { if (!cols[tbl]) continue; const ks = Object.keys(data).filter((k) => cols[tbl].has(k)); db.prepare(`INSERT OR REPLACE INTO ${tbl}(${ks.join(',')}) VALUES(${ks.map(() => '?').join(',')})`).run(...ks.map((k) => (data[k] !== null && typeof data[k] === 'object' ? JSON.stringify(data[k]) : data[k]))); restored++; } })();
+      const cols = {}; for (const t of present) cols[t] = new Set(db.prepare(`PRAGMA table_info(${t})`).all().map((c) => c.name));
+      db.transaction(() => { for (const { tbl, data } of rows) { if (!cols[tbl] || !cols[tbl].size) continue; const ks = Object.keys(data).filter((k) => cols[tbl].has(k)); if (!ks.length) continue; db.prepare(`INSERT OR REPLACE INTO ${tbl}(${ks.join(',')}) VALUES(${ks.map(() => '?').join(',')})`).run(...ks.map((k) => (data[k] !== null && typeof data[k] === 'object' ? JSON.stringify(data[k]) : data[k]))); restored++; } })();
     }
     // push local rows the remote does not have yet (first connection, or rows written while the DB was unreachable)
-    const have = new Set(rows.map((r) => r.tbl + '/' + String(r.data[pk(r.tbl)])));
-    for (const t of Object.keys(TABLES)) for (const r of db.prepare(`SELECT ${pk(t)} AS k FROM ${t}`).all()) if (!have.has(t + '/' + r.k)) mark(t, r.k);
+    const have = new Set(rows.map((r) => {
+      const key = pk(r.tbl); if (!key) return null;
+      const id = r.data && r.data[key] != null ? r.data[key] : null;
+      return id == null ? null : r.tbl + '/' + String(id);
+    }).filter(Boolean));
+    for (const t of present) for (const r of db.prepare(`SELECT ${pk(t)} AS k FROM ${t}`).all()) if (!have.has(t + '/' + r.k)) mark(t, r.k);
     await flush();
     restoreInfo = { backend: 'postgres', restored: restored > 0, restoredRows: restored, remoteRows: rows.length };
     log.info('persist.init', restoreInfo);

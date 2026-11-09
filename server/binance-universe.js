@@ -19,6 +19,8 @@ async function listEquityPerps(client, opts = {}) {
   const EXCLUDE_UT = new Set(['KR_EQUITY', 'HK_EQUITY', 'CN_EQUITY', 'PREMARKET', 'COMMODITY', 'FX', 'INDEX', 'COIN']);
   // Non-US country / regional ETF perps that share EQUITY+TradFi tagging
   const EXCLUDE_SYM = /^(EWJ|EWY|KORU|SKHYNIX|SAMSUNG|HK)/;
+  // Metals / commodities that Binance sometimes tags underlyingType=EQUITY
+  const EXCLUDE_BASE = new Set(['XAU','XAG','XPT','XPD','COPPER','NATGAS','WTI','BRENT','CL']);
   const out = [];
   const seenAt = Date.now();
   for (const s of info.symbols || []) {
@@ -29,6 +31,7 @@ async function listEquityPerps(client, opts = {}) {
     if (EXCLUDE_UT.has(ut) && ut !== 'EQUITY') continue;
     if (ut !== 'EQUITY') continue; // US stocks/ETFs only
     if (EXCLUDE_SYM.test(s.symbol)) continue;
+    if (EXCLUDE_BASE.has(String(s.baseAsset || '').toUpperCase())) continue;
     out.push({
       symbol: s.symbol, base: s.baseAsset, status: s.status, contractType: s.contractType,
       underlyingType: s.underlyingType, underlyingSubType: s.underlyingSubType || [],
