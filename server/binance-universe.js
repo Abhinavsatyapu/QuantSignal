@@ -93,4 +93,4 @@ function maxHoldMs(interval, overrideHours) {
   return hours * 3600e3;
 }
 
-module.exports = { listEquityPerps, liquiditySnapshot, maxHoldMs, DEFAULT_LIQ };
+module.exports = { listEquityPerps, listEquityPerpsCached, liquiditySnapshot, maxHoldMs, DEFAULT_LIQ };
