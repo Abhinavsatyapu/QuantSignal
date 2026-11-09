@@ -57,10 +57,10 @@ app.get('/login', (req, res) => {
   if (req.user && (req.user.role === 'owner' || req.user.role === 'guest')) return res.redirect(302, '/');
   res.sendFile(path.join(config.ROOT, 'public', 'login.html'));
 });
-// Owner session required for all non-public routes (fail closed if OWNER_PASSWORD unset)
+// Session required for all non-public routes (owner full / guest read-only via gateMiddleware)
 app.use((req, res, next) => {
   if (auth.publicPath(req.path)) return next();
-  return auth.requireOwner(req, res, next);
+  return auth.requireAuth(req, res, next);
 });
 
 // ------------------------------------------------------------------ health

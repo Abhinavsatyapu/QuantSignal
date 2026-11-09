@@ -1,0 +1,13 @@
+{
+  "id": "no_friday",
+  "label": "Skip Friday entries",
+  "interval": "4h",
+  "variant": "any",
+  "rules": {
+    "id": "no_friday",
+    "label": "Skip Friday entries",
+    "noFridayEntry": true
+  },
+  "selectable": true,
+  "source": "oos_improvement_pass"
+}

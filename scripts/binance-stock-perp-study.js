@@ -28,6 +28,10 @@ const FUNDING_8H = 0.0001;   // ~1 bp per 8h funding period (conservative avg)
 const ENTRY_TIMEOUT_MS = 120_000;
 const MIN_SCORE = 6;
 const TRAIN_FRAC = 0.6;
+/** Optional improvement-pass hooks (null = baseline). Mutated only by study-improve. */
+let activeRules = null;
+function setActiveRules(r) { activeRules = r; }
+function getActiveRules() { return activeRules; }
 
 const TFS = ['5m', '10m', '15m', '30m', '1h', '4h', '1d'];
 const TF_MS = { '5m': 300e3, '10m': 600e3, '15m': 900e3, '30m': 1800e3, '1h': 3600e3, '4h': 14400e3, '1d': 86400e3 };
@@ -91,11 +95,14 @@ function toISTDate(ms) {
 function maxHoldBars(interval) {
   const hours = { '5m': 8, '10m': 12, '15m': 18, '30m': 36, '1h': 72, '4h': 14 * 24, '1d': 60 * 24 };
   const h = hours[interval] || 24;
-  return Math.max(1, Math.round((h * 3600e3) / TF_MS[interval]));
+  let bars = Math.max(1, Math.round((h * 3600e3) / TF_MS[interval]));
+  if (activeRules && activeRules.maxHoldScale != null) bars = Math.max(1, Math.round(bars * activeRules.maxHoldScale));
+  return bars;
 }
 
 function signalAt(bars, i, variant) {
   if (i < 220) return null;
+  const rules = activeRules;
   // Trailing window only — full-history slice made the study O(n²) and unusable
   const window = bars.slice(Math.max(0, i + 1 - 260), i + 1);
   let ind = null;
@@ -127,15 +134,33 @@ function signalAt(bars, i, variant) {
     } else if (liqDir) { dir = liqDir; score = 6; source = 'liquidity'; }
   }
   if (!dir) return null;
+  if (rules) {
+    if (rules.requireConfirm) {
+      // re-gate: need indicators + matching liq
+      if (!(['LONG', 'SHORT'].includes(ind.direction) && ind.score >= (rules.minScore || MIN_SCORE) && liqDir === ind.direction)) return null;
+      dir = ind.direction; score = ind.score; stop = ind.stop; tp = ind.tp1; source = 'confirm';
+    }
+    if (rules.noLiquidityOnly && source === 'liquidity') return null;
+    const minSc = rules.minScore != null ? rules.minScore : MIN_SCORE;
+    if (score < minSc && source !== 'liquidity') return null;
+    if (rules.minScore != null && source === 'liquidity' && score < rules.minScore) return null;
+    const ist = new Date(bars[i].t + 5.5 * 3600e3);
+    const hour = ist.getUTCHours();
+    const dow = ist.getUTCDay();
+    if (rules.usCashOnly && !(hour >= 19 || hour <= 2)) return null;
+    if (rules.noFridayEntry && dow === 5) return null;
+  }
   const entry = bars[i].c;
-  if (!(stop > 0)) {
+  const atrMult = (rules && rules.atrStopMult != null) ? rules.atrStopMult : 3;
+  const rrMult = (rules && rules.rr != null) ? rules.rr : 2;
+  if (!(stop > 0) || rules) {
     const atr = ind?.atr || (bars[i].h - bars[i].l);
-    const dist = Math.max(3 * atr, entry * 0.015);
+    const dist = Math.max(atrMult * atr, entry * 0.015);
     stop = dir === 'LONG' ? entry - dist : entry + dist;
   }
-  if (!(tp > 0)) {
+  {
     const risk = Math.abs(entry - stop);
-    tp = dir === 'LONG' ? entry + 2 * risk : entry - 2 * risk;
+    tp = dir === 'LONG' ? entry + rrMult * risk : entry - rrMult * risk;
   }
   return { dir, entry, stop, tp, score, source, barT: bars[i].t, barTclose: bars[i].T };
 }
@@ -231,9 +256,14 @@ function runPortfolio(series, interval, variant, opts = {}) {
     if (dayStartEquity && (dayPnl / dayStartEquity) * 100 >= 5) {
       if (!d.wouldProfitHalt5) { d.wouldProfitHalt5 = true; profitHaltCount += 1; }
     }
+    const holdBarsOut = Math.max(1, Math.round((ts - pos.entryTs) / barMs));
+    const ist = new Date(pos.entryTs + 5.5 * 3600e3);
     trades.push({
       symbol: pos.symbol, dir: pos.dir, entry: pos.entry, exit: exitPx, qty: pos.qty,
       pnl, reason, entryTs: pos.entryTs, exitTs: ts, source: pos.source, interval,
+      holdBars: holdBarsOut, entryHourIST: ist.getUTCHours(), entryDowIST: ist.getUTCDay(),
+      stopDistPct: pos.entry ? (Math.abs(pos.entry - pos.stop) / pos.entry) * 100 : null,
+      rr: pos.stop && pos.tp ? Math.abs(pos.tp - pos.entry) / Math.max(1e-9, Math.abs(pos.entry - pos.stop)) : null,
     });
   }
 
@@ -663,4 +693,11 @@ function summarize(r) {
   };
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+if (require.main === module) {
+  main().catch((e) => { console.error(e); process.exit(1); });
+}
+
+module.exports = {
+  CAPITAL, LEVERAGE, MAX_POS, RISK_PCT, TRAIN_FRAC, TFS, TF_MS, VARIANTS, OUT,
+  signalAt, runPortfolio, splitTrainTest, maxHoldBars, summarize, toISTDate, agg10m, sizeQty, setActiveRules, getActiveRules,
+};

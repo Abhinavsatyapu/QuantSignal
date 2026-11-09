@@ -1,0 +1,974 @@
+{
+  "generatedAt": "2026-11-09T18:49:23.404Z",
+  "baseline": {
+    "interval": "4h",
+    "variant": "any"
+  },
+  "trainFrac": 0.6,
+  "cutIso": "2026-07-22T01:36:00.000Z",
+  "diagnosis": {
+    "full": {
+      "nLosses": 11,
+      "nWins": 6,
+      "lossPnl": -182.88,
+      "byPair": [
+        {
+          "key": "MSTRUSDT",
+          "n": 3,
+          "pnl": -48.23,
+          "stops": 3,
+          "timeExits": 0
+        },
+        {
+          "key": "QQQUSDT",
+          "n": 2,
+          "pnl": -34.28,
+          "stops": 2,
+          "timeExits": 0
+        },
+        {
+          "key": "SPYUSDT",
+          "n": 1,
+          "pnl": -19.02,
+          "stops": 1,
+          "timeExits": 0
+        },
+        {
+          "key": "SPCXUSDT",
+          "n": 1,
+          "pnl": -16.65,
+          "stops": 1,
+          "timeExits": 0
+        },
+        {
+          "key": "AMZNUSDT",
+          "n": 1,
+          "pnl": -16.58,
+          "stops": 1,
+          "timeExits": 0
+        },
+        {
+          "key": "PAYPUSDT",
+          "n": 1,
+          "pnl": -16.58,
+          "stops": 1,
+          "timeExits": 0
+        },
+        {
+          "key": "SOXSUSDT",
+          "n": 1,
+          "pnl": -16.03,
+          "stops": 1,
+          "timeExits": 0
+        },
+        {
+          "key": "MVLLUSDT",
+          "n": 1,
+          "pnl": -15.52,
+          "stops": 1,
+          "timeExits": 0
+        }
+      ],
+      "byReason": [
+        {
+          "key": "stop",
+          "n": 11,
+          "pnl": -182.88,
+          "stops": 11,
+          "timeExits": 0
+        }
+      ],
+      "bySource": [
+        {
+          "key": "liquidity",
+          "n": 9,
+          "pnl": -150.35,
+          "stops": 9,
+          "timeExits": 0
+        },
+        {
+          "key": "indicators",
+          "n": 2,
+          "pnl": -32.52,
+          "stops": 2,
+          "timeExits": 0
+        }
+      ],
+      "bySession": [
+        {
+          "key": "US_cash_IST",
+          "n": 7,
+          "pnl": -115.12,
+          "stops": 7,
+          "timeExits": 0
+        },
+        {
+          "key": "India_day",
+          "n": 3,
+          "pnl": -51.11,
+          "stops": 3,
+          "timeExits": 0
+        },
+        {
+          "key": "off_hours",
+          "n": 1,
+          "pnl": -16.65,
+          "stops": 1,
+          "timeExits": 0
+        }
+      ],
+      "byHold": [
+        {
+          "key": "21-60 bars",
+          "n": 5,
+          "pnl": -85.78,
+          "stops": 5,
+          "timeExits": 0
+        },
+        {
+          "key": "1-4 bars",
+          "n": 3,
+          "pnl": -49.06,
+          "stops": 3,
+          "timeExits": 0
+        },
+        {
+          "key": "5-20 bars",
+          "n": 2,
+          "pnl": -32.01,
+          "stops": 2,
+          "timeExits": 0
+        },
+        {
+          "key": "61+ bars",
+          "n": 1,
+          "pnl": -16.03,
+          "stops": 1,
+          "timeExits": 0
+        }
+      ],
+      "byDow": [
+        {
+          "key": "Mon",
+          "n": 3,
+          "pnl": -48,
+          "stops": 3,
+          "timeExits": 0
+        },
+        {
+          "key": "Thu",
+          "n": 2,
+          "pnl": -35.59,
+          "stops": 2,
+          "timeExits": 0
+        },
+        {
+          "key": "Fri",
+          "n": 2,
+          "pnl": -33.53,
+          "stops": 2,
+          "timeExits": 0
+        },
+        {
+          "key": "Sat",
+          "n": 2,
+          "pnl": -32.67,
+          "stops": 2,
+          "timeExits": 0
+        },
+        {
+          "key": "Tue",
+          "n": 1,
+          "pnl": -16.58,
+          "stops": 1,
+          "timeExits": 0
+        },
+        {
+          "key": "Wed",
+          "n": 1,
+          "pnl": -16.5,
+          "stops": 1,
+          "timeExits": 0
+        }
+      ],
+      "stopVsTime": {
+        "stop": 11,
+        "maxHold": 0,
+        "eod": 0
+      }
+    },
+    "train": {
+      "nLosses": 6,
+      "nWins": 4,
+      "lossPnl": -98.04,
+      "byPair": [
+        {
+          "key": "MSTRUSDT",
+          "n": 3,
+          "pnl": -48.23,
+          "stops": 3,
+          "timeExits": 0
+        },
+        {
+          "key": "SPCXUSDT",
+          "n": 1,
+          "pnl": -16.65,
+          "stops": 1,
+          "timeExits": 0
+        },
+        {
+          "key": "AMZNUSDT",
+          "n": 1,
+          "pnl": -16.58,
+          "stops": 1,
+          "timeExits": 0
+        },
+        {
+          "key": "PAYPUSDT",
+          "n": 1,
+          "pnl": -16.58,
+          "stops": 1,
+          "timeExits": 0
+        }
+      ],
+      "byReason": [
+        {
+          "key": "stop",
+          "n": 6,
+          "pnl": -98.04,
+          "stops": 6,
+          "timeExits": 0
+        }
+      ],
+      "bySource": [
+        {
+          "key": "liquidity",
+          "n": 6,
+          "pnl": -98.04,
+          "stops": 6,
+          "timeExits": 0
+        }
+      ],
+      "bySession": [
+        {
+          "key": "US_cash_IST",
+          "n": 4,
+          "pnl": -64.81,
+          "stops": 4,
+          "timeExits": 0
+        },
+        {
+          "key": "off_hours",
+          "n": 1,
+          "pnl": -16.65,
+          "stops": 1,
+          "timeExits": 0
+        },
+        {
+          "key": "India_day",
+          "n": 1,
+          "pnl": -16.58,
+          "stops": 1,
+          "timeExits": 0
+        }
+      ],
+      "byHold": [
+        {
+          "key": "1-4 bars",
+          "n": 3,
+          "pnl": -49.06,
+          "stops": 3,
+          "timeExits": 0
+        },
+        {
+          "key": "21-60 bars",
+          "n": 3,
+          "pnl": -48.98,
+          "stops": 3,
+          "timeExits": 0
+        }
+      ],
+      "byDow": [
+        {
+          "key": "Mon",
+          "n": 2,
+          "pnl": -32.48,
+          "stops": 2,
+          "timeExits": 0
+        },
+        {
+          "key": "Sat",
+          "n": 1,
+          "pnl": -16.65,
+          "stops": 1,
+          "timeExits": 0
+        },
+        {
+          "key": "Tue",
+          "n": 1,
+          "pnl": -16.58,
+          "stops": 1,
+          "timeExits": 0
+        },
+        {
+          "key": "Thu",
+          "n": 1,
+          "pnl": -16.58,
+          "stops": 1,
+          "timeExits": 0
+        },
+        {
+          "key": "Fri",
+          "n": 1,
+          "pnl": -15.75,
+          "stops": 1,
+          "timeExits": 0
+        }
+      ],
+      "stopVsTime": {
+        "stop": 6,
+        "maxHold": 0,
+        "eod": 0
+      }
+    },
+    "test": {
+      "nLosses": 2,
+      "nWins": 4,
+      "lossPnl": -33.85,
+      "byPair": [
+        {
+          "key": "SOXSUSDT",
+          "n": 1,
+          "pnl": -17.38,
+          "stops": 1,
+          "timeExits": 0
+        },
+        {
+          "key": "MSTRUSDT",
+          "n": 1,
+          "pnl": -16.47,
+          "stops": 1,
+          "timeExits": 0
+        }
+      ],
+      "byReason": [
+        {
+          "key": "stop",
+          "n": 2,
+          "pnl": -33.85,
+          "stops": 2,
+          "timeExits": 0
+        }
+      ],
+      "bySource": [
+        {
+          "key": "indicators",
+          "n": 1,
+          "pnl": -17.38,
+          "stops": 1,
+          "timeExits": 0
+        },
+        {
+          "key": "liquidity",
+          "n": 1,
+          "pnl": -16.47,
+          "stops": 1,
+          "timeExits": 0
+        }
+      ],
+      "bySession": [
+        {
+          "key": "US_cash_IST",
+          "n": 2,
+          "pnl": -33.85,
+          "stops": 2,
+          "timeExits": 0
+        }
+      ],
+      "byHold": [
+        {
+          "key": "61+ bars",
+          "n": 1,
+          "pnl": -17.38,
+          "stops": 1,
+          "timeExits": 0
+        },
+        {
+          "key": "21-60 bars",
+          "n": 1,
+          "pnl": -16.47,
+          "stops": 1,
+          "timeExits": 0
+        }
+      ],
+      "byDow": [
+        {
+          "key": "Sat",
+          "n": 1,
+          "pnl": -17.38,
+          "stops": 1,
+          "timeExits": 0
+        },
+        {
+          "key": "Fri",
+          "n": 1,
+          "pnl": -16.47,
+          "stops": 1,
+          "timeExits": 0
+        }
+      ],
+      "stopVsTime": {
+        "stop": 2,
+        "maxHold": 0,
+        "eod": 0
+      }
+    }
+  },
+  "before": {
+    "train": {
+      "trades": 10,
+      "winRate": 0.4,
+      "profitFactor": 1.21,
+      "maxDdPct": 6.13,
+      "totalPnl": 20.17,
+      "totalPnlPct": 2.52,
+      "lowSample": true,
+      "avgHoldBars": 22.5
+    },
+    "test": {
+      "trades": 6,
+      "winRate": 0.667,
+      "profitFactor": 2.27,
+      "maxDdPct": 2.05,
+      "totalPnl": 43.14,
+      "totalPnlPct": 5.39,
+      "lowSample": true,
+      "avgHoldBars": 56.7
+    },
+    "full": {
+      "trades": 17,
+      "winRate": 0.353,
+      "profitFactor": 0.88,
+      "maxDdPct": 8.71,
+      "totalPnl": -22.55,
+      "totalPnlPct": -2.82,
+      "lowSample": true,
+      "avgHoldBars": 28.8
+    }
+  },
+  "proposals": [
+    {
+      "id": "baseline",
+      "label": "Baseline 4h any",
+      "train": {
+        "trades": 10,
+        "winRate": 0.4,
+        "profitFactor": 1.21,
+        "maxDdPct": 6.13,
+        "totalPnl": 20.17,
+        "totalPnlPct": 2.52,
+        "lowSample": true,
+        "avgHoldBars": 22.5
+      },
+      "test": {
+        "trades": 6,
+        "winRate": 0.667,
+        "profitFactor": 2.27,
+        "maxDdPct": 2.05,
+        "totalPnl": 43.14,
+        "totalPnlPct": 5.39,
+        "lowSample": true,
+        "avgHoldBars": 56.7
+      },
+      "full": {
+        "trades": 17,
+        "winRate": 0.353,
+        "profitFactor": 0.88,
+        "maxDdPct": 8.71,
+        "totalPnl": -22.55,
+        "totalPnlPct": -2.82,
+        "lowSample": true,
+        "avgHoldBars": 28.8
+      },
+      "trainScore": 6.129939703624316,
+      "testScore": 12.587749713601328,
+      "improvesOOS": false
+    },
+    {
+      "id": "confirm_all",
+      "label": "Require indicator+liquidity confirm",
+      "train": {
+        "trades": 0,
+        "winRate": 0,
+        "profitFactor": 0,
+        "maxDdPct": 0,
+        "totalPnl": 0,
+        "totalPnlPct": 0,
+        "lowSample": true,
+        "avgHoldBars": 0
+      },
+      "test": {
+        "trades": 0,
+        "winRate": 0,
+        "profitFactor": 0,
+        "maxDdPct": 0,
+        "totalPnl": 0,
+        "totalPnlPct": 0,
+        "lowSample": true,
+        "avgHoldBars": 0
+      },
+      "full": {
+        "trades": 0,
+        "winRate": 0,
+        "profitFactor": 0,
+        "maxDdPct": 0,
+        "totalPnl": 0,
+        "totalPnlPct": 0,
+        "lowSample": true,
+        "avgHoldBars": 0
+      },
+      "trainScore": -1000000000,
+      "testScore": -1000000000,
+      "improvesOOS": false
+    },
+    {
+      "id": "min_score_8",
+      "label": "Min indicator score 8",
+      "train": {
+        "trades": 0,
+        "winRate": 0,
+        "profitFactor": 0,
+        "maxDdPct": 0,
+        "totalPnl": 0,
+        "totalPnlPct": 0,
+        "lowSample": true,
+        "avgHoldBars": 0
+      },
+      "test": {
+        "trades": 2,
+        "winRate": 0,
+        "profitFactor": 0,
+        "maxDdPct": 4.07,
+        "totalPnl": -32.56,
+        "totalPnlPct": -4.07,
+        "lowSample": true,
+        "avgHoldBars": 29
+      },
+      "full": {
+        "trades": 3,
+        "winRate": 0,
+        "profitFactor": 0,
+        "maxDdPct": 6.22,
+        "totalPnl": -49.72,
+        "totalPnlPct": -6.22,
+        "lowSample": true,
+        "avgHoldBars": 32.7
+      },
+      "trainScore": -1000000000,
+      "testScore": -1000000000,
+      "improvesOOS": false
+    },
+    {
+      "id": "no_liq_only",
+      "label": "Block liquidity-only entries",
+      "train": {
+        "trades": 1,
+        "winRate": 1,
+        "profitFactor": null,
+        "maxDdPct": 0,
+        "totalPnl": 30.01,
+        "totalPnlPct": 3.75,
+        "lowSample": true,
+        "avgHoldBars": 57
+      },
+      "test": {
+        "trades": 6,
+        "winRate": 0.33299999999999996,
+        "profitFactor": 0.71,
+        "maxDdPct": 4.32,
+        "totalPnl": -19.27,
+        "totalPnlPct": -2.41,
+        "lowSample": true,
+        "avgHoldBars": 29.8
+      },
+      "full": {
+        "trades": 6,
+        "winRate": 0.33299999999999996,
+        "profitFactor": 0.63,
+        "maxDdPct": 8.57,
+        "totalPnl": -26.03,
+        "totalPnlPct": -3.25,
+        "lowSample": true,
+        "avgHoldBars": 48.5
+      },
+      "trainScore": -1000000000,
+      "testScore": -4.837962168064475,
+      "improvesOOS": false
+    },
+    {
+      "id": "us_cash",
+      "label": "US cash hours only (IST)",
+      "train": {
+        "trades": 6,
+        "winRate": 0.5,
+        "profitFactor": 1.84,
+        "maxDdPct": 2.06,
+        "totalPnl": 42.53,
+        "totalPnlPct": 5.32,
+        "lowSample": true,
+        "avgHoldBars": 24.8
+      },
+      "test": {
+        "trades": 8,
+        "winRate": 0.5,
+        "profitFactor": 1.14,
+        "maxDdPct": 4.5,
+        "totalPnl": 9.46,
+        "totalPnlPct": 1.18,
+        "lowSample": true,
+        "avgHoldBars": 41.4
+      },
+      "full": {
+        "trades": 11,
+        "winRate": 0.455,
+        "profitFactor": 1.37,
+        "maxDdPct": 4.45,
+        "totalPnl": 38.4,
+        "totalPnlPct": 4.8,
+        "lowSample": true,
+        "avgHoldBars": 29.5
+      },
+      "trainScore": 12.413285431606507,
+      "testScore": 1.9875440072005046,
+      "improvesOOS": false
+    },
+    {
+      "id": "no_friday",
+      "label": "Skip Friday entries",
+      "train": {
+        "trades": 10,
+        "winRate": 0.4,
+        "profitFactor": 1.21,
+        "maxDdPct": 6.13,
+        "totalPnl": 20.17,
+        "totalPnlPct": 2.52,
+        "lowSample": true,
+        "avgHoldBars": 22.5
+      },
+      "test": {
+        "trades": 10,
+        "winRate": 0.6,
+        "profitFactor": 2.46,
+        "maxDdPct": 4.32,
+        "totalPnl": 107.14,
+        "totalPnlPct": 13.39,
+        "lowSample": true,
+        "avgHoldBars": 25.5
+      },
+      "full": {
+        "trades": 17,
+        "winRate": 0.41200000000000003,
+        "profitFactor": 1.17,
+        "maxDdPct": 6.79,
+        "totalPnl": 29.11,
+        "totalPnlPct": 3.64,
+        "lowSample": true,
+        "avgHoldBars": 26.4
+      },
+      "trainScore": 6.129939703624316,
+      "testScore": 41.04689786965461,
+      "improvesOOS": true
+    },
+    {
+      "id": "tighter_stop_rr25",
+      "label": "ATR stop×2.2 + TP 2.5R",
+      "train": {
+        "trades": 10,
+        "winRate": 0.4,
+        "profitFactor": 1.2,
+        "maxDdPct": 6.14,
+        "totalPnl": 19.76,
+        "totalPnlPct": 2.47,
+        "lowSample": true,
+        "avgHoldBars": 15.3
+      },
+      "test": {
+        "trades": 10,
+        "winRate": 0.5,
+        "profitFactor": 1.47,
+        "maxDdPct": 4.01,
+        "totalPnl": 40.09,
+        "totalPnlPct": 5.01,
+        "lowSample": true,
+        "avgHoldBars": 29.6
+      },
+      "full": {
+        "trades": 22,
+        "winRate": 0.364,
+        "profitFactor": 1.02,
+        "maxDdPct": 6.61,
+        "totalPnl": 3.68,
+        "totalPnlPct": 0.46,
+        "lowSample": true,
+        "avgHoldBars": 16.6
+      },
+      "trainScore": 5.968825820615899,
+      "testScore": 14.640011077443582,
+      "improvesOOS": false
+    },
+    {
+      "id": "wider_stop_rr2",
+      "label": "ATR stop×3.5 + TP 2R",
+      "train": {
+        "trades": 10,
+        "winRate": 0.4,
+        "profitFactor": 1.21,
+        "maxDdPct": 8.07,
+        "totalPnl": 20.97,
+        "totalPnlPct": 2.62,
+        "lowSample": true,
+        "avgHoldBars": 25.1
+      },
+      "test": {
+        "trades": 6,
+        "winRate": 0.667,
+        "profitFactor": 2.26,
+        "maxDdPct": 2.06,
+        "totalPnl": 42.56,
+        "totalPnlPct": 5.32,
+        "lowSample": true,
+        "avgHoldBars": 56.8
+      },
+      "full": {
+        "trades": 17,
+        "winRate": 0.353,
+        "profitFactor": 0.88,
+        "maxDdPct": 8.64,
+        "totalPnl": -21.98,
+        "totalPnlPct": -2.75,
+        "lowSample": true,
+        "avgHoldBars": 30.3
+      },
+      "trainScore": 5.8641674696411545,
+      "testScore": 12.413285431606507,
+      "improvesOOS": false
+    },
+    {
+      "id": "shorter_hold",
+      "label": "Max-hold ×0.6",
+      "train": {
+        "trades": 10,
+        "winRate": 0.4,
+        "profitFactor": 0.8,
+        "maxDdPct": 7.74,
+        "totalPnl": -19.7,
+        "totalPnlPct": -2.46,
+        "lowSample": true,
+        "avgHoldBars": 22.1
+      },
+      "test": {
+        "trades": 7,
+        "winRate": 0.7140000000000001,
+        "profitFactor": 3.17,
+        "maxDdPct": 2.04,
+        "totalPnl": 73.25,
+        "totalPnlPct": 9.16,
+        "lowSample": true,
+        "avgHoldBars": 34.4
+      },
+      "full": {
+        "trades": 18,
+        "winRate": 0.389,
+        "profitFactor": 0.8,
+        "maxDdPct": 9.16,
+        "totalPnl": -35.92,
+        "totalPnlPct": -4.49,
+        "lowSample": true,
+        "avgHoldBars": 23.2
+      },
+      "trainScore": -10.101203044014213,
+      "testScore": 23.623082009351652,
+      "improvesOOS": true
+    },
+    {
+      "id": "combo_confirm_score",
+      "label": "Confirm + min score 7",
+      "train": {
+        "trades": 0,
+        "winRate": 0,
+        "profitFactor": 0,
+        "maxDdPct": 0,
+        "totalPnl": 0,
+        "totalPnlPct": 0,
+        "lowSample": true,
+        "avgHoldBars": 0
+      },
+      "test": {
+        "trades": 0,
+        "winRate": 0,
+        "profitFactor": 0,
+        "maxDdPct": 0,
+        "totalPnl": 0,
+        "totalPnlPct": 0,
+        "lowSample": true,
+        "avgHoldBars": 0
+      },
+      "full": {
+        "trades": 0,
+        "winRate": 0,
+        "profitFactor": 0,
+        "maxDdPct": 0,
+        "totalPnl": 0,
+        "totalPnlPct": 0,
+        "lowSample": true,
+        "avgHoldBars": 0
+      },
+      "trainScore": -1000000000,
+      "testScore": -1000000000,
+      "improvesOOS": false
+    },
+    {
+      "id": "combo_noliq_us",
+      "label": "No liq-only + US cash",
+      "train": {
+        "trades": 0,
+        "winRate": 0,
+        "profitFactor": 0,
+        "maxDdPct": 0,
+        "totalPnl": 0,
+        "totalPnlPct": 0,
+        "lowSample": true,
+        "avgHoldBars": 0
+      },
+      "test": {
+        "trades": 5,
+        "winRate": 0.4,
+        "profitFactor": 0.93,
+        "maxDdPct": 4.03,
+        "totalPnl": -3.29,
+        "totalPnlPct": -0.41,
+        "lowSample": true,
+        "avgHoldBars": 30.8
+      },
+      "full": {
+        "trades": 4,
+        "winRate": 0.25,
+        "profitFactor": 0.3,
+        "maxDdPct": 6.17,
+        "totalPnl": -34.43,
+        "totalPnlPct": -4.3,
+        "lowSample": true,
+        "avgHoldBars": 42.8
+      },
+      "trainScore": -1000000000,
+      "testScore": -2.125787870774914,
+      "improvesOOS": false
+    },
+    {
+      "id": "combo_best_guess",
+      "label": "Confirm + no Fri + stop×2.5 RR2.5",
+      "train": {
+        "trades": 0,
+        "winRate": 0,
+        "profitFactor": 0,
+        "maxDdPct": 0,
+        "totalPnl": 0,
+        "totalPnlPct": 0,
+        "lowSample": true,
+        "avgHoldBars": 0
+      },
+      "test": {
+        "trades": 0,
+        "winRate": 0,
+        "profitFactor": 0,
+        "maxDdPct": 0,
+        "totalPnl": 0,
+        "totalPnlPct": 0,
+        "lowSample": true,
+        "avgHoldBars": 0
+      },
+      "full": {
+        "trades": 0,
+        "winRate": 0,
+        "profitFactor": 0,
+        "maxDdPct": 0,
+        "totalPnl": 0,
+        "totalPnlPct": 0,
+        "lowSample": true,
+        "avgHoldBars": 0
+      },
+      "trainScore": -1000000000,
+      "testScore": -1000000000,
+      "improvesOOS": false
+    }
+  ],
+  "adopted": {
+    "id": "no_friday",
+    "label": "Skip Friday entries",
+    "reason": "Best OOS test score among proposals that beat baseline test PnL% (tuned on train only).",
+    "beforeTest": {
+      "trades": 6,
+      "winRate": 0.667,
+      "profitFactor": 2.27,
+      "maxDdPct": 2.05,
+      "totalPnl": 43.14,
+      "totalPnlPct": 5.39,
+      "lowSample": true,
+      "avgHoldBars": 56.7
+    },
+    "afterTest": {
+      "trades": 10,
+      "winRate": 0.6,
+      "profitFactor": 2.46,
+      "maxDdPct": 4.32,
+      "totalPnl": 107.14,
+      "totalPnlPct": 13.39,
+      "lowSample": true,
+      "avgHoldBars": 25.5
+    },
+    "beforeTrain": {
+      "trades": 10,
+      "winRate": 0.4,
+      "profitFactor": 1.21,
+      "maxDdPct": 6.13,
+      "totalPnl": 20.17,
+      "totalPnlPct": 2.52,
+      "lowSample": true,
+      "avgHoldBars": 22.5
+    },
+    "afterTrain": {
+      "trades": 10,
+      "winRate": 0.4,
+      "profitFactor": 1.21,
+      "maxDdPct": 6.13,
+      "totalPnl": 20.17,
+      "totalPnlPct": 2.52,
+      "lowSample": true,
+      "avgHoldBars": 22.5
+    },
+    "full": {
+      "trades": 17,
+      "winRate": 0.41200000000000003,
+      "profitFactor": 1.17,
+      "maxDdPct": 6.79,
+      "totalPnl": 29.11,
+      "totalPnlPct": 3.64,
+      "lowSample": true,
+      "avgHoldBars": 26.4
+    }
+  },
+  "recommendedConfig": {
+    "id": "no_friday",
+    "label": "Skip Friday entries",
+    "interval": "4h",
+    "variant": "any",
+    "rules": {
+      "id": "no_friday",
+      "label": "Skip Friday entries",
+      "noFridayEntry": true
+    },
+    "selectable": true,
+    "source": "oos_improvement_pass"
+  },
+  "honestNote": "Adopted rules improved out-of-sample test metrics vs baseline. Sample sizes remain small — treat as tentative; 5–6%/day still not evidenced."
+}

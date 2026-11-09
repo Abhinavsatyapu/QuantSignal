@@ -544,9 +544,22 @@ async function scanOnce(reason) {
           if (['LONG','SHORT'].includes(a.direction) && (a.score||0) >= c.minScore) dir = a.direction;
           else if (liq.direction) { dir = liq.direction; score = 6 + liq.score; sourceTag = 'liquidity'; }
         }
+        // Apply selectable study ruleset entry filters (OOS-validated when set)
+        const ruleset = (c.studyRulesets && c.activeStudyRuleset && c.studyRulesets[c.activeStudyRuleset]) || null;
+        const filters = { ...(c.entryFilters || {}), ...((ruleset && ruleset.rules) || {}) };
+        if (dir && filters.noFridayEntry) {
+          const istDow = new Date(Date.now() + 5.5 * 3600e3).getUTCDay();
+          if (istDow === 5) dir = null;
+        }
+        if (dir && filters.noLiquidityOnly && sourceTag === 'liquidity') dir = null;
+        if (dir && filters.usCashOnly) {
+          const h = new Date(Date.now() + 5.5 * 3600e3).getUTCHours();
+          if (!(h >= 19 || h <= 2)) dir = null;
+        }
+        if (dir && filters.minScore != null && (score || 0) < filters.minScore && sourceTag !== 'liquidity') dir = null;
         if (dir) {
           const dedupeKey = 'bn|' + symbol + '|' + c.interval + '|' + (a.closedAt || Math.floor(Date.now() / 60e3)) + '|' + dir + '|' + mode;
-          await handleSignal({ source: sourceTag, symbol, direction: dir, entry: a.entry ?? kl.at(-1).c, stop: a.stop ?? null, tp: a.target ?? null, interval: c.interval, score, closedAt: a.closedAt, dedupeKey, raw: { indicators: a, liquidity: liq } });
+          await handleSignal({ source: sourceTag, symbol, direction: dir, entry: a.entry ?? kl.at(-1).c, stop: a.stop ?? null, tp: a.target ?? null, interval: c.interval, score, closedAt: a.closedAt, dedupeKey, raw: { indicators: a, liquidity: liq, ruleset: ruleset ? ruleset.id : null } });
         }
       } catch (e) { blog('warn', `scan ${symbol}: ${e.message}`); }
     }

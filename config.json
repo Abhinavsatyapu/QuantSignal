@@ -44,5 +44,31 @@
   "market": {
     "dex": "xyz",
     "type": "us-stock-perps"
+  },
+  "binance": {
+    "studyRulesets": {
+      "baseline_4h_any": {
+        "id": "baseline_4h_any",
+        "label": "Baseline 4h any (prior recommended)",
+        "interval": "4h",
+        "variant": "any",
+        "rules": null
+      },
+      "no_friday": {
+        "id": "no_friday",
+        "label": "Skip Friday entries",
+        "interval": "4h",
+        "variant": "any",
+        "rules": {
+          "id": "no_friday",
+          "label": "Skip Friday entries",
+          "noFridayEntry": true
+        }
+      }
+    },
+    "activeStudyRuleset": "no_friday",
+    "entryFilters": {
+      "noFridayEntry": true
+    }
   }
 }
