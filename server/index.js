@@ -32,7 +32,7 @@ app.use(helmet({
   contentSecurityPolicy: { useDefaults: true, directives: {
     'default-src': ["'self'"], 'script-src': ["'self'"], 'style-src': ["'self'", "'unsafe-inline'"], 'img-src': ["'self'", 'data:', 'blob:'],
     'connect-src': ["'self'", 'https://api.hyperliquid.xyz', 'https://api.hyperliquid-testnet.xyz', 'wss://api.hyperliquid.xyz', 'https://data-api.binance.vision', 'https://www.binance.com', 'https://fapi.binance.com', 'https://testnet.binancefuture.com', 'wss://fstream.binance.com', 'wss://stream.binancefuture.com'],
-    'font-src': ["'self'", 'data:'], 'object-src': ["'none'"], 'frame-ancestors': ["'none'"], 'base-uri': ["'self'"], 'form-action': ["'self'"], 'upgrade-insecure-requests': null } },
+    'font-src': ["'self'", 'data:', 'https://fonts.gstatic.com'], 'object-src': ["'none'"], 'frame-ancestors': ["'none'"], 'base-uri': ["'self'"], 'form-action': ["'self'"], 'upgrade-insecure-requests': null } },
   crossOriginEmbedderPolicy: false, referrerPolicy: { policy: 'same-origin' } }));
 app.use(compression());
 // structured request log (one JSON line per API request; static assets are not logged)
@@ -56,10 +56,10 @@ const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { if (
 app.use(auth.attachUser);
 auth.mountRoutes(app, { wrap });
 app.get('/login', (req, res) => {
-  if (req.user && (req.user.role === 'owner' || req.user.role === 'guest')) return res.redirect(302, '/');
+  if (req.user && req.user.role === 'owner') return res.redirect(302, '/');
   res.sendFile(path.join(config.ROOT, 'public', 'login.html'));
 });
-// Session required for all non-public routes (owner full / guest read-only via gateMiddleware)
+// Session required for all non-public routes (owner only; fail closed)
 app.use((req, res, next) => {
   if (auth.publicPath(req.path)) return next();
   return auth.requireAuth(req, res, next);
@@ -67,6 +67,9 @@ app.use((req, res, next) => {
 
 // ------------------------------------------------------------------ health
 app.get('/health', (req, res) => {
+  res.json(auth.publicHealth(Math.round(process.uptime())));
+});
+app.get('/api/health', (req, res) => {
   res.json(auth.publicHealth(Math.round(process.uptime())));
 });
 app.get('/api/health/detail', (req, res) => {
@@ -126,10 +129,6 @@ at.get('/status', wrap(async (req, res) => {
     stats: store.one("SELECT COUNT(*) n, COALESCE(SUM(CASE WHEN pnl>0 THEN 1 ELSE 0 END),0) wins, COALESCE(SUM(pnl),0) pnl FROM trades WHERE status='closed'"),
     serverTime: Date.now(),
   };
-  if (req.user && req.user.role === 'guest') {
-    delete payload.keyVar; delete payload.agentAddress; delete payload.accountAddress;
-    return res.json(auth.redactSecrets({ ...payload, readOnly: true, role: 'guest' }));
-  }
   res.json({ ...payload, readOnly: false, role: 'owner' });
 }));
 at.get('/signals', (req, res) => res.json(store.all('SELECT id,ts,source,coin,direction,interval,entry,stop,tp,score,closed_at,status,reason FROM signals ORDER BY id DESC LIMIT ?', Math.min(500, Number(req.query.limit) || 50))));
@@ -207,6 +206,7 @@ bnApi.post('/scan', wrap(async (req, res) => { await bnTrader.scanOnce('manual')
 bnApi.post('/reconcile', wrap(async (req, res) => { const r = await bnTrader.reconcile(); res.json(r); }));
 bnApi.get('/events', (req, res) => res.json(require('./db').db.prepare('SELECT * FROM bn_events ORDER BY id DESC LIMIT ?').all(Math.min(500, Number(req.query.limit) || 100))));
 bnApi.get('/trades', (req, res) => res.json(require('./db').db.prepare('SELECT * FROM bn_trades ORDER BY id DESC LIMIT ?').all(Math.min(500, Number(req.query.limit) || 50))));
+bnApi.get('/signals', (req, res) => res.json(require('./db').db.prepare('SELECT * FROM bn_signals ORDER BY id DESC LIMIT ?').all(Math.min(200, Number(req.query.limit) || 40))));
 app.get('/api/binance/whales', (req, res) => {
   res.json(bnWhales.snapshot());
 });
@@ -294,16 +294,21 @@ app.all(/^\/api\/.*/, (req, res) => res.status(404).json({ error: 'Unknown API e
 
 // ------------------------------------------------------------------ frontend
 const PUB = path.join(config.ROOT, 'public');
-// static assets: HTML revalidated every time (no stale UI after a deploy); JS/CSS/images cached 1 h with ETag revalidation
+// Redirects first so static HTML (index.html / options.html) cannot leak mixed or legacy pages.
 app.get('/', (req, res) => res.redirect(302, '/futures'));
-app.use(express.static(PUB, { extensions: ['html'], index: 'index.html', etag: true, setHeaders: (res, file) => res.setHeader('Cache-Control', /\.html$/.test(file) ? 'no-cache' : /sheet-data\.js$/.test(file) ? 'public, max-age=86400' : 'public, max-age=3600, must-revalidate') }));
-for (const p of ['/options', '/gamma', '/hedge', '/ratio', '/live-hedge', '/options-studio', '/gamma-book']) app.get(p, (req, res) => res.redirect(301, '/builder'));
-for (const p of ['/signals', '/news', '/webhook', '/risk', '/paper', '/autotrader']) app.get(p, (req, res) => res.sendFile(path.join(PUB, 'index.html')));
+app.get('/index.html', (req, res) => res.redirect(302, '/futures'));
+for (const p of ['/signals', '/news', '/webhook', '/risk', '/paper', '/autotrader']) {
+  app.get(p, (req, res) => res.redirect(302, '/futures'));
+}
+for (const p of ['/options', '/gamma', '/hedge', '/ratio', '/live-hedge', '/options-studio', '/gamma-book']) {
+  app.get(p, (req, res) => res.redirect(301, '/builder'));
+}
+app.get('/lab', (req, res) => res.redirect(302, '/manual'));
+app.get('/derivatives', (req, res) => res.redirect(302, '/builder'));
 app.get('/positions', (req, res) => res.sendFile(path.join(PUB, 'positions.html')));
 app.get('/futures', (req, res) => res.sendFile(path.join(PUB, 'futures.html')));
 app.get('/whales', (req, res) => res.sendFile(path.join(PUB, 'whales.html')));
 app.get('/futures-settings', (req, res) => res.sendFile(path.join(PUB, 'futures-settings.html')));
-app.get('/options', (req, res) => res.sendFile(path.join(PUB, 'options.html')));
 app.get('/strategies', (req, res) => res.sendFile(path.join(PUB, 'strategies.html')));
 app.get('/options-settings', (req, res) => res.sendFile(path.join(PUB, 'options-settings.html')));
 app.get('/manual', (req, res) => res.sendFile(path.join(PUB, 'manual.html')));
@@ -311,8 +316,8 @@ app.get('/builder', (req, res) => res.sendFile(path.join(PUB, 'builder.html')));
 app.get('/docs/four-leg-methodology.md', (req, res) => res.type('text/markdown; charset=utf-8').sendFile(path.join(__dirname, '..', 'docs', 'four-leg-methodology.md')));
 app.get('/sheet-lab', (req, res) => res.sendFile(path.join(PUB, 'sheet-lab.html')));
 app.get('/weekly', (req, res) => res.sendFile(path.join(PUB, 'weekly.html')));
-app.get('/lab', (req, res) => res.redirect(302, '/manual'));
-app.get('/derivatives', (req, res) => res.redirect(302, '/builder'));
+// static assets: HTML revalidated every time (no stale UI after a deploy); JS/CSS/images cached 1 h with ETag revalidation
+app.use(express.static(PUB, { extensions: ['html'], index: false, etag: true, setHeaders: (res, file) => res.setHeader('Cache-Control', /\.html$/.test(file) ? 'no-cache' : /sheet-data\.js$/.test(file) ? 'public, max-age=86400' : 'public, max-age=3600, must-revalidate') }));
 // friendly 404 / 500 pages (JSON for API callers)
 app.use((req, res) => { res.status(404); if (req.accepts('html')) return res.sendFile(path.join(PUB, '404.html')); res.json({ error: 'Not found' }); });
 app.use((err, req, res, next) => { log.error('http.error', { path: req.path, error: err.message }); if (res.headersSent) return next(err); res.status(err.status || 500); if (req.path.startsWith('/api/') || !req.accepts('html')) return res.json({ error: err.status && err.status < 500 ? err.message : 'Internal error' }); res.sendFile(path.join(PUB, '500.html')); });
@@ -323,7 +328,7 @@ const strategyMod = require('./strategy');
 strategyMod.initPersistence().catch(e => log.error('persist.init_crash', { error: e.message })).finally(() => {
   const server = app.listen(port, cfg.host, () => {
     store.log('info', `QuantSignal server listening on http://${cfg.host}:${port}`);
-    log.info('server.start', { port, commit: VERSION.commit, storage: require('./persist').backend(), ownerAuth: auth.ownerConfigured(), guestAuth: auth.guestConfigured() });
+    log.info('server.start', { port, commit: VERSION.commit, storage: require('./persist').backend(), ownerAuth: auth.ownerConfigured(), guestAuth: 'disabled' });
     engine.start();
   try { bnTrader.start(); } catch (e) { log.error('bnTrader.start_failed', { error: e.message }); };
   try { tradeLessons.buildSuggestions(); } catch (e) { log.warn('tradeLessons.suggest_failed', { error: e.message }); }

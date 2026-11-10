@@ -1,8 +1,8 @@
 'use strict';
 /**
- * Dual-password site auth (owner + guest).
- * OWNER_PASSWORD → full control. GUEST_PASSWORD → read-only (shared manually).
- * Changing a password invalidates that role's sessions (password version in signed cookie).
+ * Owner-password site auth only (no guest / view-only path).
+ * OWNER_PASSWORD → full control. Guest passwords, if present in env, are ignored.
+ * Changing the owner password invalidates sessions (password version in signed cookie).
  * Fail closed when OWNER_PASSWORD is unset. Never log password values.
  */
 const crypto = require('crypto');
@@ -51,7 +51,8 @@ function ownerConfigured() {
   return ownerPassword().length > 0;
 }
 function guestConfigured() {
-  return guestPassword().length > 0;
+  // Guest login is disabled. Env may still hold a leftover GUEST_PASSWORD; it is never accepted.
+  return false;
 }
 
 function sessionSecret() {
@@ -84,15 +85,11 @@ function verifyToken(token) {
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
   let payload;
   try { payload = JSON.parse(fromB64url(body).toString('utf8')); } catch { return null; }
-  if (!payload || (payload.role !== 'owner' && payload.role !== 'guest')) return null;
+  if (!payload || payload.role !== 'owner') return null; // guest cookies fail closed
   if (!(payload.exp > Date.now())) return null;
-  // Invalidate when env password changed
-  const wantPv = payload.role === 'owner'
-    ? passwordVersion(ownerPassword())
-    : passwordVersion(guestPassword());
+  const wantPv = passwordVersion(ownerPassword());
   if (!payload.pv || !safeEqStr(payload.pv, wantPv)) return null;
-  if (payload.role === 'owner' && !ownerConfigured()) return null;
-  if (payload.role === 'guest' && !guestConfigured()) return null;
+  if (!ownerConfigured()) return null;
   return payload;
 }
 
@@ -168,9 +165,10 @@ function rateLimitLogin(ip) {
 }
 
 function mintSession(role) {
-  const pw = role === 'owner' ? ownerPassword() : guestPassword();
+  if (role !== 'owner') throw new Error('Only owner sessions are issued');
+  const pw = ownerPassword();
   return signPayload({
-    role,
+    role: 'owner',
     pv: passwordVersion(pw),
     iat: Date.now(),
     exp: Date.now() + MAX_AGE_MS,
@@ -189,7 +187,7 @@ function wantsHtml(req) {
 }
 
 function requireAuth(req, res, next) {
-  if (req.user && (req.user.role === 'owner' || req.user.role === 'guest')) return next();
+  if (req.user && req.user.role === 'owner') return next();
   if (wantsHtml(req)) return res.redirect(302, '/login?next=' + encodeURIComponent(req.originalUrl || '/'));
   return res.status(401).json({ error: 'Login required' });
 }
@@ -206,66 +204,21 @@ function requireOwner(req, res, next) {
 
 /** Paths that skip session auth (webhook uses its own secret). */
 function publicPath(path) {
-  if (path === '/version' || path === '/health') return true;
+  if (path === '/version' || path === '/health' || path === '/api/health') return true;
   if (path === '/login') return true;
   if (path === '/api/auth/login' || path === '/api/auth/logout' || path === '/api/auth/me') return true;
   if (path === '/webhook') return true;
-  if (path === '/styles.css' || path === '/favicon.svg') return true;
+  if (path === '/styles.css' || path === '/ds.css' || path === '/favicon.svg') return true;
   return false;
 }
 
-/**
- * Guest may only use safe read endpoints. Everything else (writes, settings, keys, admin) is owner-only.
- * Returns true if this request is allowed for a guest.
- */
-function guestAllowed(req) {
-  if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS') return false;
-  const p = req.path;
-  // Explicit denylist of sensitive GETs
-  if (p === '/api/health/detail') return false;
-  if (p.startsWith('/api/autotrader')) {
-    // guest: status/signals/trades/events/scans/markets ok; no config dumps with secrets
-    if (p === '/api/autotrader/status' || p === '/api/autotrader/signals' || p === '/api/autotrader/trades'
-      || p === '/api/autotrader/events' || p === '/api/autotrader/scans' || p === '/api/autotrader/markets') return true;
-    return false;
-  }
-  if (p.startsWith('/api/binance')) {
-    if (p === '/api/binance/prices' || p === '/api/binance/prices/stream' || p === '/api/binance/positions' || p === '/api/binance/whales') return true;
-    if (p === '/futures') return true;
-    // status/health/events/trades/settings — no settings; allow status/events/trades read
-    if (p === '/api/binance/status' || p === '/api/binance/events' || p === '/api/binance/trades' || p === '/api/binance/lessons' || p === '/api/binance/suggestions') return true;
-    return false;
-  }
-  // Strategy / builder reads
-  if (p.startsWith('/api/strategy')) {
-    if (p.includes('import') || p.includes('export') || p.includes('weights') && req.method !== 'GET') return false;
-    return true; // GET strategy data
-  }
-  if (p.startsWith('/api/')) {
-    // derivatives, news, stocks, hyperliquid public reads
-    if (p === '/api/news' || p === '/api/stocks' || p === '/api/stream/universe') return true;
-    if (p.startsWith('/api/') && (p.includes('chain') || p.includes('quote') || p.includes('builder')
-      || p.includes('optimize') || p.includes('weekly') || p.includes('runs') || p.includes('plan')
-      || p.includes('reference') || p.includes('sheet') || p.includes('gamma') || p.includes('hedge'))) return true;
-    // POST /api/hyperliquid is market data — allow as "read" even though POST
-    return false;
-  }
-  // HTML pages — guest may view UI; client should hide write controls; server blocks write APIs
-  if (!p.startsWith('/api/')) return true;
+/** Guest access is disabled — always false (fail closed). */
+function guestAllowed(_req) {
   return false;
 }
 
 function gateMiddleware(req, res, next) {
   if (publicPath(req.path)) return next();
-  // Special-case: Hyperliquid public market-data POST used by UI charts
-  if (req.method === 'POST' && req.path === '/api/hyperliquid') {
-    return requireAuth(req, res, next);
-  }
-  if (req.user && req.user.role === 'owner') return next();
-  if (req.user && req.user.role === 'guest') {
-    if (guestAllowed(req) || (req.method === 'POST' && req.path === '/api/hyperliquid')) return next();
-    return res.status(403).json({ error: 'Read-only guest session — action not permitted' });
-  }
   return requireAuth(req, res, next);
 }
 
@@ -274,7 +227,7 @@ function publicHealth(uptimeSec) {
     ok: true,
     uptimeSec,
     auth: ownerConfigured() ? 'configured' : 'missing_owner_password',
-    guest: guestConfigured() ? 'configured' : 'missing_guest_password',
+    guest: 'disabled',
   };
 }
 
@@ -308,17 +261,17 @@ function mountRoutes(app, { wrap }) {
   app.get('/api/auth/me', (req, res) => {
     if (!ownerConfigured()) {
       return res.status(503).json({
-        authenticated: false, role: null, configured: false, guestConfigured: guestConfigured(),
+        authenticated: false, role: null, configured: false, guestConfigured: false,
         error: 'OWNER_PASSWORD not set — site is locked',
       });
     }
     if (req.user) {
       return res.json({
-        authenticated: true, role: req.user.role, configured: true,
-        guestConfigured: guestConfigured(), exp: req.user.exp, readOnly: req.user.role === 'guest',
+        authenticated: true, role: 'owner', configured: true,
+        guestConfigured: false, exp: req.user.exp, readOnly: false,
       });
     }
-    return res.status(401).json({ authenticated: false, role: null, configured: true, guestConfigured: guestConfigured() });
+    return res.status(401).json({ authenticated: false, role: null, configured: true, guestConfigured: false });
   });
 
   app.post('/api/auth/login', (req, res) => {
@@ -328,16 +281,12 @@ function mountRoutes(app, { wrap }) {
     const ip = req.ip || 'unknown';
     if (!rateLimitLogin(ip)) return res.status(429).json({ error: 'Too many login attempts — try again shortly' });
     const password = req.body && req.body.password;
-    // Owner match first, then guest (constant-time-ish: always check both lengths via verify)
+    // Owner only. Still compare against a dummy when unset would have been caught above.
+    // If a leftover GUEST_PASSWORD is set, it is never accepted.
     const asOwner = verifyAgainstEnv(password, ownerPassword());
-    const asGuest = guestConfigured() && verifyAgainstEnv(password, guestPassword());
     if (asOwner) {
       setSessionCookie(res, mintSession('owner'));
       return res.json({ ok: true, role: 'owner', readOnly: false });
-    }
-    if (asGuest) {
-      setSessionCookie(res, mintSession('guest'));
-      return res.json({ ok: true, role: 'guest', readOnly: true });
     }
     return res.status(401).json({ error: 'Invalid password' });
   });

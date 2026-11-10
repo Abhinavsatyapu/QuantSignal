@@ -23,18 +23,19 @@
 <body class="qs-app">
 <main>
   <h1 class="page-title">Whale Footprints</h1>
-  <p class="page-sub">Futures section only — large prints, OI spikes, top-trader &amp; global L/S, taker imbalance, book walls. Binance public data. Guest read-only. Timestamps IST.</p>
+  <p class="page-sub">US equity TradFi perps only. Large aggTrades, open-interest changes, top-trader and global long/short ratios, taker imbalance, and book walls. Liquidation tape is labeled when unavailable. Timestamps IST. Owner login required.</p>
   <div class="meta">
     <span id="upd">Last refresh: —</span>
     <span id="uni">Universe: —</span>
     <span id="thr">Print ≥ $50k · Wall ≥ $100k</span>
     <button class="btn ghost" id="btnRefresh" type="button">Refresh now</button>
   </div>
+  <p class="page-sub" id="liqNote" style="font-size:12px;color:var(--muted)"></p>
   <p class="page-sub" id="err" hidden style="color:var(--amber)"></p>
   <div class="whale-grid" id="grid"><p class="muted">Loading whale cards…</p></div>
   <section class="panel" style="margin-top:8px">
     <h2>Sources</h2>
-    <p class="muted" id="sources" style="font-size:13px">Binance fapi aggTrades, openInterest, futures/data OI hist + L/S + taker ratios, depth. Third-party notes listed but not required.</p>
+    <p class="muted" id="sources" style="font-size:13px">Primary: Binance public REST (fapi aggTrades, openInterest, futures/data openInterestHist, top-trader &amp; global long/short, taker buy/sell, depth). Coinglass / Unusual Whales / EDGAR are listed as not wired (no paid keys; nothing is scraped). Public liquidation websocket is not hooked — the note below is shown rather than invented prints.</p>
     <details class="details-toggle"><summary>How bias is chosen</summary>
       <ol style="font-size:13px;color:var(--text2)">
         <li>Score OI change, taker buy ratio, top-trader long ratio, large print imbalance, book wall skew.</li>

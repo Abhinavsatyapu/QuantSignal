@@ -2,25 +2,26 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Login · QuantSignal</title>
-<link rel="stylesheet" href="/styles.css">
+<meta name="color-scheme" content="dark">
+<title>Sign in · QuantSignal</title>
+<link rel="stylesheet" href="/ds.css">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>
-.login-wrap{min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(1200px 600px at 50% -10%,rgba(76,141,255,.12),transparent),var(--bg)}
+.login-wrap{min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(1200px 600px at 50% -10%,rgba(91,157,255,.12),transparent),var(--bg)}
 .login-card{width:100%;max-width:400px;background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:28px 26px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
 .login-card h1{margin:0 0 6px;font-size:22px}
 .login-card .sub{color:var(--muted);font-size:13px;margin:0 0 20px}
 .login-card label{display:block;font-size:12px;color:var(--muted);margin:0 0 6px}
-.login-card input[type=password]{width:100%;padding:11px 12px;border-radius:8px;border:1px solid var(--line2);background:var(--panel2);color:var(--text);font:14px var(--sans)}
-.login-card input:focus{outline:none;border-color:var(--accent)}
-.login-card button{width:100%;margin-top:16px;padding:11px;border:0;border-radius:8px;background:var(--accent);color:#fff;font:600 14px var(--sans);cursor:pointer}
-.login-card button:hover{background:var(--accent2)}
+.login-card input[type=password]{width:100%;padding:11px 12px;border-radius:8px;border:1px solid var(--line2);background:var(--panel2);color:var(--text);font:14px var(--mono)}
+.login-card input:focus{outline:none;border-color:var(--blue)}
+.login-card button{width:100%;margin-top:16px;padding:11px;border:0;border-radius:8px;background:var(--blue);color:#071018;font:600 14px var(--font);cursor:pointer}
+.login-card button:hover{filter:brightness(1.08)}
 .login-card button:disabled{opacity:.55;cursor:not-allowed}
 .login-err{margin-top:12px;color:var(--red);font-size:13px;min-height:1.2em}
 .login-brand{display:flex;gap:10px;align-items:center;margin-bottom:18px}
-.login-brand .logo{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;background:linear-gradient(135deg,#4c8dff,#2a5bd7)}
+.login-brand .logo{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;background:linear-gradient(135deg,#5b9dff,#2a5bd7)}
 .login-brand .logo svg{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:2.6;stroke-linecap:round}
-.login-note{margin-top:14px;font-size:12px;color:var(--faint);line-height:1.4}
+.login-note{margin-top:14px;font-size:12px;color:var(--muted);line-height:1.4}
 </style>
 </head>
 <body>
@@ -28,15 +29,15 @@
   <form class="login-card" id="f" autocomplete="current-password">
     <div class="login-brand">
       <div class="logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 16l5-6 4 4 7-9"/></svg></div>
-      <div><strong>QuantSignal</strong><div class="sub" style="margin:0">Secure access</div></div>
+      <div><strong>QuantSignal</strong><div class="sub" style="margin:0">Owner access</div></div>
     </div>
     <h1>Sign in</h1>
-    <p class="sub">Enter the owner password (full control) or the guest password (read-only view).</p>
-    <label for="pw">Password</label>
+    <p class="sub">Enter the owner password. There is no guest or view-only login.</p>
+    <label for="pw">Owner password</label>
     <input id="pw" name="password" type="password" required autofocus minlength="1" autocomplete="current-password">
     <button type="submit" id="btn">Continue</button>
     <p class="login-err" id="err" role="alert"></p>
-    <p class="login-note">Sessions use an httpOnly cookie. Changing a password signs out everyone on that role.</p>
+    <p class="login-note">Sessions use an httpOnly cookie. Changing the owner password signs out existing sessions.</p>
   </form>
 </main>
 <script>
@@ -51,11 +52,12 @@
       const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({password:document.getElementById('pw').value})});
       const d=await r.json().catch(()=>({}));
       if(!r.ok){ err.textContent=d.error||('Login failed ('+r.status+')'); btn.disabled=false; return; }
+      if(d.role && d.role!=='owner'){ err.textContent='Owner login required'; btn.disabled=false; return; }
       location.replace(next.startsWith('/')?next:'/');
     }catch(ex){ err.textContent='Network error'; btn.disabled=false; }
   });
   fetch('/api/auth/me',{credentials:'same-origin'}).then(r=>r.json()).then(d=>{
-    if(d.authenticated) location.replace(next.startsWith('/')?next:'/');
+    if(d.authenticated && d.role==='owner') location.replace(next.startsWith('/')?next:'/');
     if(d.configured===false) err.textContent='Server locked: OWNER_PASSWORD is not set.';
   }).catch(()=>{});
 })();

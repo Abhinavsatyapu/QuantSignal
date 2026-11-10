@@ -5,141 +5,129 @@
   const px = (v) => Number.isFinite(+v) ? (+v).toLocaleString('en-US', { maximumFractionDigits: +v < 1 ? 6 : +v < 100 ? 4 : 2 }) : '—';
   const cls = (v) => (v > 0 ? 'pos' : v < 0 ? 'neg' : '');
   const ago = (ms) => { if (!ms) return '—'; const s = Math.round((Date.now() - ms) / 1000); return s < 60 ? s + 's ago' : s < 3600 ? Math.round(s / 60) + 'm ago' : Math.round(s / 3600) + 'h ago'; };
-  const t = (ms) => ms ? new Date(ms).toLocaleString([], { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
+  const tIST = (ms) => {
+    if (!ms) return '—';
+    try { return new Date(ms).toLocaleString('en-IN', { timeZone: 'Asia/Calcutta', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }) + ' IST'; }
+    catch { return new Date(ms).toISOString(); }
+  };
 
-  let lastPrices = null, lastPos = null, es = null;
+  let es = null;
 
   function renderPrices(snap) {
-    lastPrices = snap;
-    const lat = snap.lastUpdateAt && snap.serverNow ? Math.max(0, snap.serverNow - snap.lastUpdateAt) : null;
-    // Prefer mark event latency if present on marks
-    let pushLat = null;
-    for (const m of Object.values(snap.marks || {})) {
-      if (m.ts && snap.serverNow) { const l = snap.serverNow - m.ts; if (pushLat == null || l < pushLat) pushLat = l; }
-    }
+    if (!$('srcLine')) return;
     const ageMs = snap.ageMs != null ? snap.ageMs : (snap.lastUpdateAt ? Math.max(0, Date.now() - snap.lastUpdateAt) : null);
     const stale = snap.stale === true || (ageMs != null && ageMs > 10000) || snap.lastUpdateAt == null;
     const lastAbs = snap.lastUpdateAt ? new Date(snap.lastUpdateAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
     $('srcLine').innerHTML = `Source: <b>${esc(snap.source || 'Binance')}</b> · transport <b>${esc(snap.transport || '—')}</b>` +
       ` · last update <b>${esc(lastAbs)}</b> (${esc(ago(snap.lastUpdateAt))})` +
-      (stale ? ' · <span class="badge bad">STALE</span>' : ' · <span class="badge">LIVE</span>') +
-      (pushLat != null ? ` · <span class="lat">feed lag <b>${Math.round(pushLat)} ms</b></span>` : '') +
-      (ageMs != null ? ` · <span class="lat">age <b>${Math.round(ageMs)} ms</b></span>` : '');
-    if (snap.geoBlocked || snap.note) { $('geoNote').hidden = false; $('geoNote').textContent = snap.note || 'Binance geo-blocked from this host (HTTP 451). Move Render to Frankfurt or Singapore.'; }
-    else $('geoNote').hidden = true;
-  }
-
-  function cardOpen(p) {
-    const side = String(p.side || '').toLowerCase();
-    return `<article class="pos-card ${side}">
-      <h3><span>${esc(p.symbol)} · ${esc(p.side)}</span><span class="badge ${p.mode === 'dry_run' ? 'info' : ''}">${esc(p.mode || '')}</span></h3>
-      <div class="badge-row">
-        <span class="badge ${p.protectionOk ? '' : 'bad'}">SL ${esc(p.stopStatus)}</span>
-        <span class="badge ${p.protectionOk ? '' : 'bad'}">TP ${esc(p.tpStatus)}</span>
-        <span class="badge muted">${esc(p.entryType || '—')}</span>
-      </div>
-      <dl>
-        <dt>Entry price</dt><dd>${px(p.entryPx)}</dd>
-        <dt>Quantity</dt><dd>${px(p.qty)}</dd>
-        <dt>Leverage</dt><dd>${esc(p.leverage)}×</dd>
-        <dt>Margin</dt><dd>${usd(p.margin)}</dd>
-        <dt>Stop (SL)</dt><dd>${px(p.stopPx)}</dd>
-        <dt>Target (TP)</dt><dd>${px(p.tpPx)}</dd>
-        <dt>Live mark (Binance)</dt><dd>${px(p.markPx)}</dd>
-        <dt>Unrealized P&amp;L</dt><dd class="${cls(p.upnl)}">${usd(p.upnl)}${p.upnlPct != null ? ` (${p.upnlPct.toFixed(2)}%)` : ''}</dd>
-        <dt>Liq. price (est.)</dt><dd>${px(p.liqPx)}</dd>
-        <dt>Entered</dt><dd>${t(p.entryTime)}</dd>
-      </dl>
-      <details class="b-more"><summary>Show raw</summary><pre class="mono" style="font-size:11px;white-space:pre-wrap">${esc(JSON.stringify(p, null, 2))}</pre></details>
-    </article>`;
-  }
-
-  function cardPending(p) {
-    return `<article class="pos-card">
-      <h3><span>${esc(p.symbol)} · ${esc(p.side)}</span><span class="pending-cd">${p.remainSec}s</span></h3>
-      <dl>
-        <dt>Limit price</dt><dd>${px(p.limitPx)}</dd>
-        <dt>Filled / target</dt><dd>${px(p.filledQty)} / ${px(p.targetQty)}</dd>
-        <dt>Leverage</dt><dd>${esc(p.leverage)}×</dd>
-        <dt>Planned SL</dt><dd>${px(p.stopPx)}</dd>
-        <dt>Planned TP</dt><dd>${px(p.tpPx)}</dd>
-        <dt>Deadline</dt><dd>${t(p.deadlineTs)}</dd>
-        <dt>Created</dt><dd>${t(p.createdAt)}</dd>
-      </dl>
-      <p class="market-note">If unfilled when the countdown hits 0, the remainder goes market (restart-safe).</p>
-    </article>`;
-  }
-
-  function renderPos(d) {
-    lastPos = d;
-    if (d.source) renderPrices({ source: d.source, transport: d.transport, lastUpdateAt: d.lastUpdateAt, geoBlocked: d.geoBlocked, note: d.priceNote, marks: {}, serverNow: Date.now() });
-    $('modeBadge').textContent = (d.dryRun ? 'DRY-RUN' : String(d.mode || '').toUpperCase());
-    $('modeBadge').className = 'badge ' + (d.dryRun ? 'info' : 'bad');
-    const day = d.daily || {};
-    const tgt = day.targetPct != null ? day.targetPct : 5;
-    const lossRef = day.lossLimitPct != null ? day.lossLimitPct : 6;
-    const prog = day.pnlPct != null ? `${day.pnlPct.toFixed(2)}% of day-start` : '—';
-    $('daily').innerHTML = [
-      ['Equity (compounding)', usd(d.equity)],
-      ["Today's P&L (IST)", usd(day.pnl) + (day.pnlPct != null ? ` (${day.pnlPct.toFixed(2)}%)` : '')],
-      ['Progress vs ' + tgt + '% target', prog + (day.profitReached ? ' · reached (info only)' : '')],
-      ['vs −' + lossRef + '% loss ref', day.lossBreached ? 'breached (info — halt OFF)' : 'OK'],
-      ['Positions', `${day.positionsUsed ?? 0} / ${day.maxPositions ?? 4}`],
-      ['Kill switch', day.killSwitch ? 'ON' : 'OFF'],
-    ].map(([k, v]) => `<div class="m"><span>${esc(k)}</span><b class="${String(k).includes('P&L') ? cls(day.pnl) : ''}">${v}</b></div>`).join('');
-    $('daily').innerHTML += `<p class="market-note">Daily ${tgt}% target and −${lossRef}% loss level are <b>informational</b> by default — bot keeps opening trades. Per-trade exchange SL/TP still apply. Loss-halt setting: ${day.lossHaltEnabled ? 'ON' : 'OFF'}.</p>`;
-    if (day.pausedReason) $('daily').innerHTML += `<p class="market-note warn-text">${esc(day.pausedReason)}</p>`;
-
-    const ar = d.actualReturns || {};
-    const arEl = $('avgDaily');
-    if (arEl) {
-      const cell = (k,v,cls='') => `<div class="m"><span>${k}</span><b class="${cls}">${v}</b></div>`;
-      const pct = (x) => (x==null||!Number.isFinite(+x)) ? '—' : ((+x>=0?'+':'') + (+x).toFixed(3) + '%');
-      arEl.innerHTML = [
-        cell('Mean daily % (all days)', pct(ar.meanDailyPctAllDays)),
-        cell('Median daily % (all days)', pct(ar.medianDailyPctAllDays)),
-        cell('Compounded avg daily %', pct(ar.geoAvgDailyPct)),
-        cell('Mean daily % (trade days)', pct(ar.meanDailyPctTradeDays)),
-        cell('Median daily % (trade days)', pct(ar.medianDailyPctTradeDays)),
-        cell('Trade / calendar days', `${ar.tradeDays ?? 0} / ${ar.calendarDays ?? 0}`),
-        cell('Net P&L (window)', usd(ar.netPnl), cls(ar.netPnl)),
-        cell('End equity (from capital)', usd(ar.endEquity)),
-      ].join('');
-      $('avgDailyNote').textContent = (ar.calendarDays ? '' : 'No closed trades yet in the lookback window — averages stay at 0 until the bot realizes P&L in dry-run or live.');
+      (stale ? ' · <span class="pill stale">STALE</span>' : ' · <span class="pill live">LIVE</span>') +
+      (ageMs != null ? ` · age <b>${Math.round(ageMs)} ms</b>` : '');
+    if ($('geoNote')) {
+      if (snap.geoBlocked || snap.note) { $('geoNote').hidden = false; $('geoNote').textContent = snap.note || 'Binance geo-blocked from this host (HTTP 451).'; }
+      else $('geoNote').hidden = true;
     }
-
-    const open = d.open || [];
-    $('openCount').textContent = open.length ? open.length + ' open' : 'None';
-    $('open').innerHTML = open.length ? open.map(cardOpen).join('') : '<p class="empty">No open positions.</p>';
-
-    const pending = d.pending || [];
-    $('pending').innerHTML = pending.length ? pending.map(cardPending).join('') : '<p class="empty">No pending limit entries.</p>';
-
-    const body = $('closed').querySelector('tbody');
-    const closed = d.closed || [];
-    body.innerHTML = closed.length ? closed.map((c) => `<tr>
-      <td class="num">${c.id}</td><td><b>${esc(c.symbol)}</b></td><td>${esc(c.side)}</td>
-      <td class="num">${px(c.entryPx)}</td><td class="num">${px(c.exitPx)}</td><td>${esc(c.reason)}</td>
-      <td class="num">${px(c.qty)}</td><td class="num ${cls(c.pnl)}">${usd(c.pnl)}</td><td class="num">${usd(c.fees)}</td>
-      <td>${esc(c.entryType)}</td><td>${t(c.closedAt)}</td></tr>`).join('') : '<tr><td colspan="11" class="empty">No closed trades yet.</td></tr>';
   }
 
-  async function refresh() {
+  function drawCurve(days) {
+    const c = $('eqCanvas'); if (!c) return;
+    const ctx = c.getContext('2d');
+    const w = c.width, h = c.height;
+    ctx.fillStyle = '#141e30'; ctx.fillRect(0, 0, w, h);
+    if (!days.length) {
+      ctx.fillStyle = '#7f8eab'; ctx.font = '13px IBM Plex Sans, sans-serif';
+      ctx.fillText('No closed-trade equity series yet', 16, h / 2);
+      return;
+    }
+    const ys = days.map((d) => +d.equity).filter(Number.isFinite);
+    if (!ys.length) return;
+    const min = Math.min(...ys), max = Math.max(...ys);
+    const pad = 12;
+    const up = ys[ys.length - 1] >= ys[0];
+    ctx.strokeStyle = up ? '#3dd68c' : '#ff6b7a';
+    ctx.lineWidth = 2; ctx.beginPath();
+    days.forEach((d, i) => {
+      const x = pad + (i / (days.length - 1 || 1)) * (w - 2 * pad);
+      const y = h - pad - ((d.equity - min) / ((max - min) || 1)) * (h - 2 * pad);
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.stroke();
+  }
+
+  async function enrich() {
     try {
-      const r = await fetch('/api/binance/positions');
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || r.statusText);
-      renderPos(d);
-    } catch (e) { $('srcLine').textContent = 'Positions unavailable: ' + e.message; }
+      const [posR, stR, sigR] = await Promise.all([
+        fetch('/api/binance/positions', { credentials: 'same-origin' }),
+        fetch('/api/binance/status', { credentials: 'same-origin' }),
+        fetch('/api/binance/signals?limit=25', { credentials: 'same-origin' }),
+      ]);
+      if (posR.status === 401) { location.replace('/login?next=/futures'); return; }
+      const pos = posR.ok ? await posR.json() : {};
+      const st = stR.ok ? await stR.json() : null;
+      const ev = sigR.ok ? await sigR.json() : [];
+
+      const day = pos.daily || {};
+      const ar = pos.actualReturns || {};
+      const openN = (pos.open || []).length;
+      const wr = (pos.closed && pos.closed.length)
+        ? (100 * pos.closed.filter((t) => t.pnl > 0).length / pos.closed.length)
+        : null;
+      if ($('kpis')) {
+        $('kpis').innerHTML = [
+          ['Equity', usd(pos.equity), pos.dryRun ? 'DRY-RUN compounding' : 'LIVE compounding'],
+          ["Today's P&L", usd(day.pnl) + (day.pnlPct != null ? ` (${day.pnlPct.toFixed(2)}%)` : ''), 'IST day-start'],
+          ['Avg daily %', ar.meanDailyPctAllDays != null ? ((ar.meanDailyPctAllDays >= 0 ? '+' : '') + Number(ar.meanDailyPctAllDays).toFixed(3) + '%') : '—', 'closed trades · 60d'],
+          ['Win rate', wr != null ? wr.toFixed(0) + '%' : '—', 'last 50 closed'],
+          ['Open positions', `${day.positionsUsed ?? openN}/${day.maxPositions ?? 4}`, 'max 4'],
+        ].map(([k, v, d]) => `<div class="kpi"><div class="k">${k}</div><div class="v ${String(k).includes('P&L') ? cls(day.pnl) : (k === 'Avg daily %' ? cls(ar.meanDailyPctAllDays) : '')}">${v}</div><div class="d">${d}</div></div>`).join('');
+      }
+
+      if ($('avgDaily')) {
+        const pct = (x) => (x == null || !Number.isFinite(+x)) ? '—' : ((+x >= 0 ? '+' : '') + (+x).toFixed(3) + '%');
+        $('avgDaily').innerHTML = [
+          ['Mean daily %', pct(ar.meanDailyPctAllDays)],
+          ['Compounded avg', pct(ar.geoAvgDailyPct)],
+          ['Net P&L (window)', usd(ar.netPnl)],
+          ['Trade / calendar days', `${ar.tradeDays ?? 0} / ${ar.calendarDays ?? 0}`],
+        ].map(([k, v]) => `<div class="kpi"><div class="k">${k}</div><div class="v ${k.includes('P&L') ? cls(ar.netPnl) : ''}">${v}</div></div>`).join('');
+      }
+
+      const s = st && (st.settings || st);
+      if ($('presetLine') && s) {
+        const preset = s.activePreset || (st.settings && st.settings.activePreset) || '—';
+        const interval = s.interval || (st.settings && st.settings.interval) || '';
+        const mode = s.signalMode || (st.settings && st.settings.signalMode) || '';
+        const n = s.universeCount || (s.assets || []).length || '';
+        $('presetLine').textContent = `Active: ${preset} · ${interval} · ${mode} · universe ${n}`;
+      }
+
+      const rows = Array.isArray(ev) ? ev : [];
+      if ($('sigFeed')) {
+        $('sigFeed').innerHTML = rows.length
+          ? `<table class="inst"><thead><tr><th>Time (IST)</th><th>Symbol</th><th>Side</th><th class="num">Entry</th><th class="num">SL</th><th class="num">TP</th><th>Status</th></tr></thead><tbody>` +
+            rows.slice(0, 20).map((e) => `<tr>
+              <td>${esc(tIST(e.ts))}</td>
+              <td><b>${esc(e.symbol || e.coin || '')}</b></td>
+              <td class="${String(e.direction).toUpperCase() === 'LONG' ? 'pos' : String(e.direction).toUpperCase() === 'SHORT' ? 'neg' : ''}">${esc(e.direction || '')}</td>
+              <td class="num">${px(e.entry)}</td>
+              <td class="num">${px(e.stop)}</td>
+              <td class="num">${px(e.tp)}</td>
+              <td>${esc(e.status || e.reason || e.source || '')}</td>
+            </tr>`).join('') + '</tbody></table>'
+          : '<p class="muted">No signals recorded yet.</p>';
+      }
+
+      if (pos.source) renderPrices(pos);
+      drawCurve(Array.isArray(ar.days) ? ar.days : (Array.isArray(ar.daily) ? ar.daily : []));
+    } catch (e) { console.warn(e); }
   }
 
   function connectSSE() {
     if (es) { try { es.close(); } catch {} }
     es = new EventSource('/api/binance/prices/stream');
     es.onmessage = (ev) => { try { renderPrices(JSON.parse(ev.data)); } catch {} };
-    es.onerror = () => { /* browser will retry; REST refresh still runs */ };
   }
 
-  refresh(); connectSSE();
-  setInterval(refresh, 5000);
+  enrich();
+  connectSSE();
+  setInterval(enrich, 5000);
 })();

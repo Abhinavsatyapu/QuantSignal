@@ -55,8 +55,15 @@
   }
 
   function cardPending(p) {
+    const st = p.entryStatus || (p.remainSec > 0 ? 'LIMIT_WORKING' : 'MARKET_FALLBACK_DUE');
+    const prot = p.protectionStatus || ((p.stopPx != null && p.tpPx != null) ? 'SL/TP planned — attach on fill' : 'NO SL/TP PLAN');
+    const protOk = /planned/i.test(prot);
     return `<article class="pos-card">
       <h3><span>${esc(p.symbol)} · ${esc(p.side)}</span><span class="pending-cd">${p.remainSec}s</span></h3>
+      <div class="badge-row" style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px">
+        <span class="pill ${st === 'LIMIT_WORKING' ? 'dry' : 'stale'}">${esc(st.replaceAll('_',' '))}</span>
+        <span class="pill ${protOk ? 'live' : 'stale'}">${esc(prot)}</span>
+      </div>
       <dl>
         <dt>Limit price</dt><dd>${px(p.limitPx)}</dd>
         <dt>Filled / target</dt><dd>${px(p.filledQty)} / ${px(p.targetQty)}</dd>
@@ -66,7 +73,7 @@
         <dt>Deadline</dt><dd>${t(p.deadlineTs)}</dd>
         <dt>Created</dt><dd>${t(p.createdAt)}</dd>
       </dl>
-      <p class="market-note">If unfilled when the countdown hits 0, the remainder goes market (restart-safe).</p>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">If unfilled when the countdown hits 0, the remainder goes market (restart-safe). Protective SL/TP attach after fill.</p>
     </article>`;
   }
 
@@ -108,7 +115,7 @@
 
   async function refresh() {
     try {
-      const r = await fetch('/api/binance/positions');
+      const r = await fetch('/api/binance/positions', { credentials: 'same-origin' });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || r.statusText);
       renderPos(d);

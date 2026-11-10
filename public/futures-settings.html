@@ -4,21 +4,25 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
 <title>Futures Settings · QuantSignal</title>
-<link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/ds.css">
+<link rel="stylesheet" href="/ds.css">
 </head>
 <body class="qs-app">
 <main>
   <h1 class="page-title">Futures Settings</h1>
-  <p class="page-sub">Dry-run bot presets. Study-best (4h buy-side) is default; legacy 15m indicators remains selectable. Owner write only.</p>
+  <p class="page-sub">Owner-only bot parameters. The live adopted dry-run preset is <b>combo_30m_trend_flow_buyside_and3_uscash</b> (30m trend+flow+buy-side AND-within-3, US cash session, maxStop 2.5 ATR). Changing a preset here does not enable signed live orders.</p>
   <section class="panel">
-    <h2>Active study preset</h2>
+    <h2>Mode</h2>
+    <p class="muted" id="modeLine">Loading…</p>
+  </section>
+  <section class="panel">
+    <h2>Active preset</h2>
     <p class="muted" id="cur">Loading…</p>
     <label style="display:block;margin:12px 0 8px;font-size:12px;color:var(--muted)">Preset
-      <select id="preset" style="display:block;width:100%;max-width:420px;margin-top:4px;padding:8px;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px"></select>
+      <select id="preset" style="display:block;width:100%;max-width:520px;margin-top:4px;padding:8px;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px"></select>
     </label>
     <button class="btn primary" id="save" type="button">Apply preset</button>
     <p id="msg" class="muted" style="margin-top:10px"></p>
-    <details class="details-toggle" style="margin-top:12px"><summary>Raw settings</summary>
+    <details class="details-toggle" style="margin-top:12px"><summary>Raw settings (no secrets)</summary>
       <pre id="raw" class="mono" style="font-size:11px;white-space:pre-wrap"></pre>
     </details>
   </section>
@@ -28,21 +32,41 @@
 <script>
 (async function(){
   const $ = (id)=>document.getElementById(id);
+  function redact(o){
+    if(!o||typeof o!=='object') return o;
+    const S=/password|secret|api[_-]?key|private[_-]?key|mnemonic|seed|token|authorization/i;
+    const walk=(v)=>{
+      if(Array.isArray(v)) return v.map(walk);
+      if(!v||typeof v!=='object') return v;
+      const out={};
+      for(const [k,val] of Object.entries(v)) out[k]=S.test(k)?(val?'[redacted]':null):walk(val);
+      return out;
+    };
+    return walk(o);
+  }
   async function load(){
     const r = await fetch('/api/binance/status',{credentials:'same-origin'});
-    if(!r.ok){ $('cur').textContent='Login required to view status ('+r.status+')'; return; }
+    if(r.status===401){ location.replace('/login?next=/futures-settings'); return; }
+    if(!r.ok){ $('cur').textContent='Unable to load status ('+r.status+')'; return; }
     const j = await r.json();
     const s = j.settings||{};
-    $('cur').textContent = `Now: ${s.activePreset||'(custom)'} · ${s.interval} · ${s.signalMode} · kinds [${(s.liqKinds||[]).join(', ')}] · symbols ${s.universeCount||(s.assets||[]).length}`;
-    $('raw').textContent = JSON.stringify(s,null,2);
+    const f = s.entryFilters||{};
+    $('modeLine').textContent = (j.dryRun?'DRY-RUN':'LIVE') + ' · signed orders ' + (s.allowSignedOrders?'ON':'OFF') + ' · capital $'+(s.capital??'—')+' · lev '+(s.leverage??'—')+'× · max '+(s.maxConcurrentPositions??4)+' · risk '+(s.riskPerTradePct??'—')+'%';
+    $('cur').textContent = `Now: ${s.activePreset||'(custom)'} · ${s.interval||'—'} · ${s.signalMode||'—'} · usCashOnly=${!!f.usCashOnly} · noFriday=${!!f.noFridayEntry} · maxStopAtr=${f.maxStopAtr??'—'} · symbols ${s.universeCount||(s.assets||[]).length}`;
+    $('raw').textContent = JSON.stringify(redact(s),null,2);
     const presets = s.studyPresets||{};
-    $('preset').innerHTML = Object.values(presets).map(p=>`<option value="${p.id}" ${p.id===s.activePreset?'selected':''}>${p.label}</option>`).join('') || '<option value="">(none)</option>';
+    const ids = Object.keys(presets);
+    $('preset').innerHTML = (ids.length?ids:[]).map(id=>{
+      const p=presets[id];
+      const lab=(p&&p.label)||id;
+      return `<option value="${id}" ${id===s.activePreset?'selected':''}>${lab}</option>`;
+    }).join('') || '<option value="">(none)</option>';
   }
   $('save').onclick = async ()=>{
     $('msg').textContent='Saving…';
     const r = await fetch('/api/binance/settings',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({activePreset:$('preset').value})});
     const j = await r.json().catch(()=>({}));
-    $('msg').textContent = r.ok ? 'Applied. Scanner will use the new interval/mode on next cycle.' : (j.error||('HTTP '+r.status));
+    $('msg').textContent = r.ok ? 'Applied. Scanner will use the new interval/mode on next cycle. Bot stays dry-run until signed orders are enabled separately.' : (j.error||('HTTP '+r.status));
     load();
   };
   load();

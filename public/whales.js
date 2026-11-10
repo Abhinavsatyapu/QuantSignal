@@ -47,7 +47,13 @@
       const cards = j.cards || [];
       $('grid').innerHTML = cards.length ? cards.map(cardHtml).join('') : '<p class="market-note">No cards yet — click Refresh (batches to respect rate limits).</p>';
       if (j.thirdParty) {
-        $('sources').textContent = 'Binance public REST. Third-party: ' + j.thirdParty.map((t) => t.name + ' (' + t.access + '; ' + t.status + ')').join(' · ');
+        const src = [];
+        src.push('Primary: Binance USD-M public REST (aggTrades, openInterest, OI hist, top-trader L/S, global L/S, taker ratio, depth).');
+        src.push('Third-party: ' + j.thirdParty.map((t) => t.name + ' — ' + t.use + ' (' + t.access + '; ' + t.status + ')').join(' · '));
+        $('sources').textContent = src.join(' ');
+      }
+      if ($('liqNote')) {
+        $('liqNote').textContent = j.forceOrderNote || 'Liquidations: public REST history is not offered without auth; not fabricated.';
       }
       if (j.lastError) { $('err').hidden = false; $('err').textContent = j.lastError; }
     } catch (e) {

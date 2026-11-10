@@ -905,7 +905,7 @@ function actualDailyReturns(lookbackDays = 60) {
   const sorted = [...byDay.keys()].sort();
   if (!sorted.length) {
     return { lookbackDays, meanDailyPctAllDays: 0, medianDailyPctAllDays: 0, geoAvgDailyPct: 0,
-      meanDailyPctTradeDays: 0, medianDailyPctTradeDays: 0, tradeDays: 0, calendarDays: 0, endEquity: startEq, netPnl: 0 };
+      meanDailyPctTradeDays: 0, medianDailyPctTradeDays: 0, tradeDays: 0, calendarDays: 0, endEquity: startEq, netPnl: 0, maxDdPct: 0, days: [] };
   }
   // All calendar days from first to last trade day
   const t0 = Date.parse(sorted[0] + 'T00:00:00+05:30');
@@ -932,6 +932,16 @@ function actualDailyReturns(lookbackDays = 60) {
     meanDailyPctTradeDays: +mean(tradePct).toFixed(4),
     medianDailyPctTradeDays: +median(tradePct).toFixed(4),
     endEquity: +eq.toFixed(2), netPnl: +(eq - startEq).toFixed(2),
+    maxDdPct: (function () {
+      let peak = -Infinity, maxDd = 0;
+      for (const d of days) {
+        if (d.equity > peak) peak = d.equity;
+        const dd = peak > 0 ? (peak - d.equity) / peak * 100 : 0;
+        if (dd > maxDd) maxDd = dd;
+      }
+      return +maxDd.toFixed(2);
+    })(),
+    days,
   };
 }
 
@@ -953,12 +963,20 @@ function positionsView() {
       protectionOk: t.stop_status === 'ATTACHED' && t.tp_status === 'ATTACHED',
     };
   });
-  const pending = pendingRows().map((p) => ({
-    id: p.id, tradeId: p.trade_id, symbol: p.symbol, side: p.direction, limitPx: p.limit_px,
-    targetQty: p.target_qty, filledQty: p.filled_qty, deadlineTs: p.deadline_ts,
-    remainSec: Math.max(0, Math.round((p.deadline_ts - Date.now()) / 1000)),
-    stopPx: p.stop_px, tpPx: p.tp_px, leverage: p.leverage, createdAt: p.created_at,
-  }));
+  const pending = pendingRows().map((p) => {
+    const remainSec = Math.max(0, Math.round((p.deadline_ts - Date.now()) / 1000));
+    const protectionPlanned = p.stop_px != null && p.tp_px != null;
+    return {
+      id: p.id, tradeId: p.trade_id, symbol: p.symbol, side: p.direction, limitPx: p.limit_px,
+      targetQty: p.target_qty, filledQty: p.filled_qty, deadlineTs: p.deadline_ts,
+      remainSec,
+      entryStatus: remainSec > 0 ? 'LIMIT_WORKING' : 'MARKET_FALLBACK_DUE',
+      fallback: remainSec > 0 ? 'limit' : 'market',
+      protectionPlanned,
+      protectionStatus: protectionPlanned ? 'SL/TP planned — attach on fill' : 'NO SL/TP PLAN',
+      stopPx: p.stop_px, tpPx: p.tp_px, leverage: p.leverage, createdAt: p.created_at,
+    };
+  });
   const closed = store.db.prepare("SELECT * FROM bn_trades WHERE status IN ('closed','CLOSED') ORDER BY exit_ts DESC LIMIT 50").all()
     .map((t) => ({
       id: t.id, symbol: t.symbol, side: t.direction, entryPx: t.entry_px, exitPx: t.exit_px, qty: t.filled_qty || t.qty,
