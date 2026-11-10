@@ -150,3 +150,21 @@ test('limiter drops queued work as soon as the signal aborts', async () => {
   assert.equal(released, false);
   assert.equal(await hold, 'ok');
 });
+
+test('Technicals.analyze expects objects and a numeric now, not arrays with options as now', () => {
+  require('../public/indicators.js');
+  const bars = [];
+  let t0 = Date.UTC(2026, 9, 1, 0, 0, 0);
+  for (let i = 0; i < 240; i++) {
+    bars.push({ t: t0, T: t0 + 1800e3 - 1, o: 10, h: 11, l: 9, c: 10.2, v: 100, closed: true });
+    t0 += 1800e3;
+  }
+  const now = bars[bars.length - 1].T + 1000;
+  const ok = globalThis.Technicals.analyze(bars, now, { minStopPct: 1.5 });
+  assert.ok(ok.candleCount >= 220);
+  assert.ok(['LONG', 'SHORT', 'WAIT'].includes(ok.direction));
+  const asArrays = bars.map((k) => [k.t, k.o, k.h, k.l, k.c, k.v]);
+  assert.throws(() => globalThis.Technicals.analyze(asArrays, { minStopPct: 1.5 }), /220 completed candles/);
+  const src = fs.readFileSync(path.join(__dirname, '../server/binance-trader.js'), 'utf8');
+  assert.match(src, /Technicals\.analyze\(\s*kl\s*,\s*Date\.now\(\)/);
+});

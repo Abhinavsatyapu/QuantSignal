@@ -845,8 +845,7 @@ async function scanOnce(reason) {
         const kl = await getScanKlines(symbol, c.interval, ac.signal);
         if (!kl.length) continue;
         state.marks[symbol] = kl[kl.length - 1].c;
-        const candles = kl.map((k) => [k.t, k.o, k.h, k.l, k.c, k.v]);
-        const a = Technicals.analyze(candles, { minStopPct: c.defaultStopPct });
+        const a = Technicals.analyze(kl, Date.now(), { minStopPct: c.defaultStopPct });
         store.db.prepare(`INSERT INTO bn_scans(symbol,interval,ts,closed_at,direction,score,data) VALUES(?,?,?,?,?,?,?)
           ON CONFLICT(symbol,interval) DO UPDATE SET ts=excluded.ts, closed_at=excluded.closed_at, direction=excluded.direction, score=excluded.score, data=excluded.data`)
           .run(symbol, c.interval, Date.now(), a.closedAt ?? null, a.direction ?? null, a.score ?? null, JSON.stringify(a));
