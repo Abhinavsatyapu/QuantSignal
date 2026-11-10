@@ -41,6 +41,7 @@ app.use(compression());
 app.use((req, res, next) => { const t0 = Date.now(); res.on('finish', () => { if (req.path.startsWith('/api/') || res.statusCode >= 500) log.info('http', { method: req.method, path: req.path, status: res.statusCode, ms: Date.now() - t0 }); }); next(); });
 app.get('/version', (req, res) => res.json(auth.publicVersion(VERSION)));
 app.use('/api/strategy/import', express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: false, limit: '16kb' }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.text({ type: ['text/plain'], limit: '1mb' }));
 
@@ -58,8 +59,10 @@ const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { if (
 app.use(auth.attachUser);
 auth.mountRoutes(app, { wrap });
 app.get('/login', (req, res) => {
-  if (req.user && req.user.role === 'owner') return res.redirect(302, '/');
-  res.sendFile(path.join(config.ROOT, 'public', 'login.html'));
+  const next = auth.safeNext(req.query && req.query.next);
+  if (req.user && req.user.role === 'owner') return res.redirect(302, next);
+  const html = fs.readFileSync(path.join(config.ROOT, 'public', 'login.html'), 'utf8');
+  res.type('html').send(auth.fillLoginPage(html, { next, error: req.query && req.query.error }));
 });
 // Session required for all non-public routes (owner only; fail closed)
 app.use((req, res, next) => {

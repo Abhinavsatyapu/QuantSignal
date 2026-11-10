@@ -208,7 +208,7 @@ function publicPath(path) {
   if (path === '/login') return true;
   if (path === '/api/auth/login' || path === '/api/auth/logout' || path === '/api/auth/me') return true;
   if (path === '/webhook') return true;
-  if (path === '/styles.css' || path === '/ds.css' || path === '/favicon.svg') return true;
+  if (path === '/styles.css' || path === '/ds.css' || path === '/favicon.svg' || path === '/login.js') return true;
   return false;
 }
 
@@ -257,6 +257,63 @@ function redactSecrets(obj) {
   return walk(obj);
 }
 
+function safeNext(raw, fallback = '/futures') {
+  const s = String(raw == null ? '' : raw).trim();
+  if (!s.startsWith('/') || s.startsWith('//') || s.includes('\\') || s.includes('://') || /[\u0000-\u001f]/.test(s)) return fallback;
+  const pathOnly = s.split('?')[0].split('#')[0];
+  if (pathOnly === '/login' || pathOnly.startsWith('/login/')) return fallback;
+  return s;
+}
+
+function loginErrorText(code) {
+  switch (String(code || '')) {
+    case 'invalid': return 'Invalid password';
+    case 'rate': return 'Too many login attempts — try again shortly';
+    case 'locked': return 'Server locked: OWNER_PASSWORD is not set.';
+    default: return '';
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function fillLoginPage(html, { next, error } = {}) {
+  const n = escapeHtml(safeNext(next));
+  const e = escapeHtml(loginErrorText(error));
+  return String(html).replace(/\{\{NEXT\}\}/g, n).replace(/\{\{ERROR\}\}/g, e);
+}
+
+function wantsFormRedirect(req) {
+  const ct = String(req.get('content-type') || '');
+  if (ct.includes('application/x-www-form-urlencoded') || ct.includes('multipart/form-data')) return true;
+  if (req.path === '/login' && req.method === 'POST') return true;
+  return false;
+}
+
+function handleLogin(req, res) {
+  const form = wantsFormRedirect(req);
+  const nextVal = safeNext(req.body && req.body.next);
+  if (!ownerConfigured()) {
+    if (form) return res.redirect(303, '/login?error=locked&next=' + encodeURIComponent(nextVal));
+    return res.status(503).json({ error: 'OWNER_PASSWORD not configured — cannot log in' });
+  }
+  const ip = req.ip || 'unknown';
+  if (!rateLimitLogin(ip)) {
+    if (form) return res.redirect(303, '/login?error=rate&next=' + encodeURIComponent(nextVal));
+    return res.status(429).json({ error: 'Too many login attempts — try again shortly' });
+  }
+  const password = req.body && req.body.password;
+  const asOwner = verifyAgainstEnv(password, ownerPassword());
+  if (asOwner) {
+    setSessionCookie(res, mintSession('owner'));
+    if (form) return res.redirect(303, nextVal);
+    return res.json({ ok: true, role: 'owner', readOnly: false });
+  }
+  if (form) return res.redirect(303, '/login?error=invalid&next=' + encodeURIComponent(nextVal));
+  return res.status(401).json({ error: 'Invalid password' });
+}
+
 function mountRoutes(app, { wrap }) {
   app.get('/api/auth/me', (req, res) => {
     if (!ownerConfigured()) {
@@ -274,22 +331,9 @@ function mountRoutes(app, { wrap }) {
     return res.status(401).json({ authenticated: false, role: null, configured: true, guestConfigured: false });
   });
 
-  app.post('/api/auth/login', (req, res) => {
-    if (!ownerConfigured()) {
-      return res.status(503).json({ error: 'OWNER_PASSWORD not configured — cannot log in' });
-    }
-    const ip = req.ip || 'unknown';
-    if (!rateLimitLogin(ip)) return res.status(429).json({ error: 'Too many login attempts — try again shortly' });
-    const password = req.body && req.body.password;
-    // Owner only. Still compare against a dummy when unset would have been caught above.
-    // If a leftover GUEST_PASSWORD is set, it is never accepted.
-    const asOwner = verifyAgainstEnv(password, ownerPassword());
-    if (asOwner) {
-      setSessionCookie(res, mintSession('owner'));
-      return res.json({ ok: true, role: 'owner', readOnly: false });
-    }
-    return res.status(401).json({ error: 'Invalid password' });
-  });
+  // JSON API (fetch) and the same handler for the no-JS HTML form POST to /login.
+  app.post('/api/auth/login', handleLogin);
+  app.post('/login', handleLogin);
 
   app.post('/api/auth/logout', (req, res) => {
     clearSessionCookie(res);
@@ -302,4 +346,5 @@ module.exports = {
   publicHealth, publicVersion, publicPath, guestAllowed, redactSecrets,
   ownerConfigured, guestConfigured, ownerPassword, guestPassword, resolveEnvSecret, passwordVersion,
   verifyAgainstEnv, mintSession, verifyToken, setSessionCookie, clearSessionCookie, readSession,
+  safeNext, loginErrorText, escapeHtml, fillLoginPage, wantsFormRedirect, handleLogin,
 };

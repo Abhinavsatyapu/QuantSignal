@@ -27,7 +27,8 @@ html,body{margin:0;background:#070b12;color:#e8eefc;}
 </head>
 <body>
 <main class="login-wrap">
-  <form class="login-card" id="f" autocomplete="current-password">
+  <form class="login-card" id="f" method="post" action="/login" autocomplete="current-password">
+    <input type="hidden" name="next" id="next" value="{{NEXT}}">
     <div class="login-brand">
       <div class="logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 16l5-6 4 4 7-9"/></svg></div>
       <div><strong>QuantSignal</strong><div class="sub" style="margin:0">Owner access</div></div>
@@ -37,31 +38,10 @@ html,body{margin:0;background:#070b12;color:#e8eefc;}
     <label for="pw">Owner password</label>
     <input id="pw" name="password" type="password" required autofocus minlength="1" autocomplete="current-password">
     <button type="submit" id="btn">Continue</button>
-    <p class="login-err" id="err" role="alert"></p>
+    <p class="login-err" id="err" role="alert">{{ERROR}}</p>
     <p class="login-note">Sessions use an httpOnly cookie. Changing the owner password signs out existing sessions.</p>
   </form>
 </main>
-<script>
-(function(){
-  const params=new URLSearchParams(location.search);
-  const next=params.get('next')||'/';
-  const err=document.getElementById('err');
-  const btn=document.getElementById('btn');
-  document.getElementById('f').addEventListener('submit',async(e)=>{
-    e.preventDefault(); err.textContent=''; btn.disabled=true;
-    try{
-      const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({password:document.getElementById('pw').value})});
-      const d=await r.json().catch(()=>({}));
-      if(!r.ok){ err.textContent=d.error||('Login failed ('+r.status+')'); btn.disabled=false; return; }
-      if(d.role && d.role!=='owner'){ err.textContent='Owner login required'; btn.disabled=false; return; }
-      location.replace(next.startsWith('/')?next:'/');
-    }catch(ex){ err.textContent='Network error'; btn.disabled=false; }
-  });
-  fetch('/api/auth/me',{credentials:'same-origin'}).then(r=>r.json()).then(d=>{
-    if(d.authenticated && d.role==='owner') location.replace(next.startsWith('/')?next:'/');
-    if(d.configured===false) err.textContent='Server locked: OWNER_PASSWORD is not set.';
-  }).catch(()=>{});
-})();
-</script>
+<script src="/login.js"></script>
 </body>
 </html>

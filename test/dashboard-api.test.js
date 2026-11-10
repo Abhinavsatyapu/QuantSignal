@@ -131,6 +131,10 @@ describe('dashboard API + pages', () => {
     const login = fs.readFileSync(path.join(PUB, 'login.html'), 'utf8');
     assert.match(login, /Owner password/);
     assert.doesNotMatch(login, /guest password/i);
+    assert.match(login, /method="post"/i);
+    assert.match(login, /action="\/login"/);
+    assert.match(login, /src="\/login\.js"/);
+    assert.doesNotMatch(login, /<script>(?![^>]*src=)/);
     const shell = fs.readFileSync(path.join(PUB, 'shell.js'), 'utf8');
     for (const id of ['qsMode', 'qsEquity', 'qsDayPnl', 'qsPos', 'qsFeed', 'qsHealth', 'qsClock']) {
       assert.match(shell, new RegExp(id));
