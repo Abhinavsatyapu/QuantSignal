@@ -2,6 +2,9 @@
 const path = require('path');
 const crypto = require('crypto');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env'), quiet: true });
+const { installProcessGuards, listenThenWarmup } = require('./boot');
+const log = require('./log');
+installProcessGuards(log);
 const express = require('express');
 const config = require('./config');
 config.load();
@@ -18,7 +21,6 @@ const auth = require('./auth');
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', true);
-const log = require('./log');
 const helmet = require('helmet'), compression = require('compression');
 const fs = require('fs');
 // ---- version (commit sha + build time) — Render exposes RENDER_GIT_COMMIT; the Docker build writes BUILD_TIME
@@ -30,7 +32,7 @@ const VERSION = (() => {
 })();
 app.use(helmet({
   contentSecurityPolicy: { useDefaults: true, directives: {
-    'default-src': ["'self'"], 'script-src': ["'self'"], 'style-src': ["'self'", "'unsafe-inline'"], 'img-src': ["'self'", 'data:', 'blob:'],
+    'default-src': ["'self'"], 'script-src': ["'self'"], 'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'], 'img-src': ["'self'", 'data:', 'blob:'],
     'connect-src': ["'self'", 'https://api.hyperliquid.xyz', 'https://api.hyperliquid-testnet.xyz', 'wss://api.hyperliquid.xyz', 'https://data-api.binance.vision', 'https://www.binance.com', 'https://fapi.binance.com', 'https://testnet.binancefuture.com', 'wss://fstream.binance.com', 'wss://stream.binancefuture.com'],
     'font-src': ["'self'", 'data:', 'https://fonts.gstatic.com'], 'object-src': ["'none'"], 'frame-ancestors': ["'none'"], 'base-uri': ["'self'"], 'form-action': ["'self'"], 'upgrade-insecure-requests': null } },
   crossOriginEmbedderPolicy: false, referrerPolicy: { policy: 'same-origin' } }));
@@ -324,17 +326,51 @@ app.use((err, req, res, next) => { log.error('http.error', { path: req.path, err
 
 const cfg = config.get();
 const port = Number(process.env.PORT) || cfg.port;
+const host = process.env.HOST || cfg.host || '0.0.0.0';
 const strategyMod = require('./strategy');
-strategyMod.initPersistence().catch(e => log.error('persist.init_crash', { error: e.message })).finally(() => {
-  const server = app.listen(port, cfg.host, () => {
-    store.log('info', `QuantSignal server listening on http://${cfg.host}:${port}`);
-    log.info('server.start', { port, commit: VERSION.commit, storage: require('./persist').backend(), ownerAuth: auth.ownerConfigured(), guestAuth: 'disabled' });
-    engine.start();
-  try { bnTrader.start(); } catch (e) { log.error('bnTrader.start_failed', { error: e.message }); };
-  try { tradeLessons.buildSuggestions(); } catch (e) { log.warn('tradeLessons.suggest_failed', { error: e.message }); }
-  try { if (bnWhales.start) bnWhales.start(); else bnWhales.refresh({ limit: 12 }).catch(()=>{}); } catch (e) { log.error('bnWhales.start_failed', { error: e.message }); };
+
+async function warmup() {
+  try { await strategyMod.initPersistence(); }
+  catch (e) { log.error('persist.init_crash', { error: e.message }); }
+  try { engine.start(); }
+  catch (e) { log.error('engine.start_failed', { error: e.message }); }
+  try { bnTrader.start(); }
+  catch (e) { log.error('bnTrader.start_failed', { error: e.message }); }
+  try { tradeLessons.buildSuggestions(); }
+  catch (e) { log.warn('tradeLessons.suggest_failed', { error: e.message }); }
+  try {
+    if (bnWhales.start) bnWhales.start();
+    else await bnWhales.refresh({ limit: 12 }).catch(() => {});
+  } catch (e) { log.error('bnWhales.start_failed', { error: e.message }); }
+}
+
+function startServer(opts = {}) {
+  const bindHost = opts.host || host;
+  const bindPort = opts.port != null ? opts.port : port;
+  const { server, listening } = listenThenWarmup(app, {
+    port: bindPort,
+    host: bindHost,
+    warmup: opts.skipWarmup ? async () => {} : warmup,
+    log,
+    onListening(srv) {
+      const addr = srv.address();
+      const p = (addr && addr.port) || bindPort;
+      store.log('info', `QuantSignal server listening on http://${bindHost}:${p}`);
+      log.info('server.start', { port: p, host: bindHost, commit: VERSION.commit, storage: require('./persist').backend(), ownerAuth: auth.ownerConfigured(), guestAuth: 'disabled' });
+    },
   });
-  const stop = (sig) => { log.info('server.stop', { signal: sig }); server.close(); require('./persist').close().finally(() => process.exit(0)); setTimeout(() => process.exit(0), 8000).unref(); };
-  process.on('SIGTERM', () => stop('SIGTERM')); process.on('SIGINT', () => stop('SIGINT'));
-});
-process.on('unhandledRejection', e => store.log('error', 'unhandledRejection: ' + (e?.message || e)));
+  if (opts.handleSignals !== false) {
+    const stop = (sig) => {
+      log.info('server.stop', { signal: sig });
+      server.close();
+      require('./persist').close().finally(() => process.exit(0));
+      setTimeout(() => process.exit(0), 8000).unref();
+    };
+    process.on('SIGTERM', () => stop('SIGTERM'));
+    process.on('SIGINT', () => stop('SIGINT'));
+  }
+  return { server, listening };
+}
+
+if (require.main === module) startServer();
+module.exports = { app, startServer, warmup, VERSION };

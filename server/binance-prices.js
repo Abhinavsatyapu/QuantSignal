@@ -23,37 +23,84 @@ function Prices(opts = {}) {
   const MAX_REFRESH_MS = Number(opts.maxRefreshMs) > 0 ? Number(opts.maxRefreshMs) : 5000;
   const STALE_MS = Number(opts.staleMs) > 0 ? Number(opts.staleMs) : 10000;
 
+  let restBusy = false;
   async function restTick() {
+    if (restBusy) return;
+    restBusy = true;
     try {
-      const rows = await Promise.all(symbols.map(async (symbol) => {
-        try {
-          const [m, t] = await Promise.all([
-            client.markPrice(symbol),
-            client.publicGet('/fapi/v1/ticker/bookTicker', { symbol }).catch(() => null),
-          ]);
-          return {
-            symbol,
-            markPrice: Number(m.markPrice),
-            indexPrice: Number(m.indexPrice),
-            lastPrice: Number(m.markPrice),
-            bid: t ? Number(t.bidPrice) : null,
-            ask: t ? Number(t.askPrice) : null,
-            ts: Date.now(),
-          };
-        } catch (e) {
-          if (e.status === 451 || e.status === 403) state.geoBlocked = true;
-          throw e;
+      const wanted = new Set(symbols);
+      let markRows, bookRows;
+      try {
+        const [marks, books] = await Promise.all([
+          client.markPrice(),
+          client.publicGet('/fapi/v1/ticker/bookTicker').catch(() => []),
+        ]);
+        markRows = Array.isArray(marks) ? marks : (marks ? [marks] : []);
+        bookRows = Array.isArray(books) ? books : (books ? [books] : []);
+      } catch (e) {
+        if (e.status === 451 || e.status === 403 || /restricted location/i.test(e.message || '')) state.geoBlocked = true;
+        // Fallback: small concurrent batches instead of one request per symbol in parallel.
+        markRows = [];
+        bookRows = [];
+        const chunk = 4;
+        for (let i = 0; i < symbols.length; i += chunk) {
+          const part = symbols.slice(i, i + chunk);
+          const got = await Promise.all(part.map(async (symbol) => {
+            try {
+              const [m, t] = await Promise.all([
+                client.markPrice(symbol),
+                client.publicGet('/fapi/v1/ticker/bookTicker', { symbol }).catch(() => null),
+              ]);
+              return { m, t, symbol };
+            } catch (err) {
+              if (err.status === 451 || err.status === 403) state.geoBlocked = true;
+              return null;
+            }
+          }));
+          for (const row of got) {
+            if (!row || !row.m) continue;
+            markRows.push(Object.assign({ symbol: row.symbol }, row.m));
+            if (row.t) bookRows.push(Object.assign({ symbol: row.symbol }, row.t));
+          }
         }
-      }));
-      for (const r of rows) if (r && r.markPrice > 0) state.marks[r.symbol] = r;
-      state.lastUpdateAt = Date.now();
-      state.lastError = null;
-      if (state.transport !== 'ws') state.transport = 'rest';
-      emitter.emit('update', snapshot());
+      }
+      const bookBy = new Map();
+      for (const t of bookRows) {
+        const sym = String(t.symbol || '').toUpperCase();
+        if (wanted.has(sym)) bookBy.set(sym, t);
+      }
+      const now = Date.now();
+      let n = 0;
+      for (const m of markRows) {
+        const symbol = String(m.symbol || '').toUpperCase();
+        if (!wanted.has(symbol)) continue;
+        const markPrice = Number(m.markPrice);
+        if (!(markPrice > 0)) continue;
+        const t = bookBy.get(symbol);
+        const prev = state.marks[symbol] || {};
+        state.marks[symbol] = {
+          symbol,
+          markPrice,
+          indexPrice: Number(m.indexPrice),
+          lastPrice: markPrice,
+          bid: t ? Number(t.bidPrice) : (prev.bid ?? null),
+          ask: t ? Number(t.askPrice) : (prev.ask ?? null),
+          ts: now,
+        };
+        n++;
+      }
+      if (n) {
+        state.lastUpdateAt = now;
+        state.lastError = null;
+        if (state.transport !== 'ws') state.transport = 'rest';
+        emitter.emit('update', snapshot());
+      }
     } catch (e) {
       state.lastError = e.message;
       if (e.status === 451 || /restricted location/i.test(e.message)) state.geoBlocked = true;
       emitter.emit('error', e);
+    } finally {
+      restBusy = false;
     }
   }
 

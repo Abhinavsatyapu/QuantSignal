@@ -238,8 +238,11 @@ async function refreshUniverse(force = false) {
 }
 
 async function loadExchangeInfo() {
-  try { state.symbolInfo = await (await ensureClient()).exchangeInfo(); return state.symbolInfo; }
-  catch (e) { state.lastError = e.message; blog('warn', 'exchangeInfo: ' + e.message); return null; }
+  try {
+    const raw = await (await ensureClient()).exchangeInfo();
+    state.symbolInfo = bn.slimExchangeInfo(raw, (cfgBn().assets || []));
+    return state.symbolInfo;
+  } catch (e) { state.lastError = e.message; blog('warn', 'exchangeInfo: ' + e.message); return null; }
 }
 function filt(symbol) {
   return state.symbolInfo ? bn.filtersOf(state.symbolInfo, symbol) : { symbol, stepSize: 0.001, tickSize: 0.1, minQty: 0.001, minNotional: 5 };
@@ -1063,11 +1066,17 @@ function start() {
       } else blog('warn', 'No TRADING EQUITY/TradFi perpetuals found on Binance USD-M');
     } catch (e) { blog('warn', 'universe discovery: ' + e.message); }
   }).catch(() => {});
+  if (state.prices && state.prices.stop) try { state.prices.stop(); } catch {}
   state.prices = Prices({ symbols: c.assets.length ? c.assets : DEFAULT_SYMBOLS, client: null });
   // Wire price client after ensureClient asynchronously
-  ensureClient().then((cl) => { state.prices = Prices({ symbols: c.assets, client: cl }); state.prices.start(); state.prices.emitter.on('update', (snap) => {
-    for (const [sym, m] of Object.entries(snap.marks || {})) if (m.markPrice > 0) state.marks[sym] = m.markPrice;
-  }); }).catch(() => { state.prices.start(); });
+  ensureClient().then((cl) => {
+    if (state.prices && state.prices.stop) try { state.prices.stop(); } catch {}
+    state.prices = Prices({ symbols: c.assets.length ? c.assets : DEFAULT_SYMBOLS, client: cl });
+    state.prices.start();
+    state.prices.emitter.on('update', (snap) => {
+      for (const [sym, m] of Object.entries(snap.marks || {})) if (m.markPrice > 0) state.marks[sym] = m.markPrice;
+    });
+  }).catch(() => { try { state.prices.start(); } catch (e) { blog('warn', 'prices.start: ' + e.message); } });
 
   const boot = async () => {
     try { await loadExchangeInfo(); } catch {}
@@ -1076,7 +1085,7 @@ function start() {
     every(6 * 3600e3, async () => { await refreshUniverse(false); });
     try { await scanOnce('startup'); } catch (e) { blog('warn', 'startup scan: ' + e.message); }
   };
-  boot();
+  boot().catch((e) => blog('warn', 'startup boot: ' + (e && e.message)));
   const every = (ms, fn) => { const id = setInterval(() => { fn().catch((e) => blog('warn', e.message)); }, ms); state.timers.push(id); };
   every(2000, async () => {
     await processPendings();

@@ -239,6 +239,23 @@ function filtersOf(info, symbol) {
   };
 }
 
+/** Keep only the filter fields we need for configured symbols so the full exchangeInfo payload is not retained. */
+function slimExchangeInfo(info, assets) {
+  if (!info || !Array.isArray(info.symbols)) return info || { symbols: [] };
+  const wanted = new Set((assets || []).map((s) => String(s).toUpperCase()).filter(Boolean));
+  const keepTypes = new Set(['LOT_SIZE', 'PRICE_FILTER', 'MIN_NOTIONAL', 'NOTIONAL', 'PERCENT_PRICE', 'PERCENT_PRICE_BY_SIDE']);
+  const src = wanted.size ? info.symbols.filter((s) => wanted.has(String(s.symbol || '').toUpperCase())) : [];
+  return {
+    symbols: src.map((s) => ({
+      symbol: s.symbol,
+      status: s.status,
+      pricePrecision: s.pricePrecision,
+      quantityPrecision: s.quantityPrecision,
+      filters: (s.filters || []).filter((f) => keepTypes.has(f.filterType)),
+    })),
+  };
+}
+
 /** Size a USD-M futures order so the $ loss at the stop ≈ riskUsd, capped by margin budget and leverage. */
 function sizePosition({ capital, leverage, riskPerTradePct, maxConcurrent, entry, stopPct, stepSize, minQty, minNotional, openCount }) {
   if (!(capital > 0 && leverage >= 1 && entry > 0 && stopPct > 0)) throw new Error('Invalid sizing inputs');
@@ -264,5 +281,6 @@ function clientOrderId(parts) {
 }
 
 module.exports = {
+  slimExchangeInfo,
   URLS, runtime, Client, roundStep, roundTick, filtersOf, sizePosition, clientOrderId,
 };
