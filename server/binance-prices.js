@@ -3,6 +3,7 @@
 // Public data only (no keys). Prefers WebSocket; falls back to REST polling when WS is geo-blocked.
 const { EventEmitter } = require('events');
 const bn = require('./binance');
+const httpUtil = require('./binance-http-util');
 
 const DEFAULT_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'AVAXUSDT'];
 const WS_BACKOFF_MIN = 1000;
@@ -23,6 +24,8 @@ function wsNeedsWatchdog(lastUpdateAt, transport, now, limitMs = 15000) {
 function Prices(opts = {}) {
   const symbols = (opts.symbols || DEFAULT_SYMBOLS).map((s) => String(s).toUpperCase());
   const client = opts.client || bn.Client({});
+  const klineInterval = opts.interval || '30m';
+  const onKline = typeof opts.onKline === 'function' ? opts.onKline : null;
   const emitter = new EventEmitter();
   const state = {
     source: 'Binance USDⓈ-M',
@@ -45,7 +48,9 @@ function Prices(opts = {}) {
 
   let restBusy = false;
   async function restTick() {
-    if (restBusy) return;
+    if (restBusy || state.stopped) return;
+    if (httpUtil.isBanned()) return;
+    if (state.transport === 'ws' && state.lastUpdateAt && (Date.now() - state.lastUpdateAt) < STALE_MS) return;
     restBusy = true;
     try {
       const wanted = new Set(symbols);
@@ -58,6 +63,7 @@ function Prices(opts = {}) {
         markRows = Array.isArray(marks) ? marks : (marks ? [marks] : []);
         bookRows = Array.isArray(books) ? books : (books ? [books] : []);
       } catch (e) {
+        httpUtil.noteBanFromError(e);
         if (e.status === 451 || e.status === 403 || /restricted location/i.test(e.message || '')) state.geoBlocked = true;
         // Fallback: small concurrent batches instead of one request per symbol in parallel.
         markRows = [];
@@ -142,7 +148,9 @@ function Prices(opts = {}) {
     try { WebSocket = require('ws'); } catch { state.transport = 'rest'; return; }
     const streams = symbols.flatMap((s) => {
       const x = s.toLowerCase();
-      return [x + '@markPrice@1s', x + '@bookTicker'];
+      const out = [x + '@markPrice@1s', x + '@bookTicker'];
+      if (onKline) out.push(x + '@kline_' + klineInterval);
+      return out;
     }).join('/');
     const url = client.urls().ws + '/stream?streams=' + streams;
     try {
@@ -178,6 +186,9 @@ function Prices(opts = {}) {
         } else if (stream.includes('bookTicker') || d.e === 'bookTicker') {
           cur.bid = Number(d.b); cur.ask = Number(d.a); cur.lastPrice = Number(d.b || d.a); cur.ts = Date.now();
           if (!(cur.markPrice > 0)) cur.markPrice = cur.lastPrice;
+        } else if (onKline && (stream.includes('kline') || d.e === 'kline') && d.k) {
+          const k = d.k;
+          onKline(sym, { t: Number(k.t), T: Number(k.T), o: +k.o, h: +k.h, l: +k.l, c: +k.c, v: +k.v, closed: !!k.x }, k.i || klineInterval);
         }
         state.marks[sym] = cur; state.lastUpdateAt = Date.now();
         emitter.emit('update', snapshot());
@@ -228,8 +239,7 @@ function Prices(opts = {}) {
 
   function start() {
     state.stopped = false;
-    // Always keep a REST heartbeat ≤5s so UI + bot stay fresh even if WS stalls.
-    restTick();
+    // REST is a fallback only: skip while the websocket is fresh or Binance has banned this IP.
     state.timers.push(setInterval(restTick, MAX_REFRESH_MS));
     state.timers.push(setInterval(() => {
       const age = state.lastUpdateAt ? Date.now() - state.lastUpdateAt : Infinity;

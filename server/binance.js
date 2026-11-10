@@ -5,6 +5,7 @@
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
 const limiter = require('./binance-limiter');
+const httpUtil = require('./binance-http-util');
 
 const URLS = {
   // fapi.binance.com returns HTTP 451 from many cloud/US IPs; www.binance.com/fapi proxies the same public endpoints.
@@ -61,9 +62,18 @@ function Client(opts = {}) {
 
   async function raw(method, path, { query = {}, signed = false, body = null, publicOk = false, signal = null, timeoutMs = 8000, priority = 'normal' } = {}, attempt = 0) {
     if (signal && signal.aborted) throw limiter.abortError(signal);
+    if (httpUtil.isBanned() && !signed) {
+      const err = Object.assign(new Error(httpUtil.banInfo().message || 'Binance REST IP banned'), { status: 418, code: 418 });
+      throw err;
+    }
     if (Date.now() < state.rateLimitedUntil) {
       const wait = state.rateLimitedUntil - Date.now();
-      await sleep(Math.min(wait, 3000));
+      // Fail fast on long cooldowns so callers can use WS/archive fallbacks.
+      if (wait > 2000 && !signed) {
+        const err = Object.assign(new Error('Binance REST rate limited'), { status: 429, code: 429 });
+        throw err;
+      }
+      await httpUtil.abortableSleep(Math.min(wait, 2000), signal);
     }
     const run = () => rawOnce(method, path, { query, signed, body, publicOk, signal, timeoutMs, priority }, attempt);
     // Signed / already-inside-limiter recursive retries skip the queue to preserve attempt state.
@@ -101,31 +111,47 @@ function Client(opts = {}) {
     if (key) headers['X-MBX-APIKEY'] = key;
     let res;
     const timeout = Number(timeoutMs) > 0 ? Number(timeoutMs) : 8000;
-    let fetchSignal = AbortSignal.timeout(timeout);
+    const ac = new AbortController();
+    const onAbort = () => { try { ac.abort(signal && signal.reason ? signal.reason : 'timeout'); } catch {} };
     if (signal) {
-      const ac = new AbortController();
-      const onAbort = () => ac.abort(signal.reason || 'aborted');
-      if (signal.aborted) onAbort();
-      else signal.addEventListener('abort', onAbort, { once: true });
-      fetchSignal = AbortSignal.any ? AbortSignal.any([fetchSignal, ac.signal]) : ac.signal;
-      // If AbortSignal.any is missing, still honor timeout:
-      if (!AbortSignal.any) setTimeout(() => { try { ac.abort('timeout'); } catch {} }, timeout);
+      if (signal.aborted) throw limiter.abortError(signal);
+      signal.addEventListener('abort', onAbort, { once: true });
     }
     try {
-      res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined, signal: fetchSignal });
+      res = await httpUtil.withDeadline(
+        fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined, signal: ac.signal }),
+        timeout,
+        signal,
+        'timeout',
+      );
     } catch (e) {
+      onAbort();
       if (signal && signal.aborted) throw limiter.abortError(signal);
-      if (attempt < 1) { await sleep(200 * 2 ** attempt); return raw(method, path, { query, signed, body, publicOk, signal, timeoutMs, priority }, attempt + 1); }
+      if (e && e.name === 'TimeoutError' && attempt < 1 && !httpUtil.isBanned()) {
+        await httpUtil.abortableSleep(200, signal);
+        return raw(method, path, { query, signed, body, publicOk, signal, timeoutMs, priority }, attempt + 1);
+      }
       state.lastError = e.message; throw e;
+    } finally {
+      if (signal) try { signal.removeEventListener('abort', onAbort); } catch {}
     }
-    const text = await res.text();
+    const text = await httpUtil.withDeadline(res.text(), Math.min(4000, timeout), signal, 'body timeout');
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
     if (res.status === 429 || res.status === 418) {
-      const retry = Math.min(5000, Math.max(250, Number(res.headers.get('retry-after') || 1) * 1000 || 1000));
-      state.rateLimitedUntil = Date.now() + retry;
-      try { limiter.pause(retry); } catch {}
-      if (attempt < 2) { await sleep(retry); return raw(method, path, { query, signed, body, publicOk, signal, timeoutMs, priority }, attempt + 1); }
+      const msg = (data && (data.msg || data.message)) || text || ('HTTP ' + res.status);
+      httpUtil.noteBan(msg);
+      httpUtil.noteBanFromError(Object.assign(new Error(msg), { status: res.status }));
+      const banUntil = httpUtil.bannedUntilMs();
+      const retryHdr = Number(res.headers.get('retry-after') || 0) * 1000;
+      const retry = banUntil > Date.now()
+        ? Math.min(60e3, Math.max(0, banUntil - Date.now()))
+        : Math.min(5000, Math.max(250, retryHdr || 1000));
+      state.rateLimitedUntil = Math.max(state.rateLimitedUntil, banUntil || (Date.now() + retry));
+      try { limiter.pause(Math.min(retry, 15e3)); } catch {}
+      const err = Object.assign(new Error(msg), { status: res.status, code: data && data.code, data });
+      state.lastError = err.message;
+      throw err; // never retry into an IP ban or 429 cooldown
     }
     // -1021 timestamp drift: resync and retry once
     if (data && data.code === -1021 && attempt < 2) {
@@ -139,7 +165,7 @@ function Client(opts = {}) {
       if ((res.status === 451 || res.status === 403) && !signed && method === 'GET' && attempt < 2 && urls().publicRest && !String(u).startsWith(urls().publicRest)) {
         return raw(method, path, { query, signed, body, publicOk: true, signal, timeoutMs, priority }, attempt + 1);
       }
-      if (attempt < 2 && res.status >= 500) { await sleep(300 * 2 ** attempt); return raw(method, path, { query, signed, body, publicOk, signal, timeoutMs, priority }, attempt + 1); }
+      if (attempt < 2 && res.status >= 500) { await httpUtil.abortableSleep(300 * 2 ** attempt, signal); return raw(method, path, { query, signed, body, publicOk, signal, timeoutMs, priority }, attempt + 1); }
       throw err;
     }
     return data;

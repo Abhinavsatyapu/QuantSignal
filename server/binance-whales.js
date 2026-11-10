@@ -11,6 +11,7 @@ const { ForceOrderTape } = require('./whales-force-order');
 const institutions = require('./whales-institutions');
 const wutil = require('./whales-util');
 const limiter = require('./binance-limiter');
+const httpUtil = require('./binance-http-util');
 
 const DATA = 'https://fapi.binance.com'; // futures/data/* lives here
 const state = {
@@ -25,17 +26,24 @@ const forceTape = ForceOrderTape({ store, symbols: [] });
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 async function dataGet(path, params = {}) {
-  const client = bn.Client({});
-  // publicGet on fapi for /futures/data/* — use absolute via fetch on DATA host
+  if (httpUtil.isBanned()) throw new Error('Binance REST IP banned; skipping whale data fetch');
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v != null) q.set(k, String(v));
   const url = DATA + path + (q.toString() ? '?' + q : '');
+  const ac = new AbortController();
   const res = await limiter.schedule(
-    () => fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8000) }),
+    () => httpUtil.withDeadline(
+      fetch(url, { headers: { Accept: 'application/json' }, signal: ac.signal }),
+      8000,
+      null,
+      'timeout',
+    ).catch((e) => { try { ac.abort(); } catch {}; throw e; }),
     { priority: 'low' },
   );
   if (!res.ok) {
     const t = await res.text().catch(() => '');
+    httpUtil.noteBan(t);
+    httpUtil.noteBanFromError(Object.assign(new Error(t), { status: res.status }));
     const err = new Error(`Binance data ${res.status}: ${t.slice(0, 160)}`);
     err.code = res.status;
     throw err;

@@ -3,6 +3,8 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createLimiter } = require('../server/binance-limiter');
 const { mergeBars, nextFetchLimit, createKlineCache } = require('../server/binance-klines-cache');
+const httpUtil = require('../server/binance-http-util');
+const archive = require('../server/binance-klines-archive');
 const fs = require('fs');
 const path = require('path');
 
@@ -101,4 +103,50 @@ test('Live Signals badge uses Engine LIVE when the scan is fresh', () => {
   const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'signals.js'), 'utf8');
   assert.match(js, /Engine LIVE/);
   assert.match(js, /Engine STALE/);
+});
+
+test('parseBanUntil and fail-fast ban helpers', () => {
+  httpUtil._resetBanForTests();
+  const ms = httpUtil.parseBanUntil('Way too many requests; IP(1.2.3.4) banned until 1794511548522. Please use the websocket');
+  assert.equal(ms, 1794511548522);
+  assert.equal(httpUtil.parseBanUntil('banned until 1794511548'), 1794511548000);
+  httpUtil.noteBan('IP banned until 1794511548522');
+  assert.equal(httpUtil.isBanned(1794511548522 - 1000), true);
+  assert.equal(httpUtil.isBanned(1794511548522 + 1000), false);
+  httpUtil._resetBanForTests();
+  assert.equal(httpUtil.isBanned(), false);
+});
+
+test('abortableSleep and withDeadline reject quickly on abort or timeout', async () => {
+  const ac = new AbortController();
+  const started = Date.now();
+  setTimeout(() => ac.abort('stop'), 20);
+  await assert.rejects(httpUtil.abortableSleep(5000, ac.signal), /stop|aborted/);
+  assert.ok(Date.now() - started < 500, 'sleep should not wait out the delay');
+
+  await assert.rejects(httpUtil.withDeadline(new Promise(() => {}), 30, null, 'deadline'), /deadline/);
+  const ac2 = new AbortController();
+  setTimeout(() => ac2.abort('cut'), 15);
+  await assert.rejects(httpUtil.withDeadline(new Promise(() => {}), 5000, ac2.signal, 'deadline'), /cut|aborted/);
+});
+
+test('vision zip fixture parses 30m klines', () => {
+  const buf = fs.readFileSync(path.join(__dirname, 'fixtures/klines/AAPLUSDT-30m-2026-11-09.zip'));
+  const bars = archive.parseKlineCsv(archive.unzipFirst(buf).toString('utf8'));
+  assert.ok(bars.length >= 40, 'bars ' + bars.length);
+  assert.equal(bars[0].t < bars[bars.length - 1].t, true);
+  assert.ok(bars[0].c > 0 && bars[0].T > bars[0].t);
+});
+
+test('limiter drops queued work as soon as the signal aborts', async () => {
+  const lim = createLimiter({ maxConcurrent: 1, minIntervalMs: 0 });
+  let released = false;
+  const hold = lim.schedule(() => new Promise((resolve) => setTimeout(() => { released = true; resolve('ok'); }, 80)));
+  const ac = new AbortController();
+  const queued = lim.schedule(async () => 'should-not-run', { signal: ac.signal });
+  await new Promise((r) => setTimeout(r, 10));
+  ac.abort('cancel-queued');
+  await assert.rejects(queued, /cancel-queued|aborted/);
+  assert.equal(released, false);
+  assert.equal(await hold, 'ok');
 });

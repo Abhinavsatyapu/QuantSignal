@@ -12,6 +12,8 @@ const universe = require('./binance-universe');
 const sm = require('./binance-order-sm');
 const sigLive = require('./binance-signals-live');
 const { createKlineCache } = require('./binance-klines-cache');
+const klineArchive = require('./binance-klines-archive');
+const httpUtil = require('./binance-http-util');
 require('../public/indicators.js');
 require('../public/strategy-liquidity-signals.js');
 const { Technicals, LiquiditySignals } = globalThis;
@@ -22,6 +24,7 @@ const state = {
   pausedReason: null, day: null, dayStartEquity: null, dayRealizedPnl: 0,
   positionsMissingStops: [], lastError: null, client: null, symbolInfo: null,
   marks: {}, executing: new Set(), timers: [], prices: null,
+  bootReady: false, scanAbortArmed: false,
 };
 
 const utcDay = (t = Date.now()) => new Date(t).toISOString().slice(0, 10); // legacy
@@ -209,7 +212,10 @@ async function ensureClient() {
   state.client = bn.Client({});
   const mi = modeInfo();
   state.client.setNetwork(mi.placingOn === 'live' ? 'live' : 'testnet');
-  try { await state.client.syncTime(); } catch (e) { blog('warn', 'time sync: ' + e.message); }
+  // Unsigned market data does not need a time sync; skip it in dry-run so a banned IP cannot stall boot.
+  if (!mi.dryRun && !httpUtil.isBanned()) {
+    try { await state.client.syncTime(); } catch (e) { blog('warn', 'time sync: ' + e.message); }
+  }
   return state.client;
 }
 async function refreshUniverse(force = false) {
@@ -781,19 +787,32 @@ const SCAN_ABORT_MS = 120000;
 const yieldLoop = () => new Promise((r) => setImmediate(r));
 
 async function getScanKlines(symbol, interval, signal) {
-  const client = await ensureClient();
-  const limit = klineCache.limitFor(symbol, interval);
-  const fresh = await client.klines(symbol, interval, limit, { signal, timeoutMs: 8000, priority: 'normal' });
-  return klineCache.put(symbol, interval, fresh);
+  const have = klineCache.get(symbol, interval);
+  if (have.length >= 80) return have;
+  try {
+    const archived = await klineArchive.fetchRecent(symbol, interval, { days: 6, signal, timeoutMs: 8000 });
+    if (archived.length) return klineCache.put(symbol, interval, archived);
+  } catch (e) {
+    if (signal && signal.aborted) throw e;
+    blog('warn', `kline archive ${symbol}: ${e.message}`);
+  }
+  if (!httpUtil.isBanned()) {
+    const client = await ensureClient();
+    const limit = klineCache.limitFor(symbol, interval);
+    const fresh = await client.klines(symbol, interval, limit, { signal, timeoutMs: 4000, priority: 'normal' });
+    if (fresh && fresh.length) return klineCache.put(symbol, interval, fresh);
+  }
+  return klineCache.get(symbol, interval);
 }
 
 function abortScan(reason) {
   const msg = reason || 'scan aborted by watchdog';
+  const already = !!(state.scanAbort && state.scanAbort.signal && state.scanAbort.signal.aborted);
   if (state.scanAbort) {
     try { state.scanAbort.abort(msg); } catch {}
   }
   state.lastScanError = msg;
-  state.scanWatchdogRestarts = (state.scanWatchdogRestarts || 0) + 1;
+  if (!already) state.scanWatchdogRestarts = (state.scanWatchdogRestarts || 0) + 1;
 }
 
 async function scanOnce(reason) {
@@ -804,11 +823,23 @@ async function scanOnce(reason) {
   state.scanBusy = true; state.lastScanError = null; state.scanStartedAt = Date.now();
   state.scanProgress = { done: 0, total: (c.assets || []).length, reason: reason || 'scan' };
   try {
-    const client = await ensureClient();
-    if (!state.symbolInfo) await loadExchangeInfo();
+    if (!httpUtil.isBanned()) {
+      try { await ensureClient(); } catch {}
+      if (!state.symbolInfo) await loadExchangeInfo();
+    }
+    const needWarm = (c.assets || []).filter((s) => klineCache.get(s, c.interval).length < 80);
+    if (needWarm.length) {
+      state.scanProgress.reason = (reason || 'scan') + ':warmup';
+      await klineArchive.warmMany(needWarm, c.interval, {
+        days: 6, signal: ac.signal, cache: klineCache, concurrency: 3, timeoutMs: 8000,
+        onProgress: (p) => { state.scanProgress = { ...state.scanProgress, ...p, reason: (reason || 'scan') + ':warmup' }; },
+      });
+    }
+    state.scanProgress = { done: 0, total: (c.assets || []).length, reason: reason || 'scan' };
     for (const symbol of c.assets) {
       if (ac.signal.aborted) throw new Error(ac.signal.reason || 'scan aborted');
       await yieldLoop();
+      state.scanProgress.symbol = symbol;
       try {
         const kl = await getScanKlines(symbol, c.interval, ac.signal);
         state.scanProgress.done += 1;
@@ -914,7 +945,10 @@ async function scanOnce(reason) {
             raw: { conditions: a.conditions || null, skipReason, ruleset: ruleset ? ruleset.id : null },
           });
         }
-      } catch (e) { blog('warn', `scan ${symbol}: ${e.message}`); }
+      } catch (e) {
+        state.scanProgress.done += 1;
+        blog('warn', `scan ${symbol}: ${e.message}`);
+      }
     }
     state.lastScanAt = Date.now();
     state.lastScanDurationMs = state.scanStartedAt ? (state.lastScanAt - state.scanStartedAt) : 0;
@@ -1137,6 +1171,7 @@ function signalsHealth() {
     scanWatchdogRestarts: state.scanWatchdogRestarts || 0,
     prices: {
       transport: ps.transport || null,
+      connected: ps.transport === 'ws' && !priceStale,
       lastUpdateAt: ps.lastUpdateAt || null,
       ageMs: ps.ageMs == null ? null : ps.ageMs,
       stale: priceStale,
@@ -1146,6 +1181,8 @@ function signalsHealth() {
       lastError: ps.lastError || null,
       geoBlocked: !!ps.geoBlocked,
     },
+    klineCacheCount: klineCache.size(),
+    restBan: httpUtil.banInfo(),
     startedAt: state.startedAt,
   };
 }
@@ -1180,22 +1217,29 @@ function start() {
   const mi = modeInfo(), c = cfgBn();
   blog('info', `Binance trader starting mode=${mi.placingOn} dryRun=${mi.dryRun} preset=${c.activePreset||'none'} usCashOnly=${!!(c.entryFilters&&c.entryFilters.usCashOnly)}`, { problems: mi.problems, assets: c.assets, entryFilters: c.entryFilters || {} });
   // Resolve live TradFi equity perps (US-stock-linked) from exchangeInfo — never invent symbols
-  ensureClient().then(async (cl) => {
-    try {
-      const eq = await universe.listEquityPerps(cl);
-      const syms = eq.map((x) => x.symbol);
-      if (syms.length) {
-        blog('info', 'Equity perp universe: ' + syms.join(', '), { n: syms.length });
-        if (!c.assetsLocked) config.update({ binance: { assets: syms } });
-      } else blog('warn', 'No TRADING EQUITY/TradFi perpetuals found on Binance USD-M');
-    } catch (e) { blog('warn', 'universe discovery: ' + e.message); }
-  }).catch(() => {});
+  const ingestKline = (sym, bar, interval) => {
+    if (!bar || bar.t == null) return;
+    klineCache.put(sym, interval || cfgBn().interval || '30m', [bar]);
+  };
+  setTimeout(() => {
+    if (httpUtil.isBanned()) return;
+    ensureClient().then(async (cl) => {
+      try {
+        const eq = await universe.listEquityPerps(cl);
+        const syms = eq.map((x) => x.symbol);
+        if (syms.length) {
+          blog('info', 'Equity perp universe: ' + syms.join(', '), { n: syms.length });
+          if (!c.assetsLocked) config.update({ binance: { assets: syms } });
+        } else blog('warn', 'No TRADING EQUITY/TradFi perpetuals found on Binance USD-M');
+      } catch (e) { blog('warn', 'universe discovery: ' + e.message); }
+    }).catch(() => {});
+  }, 60e3);
   if (state.prices && state.prices.stop) try { state.prices.stop(); } catch {}
-  state.prices = Prices({ symbols: c.assets.length ? c.assets : DEFAULT_SYMBOLS, client: null });
+  state.prices = Prices({ symbols: c.assets.length ? c.assets : DEFAULT_SYMBOLS, client: null, interval: c.interval || '30m', onKline: ingestKline });
   // Wire price client after ensureClient asynchronously
   ensureClient().then((cl) => {
     if (state.prices && state.prices.stop) try { state.prices.stop(); } catch {}
-    state.prices = Prices({ symbols: c.assets.length ? c.assets : DEFAULT_SYMBOLS, client: cl });
+    state.prices = Prices({ symbols: c.assets.length ? c.assets : DEFAULT_SYMBOLS, client: cl, interval: c.interval || '30m', onKline: ingestKline });
     state.prices.start();
     state.prices.emitter.on('update', (snap) => {
       for (const [sym, m] of Object.entries(snap.marks || {})) if (m.markPrice > 0) state.marks[sym] = m.markPrice;
@@ -1203,18 +1247,25 @@ function start() {
   }).catch(() => { try { state.prices.start(); } catch (e) { blog('warn', 'prices.start: ' + e.message); } });
 
   const boot = async () => {
-    try { await loadExchangeInfo(); } catch {}
+    // Do not block the first scan on exchangeInfo / liquidity REST (those share the banned IP budget).
+    if (!httpUtil.isBanned()) {
+      try { await loadExchangeInfo(); } catch {}
+    }
     try { await reconcile(); } catch (e) { blog('warn', 'startup reconcile: ' + e.message); }
-    // First scan before universe re-screen — liquidity snapshots compete for the same REST budget.
     try { await scanOnce('startup'); } catch (e) { blog('warn', 'startup scan: ' + e.message); }
-    try { await refreshUniverse(false); } catch (e) { blog('warn', 'startup universe: ' + e.message); }
-    every(6 * 3600e3, async () => { await refreshUniverse(false); });
+    state.bootReady = true;
+    setTimeout(() => {
+      if (httpUtil.isBanned()) return;
+      refreshUniverse(false).catch((e) => blog('warn', 'startup universe: ' + e.message));
+    }, 60e3);
+    every(6 * 3600e3, async () => { if (!httpUtil.isBanned()) await refreshUniverse(false); });
   };
   boot().catch((e) => blog('warn', 'startup boot: ' + (e && e.message)));
   const every = (ms, fn) => { const id = setInterval(() => { fn().catch((e) => blog('warn', e.message)); }, ms); state.timers.push(id); };
   every(2000, async () => {
     await processPendings();
     const c2 = cfgBn();
+    if (!state.bootReady) return;
     if (c2.scannerEnabled && c2.enabled && !state.scanBusy && Date.now() >= (state.nextScanAt || 0)) await scanOnce('candle');
   });
   every(15000, async () => { await reconcile(); });
@@ -1224,12 +1275,16 @@ function start() {
     if (!c2.scannerEnabled || !c2.enabled) return;
     const now = Date.now();
     if (state.scanBusy && state.scanStartedAt && now - state.scanStartedAt > SCAN_ABORT_MS) {
-      blog('warn', 'scan watchdog: aborting stuck scan after ' + (now - state.scanStartedAt) + 'ms');
+      const already = !!(state.scanAbort && state.scanAbort.signal && state.scanAbort.signal.aborted);
+      if (!already) blog('warn', 'scan watchdog: aborting stuck scan after ' + (now - state.scanStartedAt) + 'ms');
       abortScan('scan aborted after ' + Math.round((now - state.scanStartedAt) / 1000) + 's');
-      // Give the aborted loop a moment to unwind, then start a fresh pass.
-      setTimeout(() => {
-        if (!state.scanBusy) scanOnce('watchdog').catch((e) => blog('warn', 'watchdog scan: ' + e.message));
-      }, 250);
+      if (!state.scanAbortArmed) {
+        state.scanAbortArmed = true;
+        setTimeout(() => {
+          state.scanAbortArmed = false;
+          if (!state.scanBusy) scanOnce('watchdog').catch((e) => blog('warn', 'watchdog scan: ' + e.message));
+        }, 500);
+      }
       return;
     }
     if (!state.scanBusy && state.nextScanAt && now >= state.nextScanAt + 30e3) {
@@ -1250,7 +1305,7 @@ function stop() {
 
 module.exports = {
   state, start, stop, handleSignal, reconcile, scanOnce, refreshUniverse, health, status, setKill, modeInfo,
-  signalsFeed, signalsHealth, liveScans, abortScan, klineCache, SCAN_ABORT_MS,
+  signalsFeed, signalsHealth, liveScans, abortScan, klineCache, SCAN_ABORT_MS, getScanKlines,
   positionsView, processPendings, finalizeEntry, attachProtection, protectiveOrders, transitionTrade, placeProtectiveWithRetry,
   sizePosition: bn.sizePosition, ensureTables, openTrades, pendingRows, equityNow, markOf, sm,
   _insertTrade: insertTrade, _closeTrade: closeTrade, _rememberCid: rememberCid, _cidTaken: cidTaken,

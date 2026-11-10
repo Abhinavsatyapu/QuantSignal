@@ -43,7 +43,25 @@ function createLimiter(opts = {}) {
   function schedule(fn, opts2 = {}) {
     const pri = opts2.priority === 'high' ? 0 : opts2.priority === 'low' ? 2 : 1;
     return new Promise((resolve, reject) => {
-      q.push({ fn, resolve, reject, pri, id: ++seq, signal: opts2.signal || null });
+      const job = { fn, resolve, reject, pri, id: ++seq, signal: opts2.signal || null, done: false };
+      const finish = (kind, value) => {
+        if (job.done) return;
+        job.done = true;
+        if (kind === 'ok') resolve(value);
+        else reject(value);
+      };
+      job.resolve = (v) => finish('ok', v);
+      job.reject = (e) => finish('err', e);
+      if (job.signal) {
+        const onAb = () => {
+          const i = q.indexOf(job);
+          if (i >= 0) q.splice(i, 1);
+          job.reject(abortError(job.signal));
+        };
+        if (job.signal.aborted) { job.reject(abortError(job.signal)); return; }
+        job.signal.addEventListener('abort', onAb, { once: true });
+      }
+      q.push(job);
       pump();
     });
   }
