@@ -788,9 +788,10 @@ const yieldLoop = () => new Promise((r) => setImmediate(r));
 
 async function getScanKlines(symbol, interval, signal) {
   const have = klineCache.get(symbol, interval);
-  if (have.length >= 80) return have;
+  // Technicals.analyze requires 220 completed candles.
+  if (have.length >= 220) return have;
   try {
-    const archived = await klineArchive.fetchRecent(symbol, interval, { days: 6, signal, timeoutMs: 8000 });
+    const archived = await klineArchive.fetchRecent(symbol, interval, { days: 14, signal, timeoutMs: 8000 });
     if (archived.length) return klineCache.put(symbol, interval, archived);
   } catch (e) {
     if (signal && signal.aborted) throw e;
@@ -827,11 +828,11 @@ async function scanOnce(reason) {
       try { await ensureClient(); } catch {}
       if (!state.symbolInfo) await loadExchangeInfo();
     }
-    const needWarm = (c.assets || []).filter((s) => klineCache.get(s, c.interval).length < 80);
+    const needWarm = (c.assets || []).filter((s) => klineCache.get(s, c.interval).length < 220);
     if (needWarm.length) {
       state.scanProgress.reason = (reason || 'scan') + ':warmup';
       await klineArchive.warmMany(needWarm, c.interval, {
-        days: 6, signal: ac.signal, cache: klineCache, concurrency: 3, timeoutMs: 8000,
+        days: 14, signal: ac.signal, cache: klineCache, concurrency: 3, timeoutMs: 8000, minBars: 220,
         onProgress: (p) => { state.scanProgress = { ...state.scanProgress, ...p, reason: (reason || 'scan') + ':warmup' }; },
       });
     }
@@ -842,7 +843,6 @@ async function scanOnce(reason) {
       state.scanProgress.symbol = symbol;
       try {
         const kl = await getScanKlines(symbol, c.interval, ac.signal);
-        state.scanProgress.done += 1;
         if (!kl.length) continue;
         state.marks[symbol] = kl[kl.length - 1].c;
         const candles = kl.map((k) => [k.t, k.o, k.h, k.l, k.c, k.v]);
@@ -946,8 +946,9 @@ async function scanOnce(reason) {
           });
         }
       } catch (e) {
-        state.scanProgress.done += 1;
         blog('warn', `scan ${symbol}: ${e.message}`);
+      } finally {
+        state.scanProgress.done += 1;
       }
     }
     state.lastScanAt = Date.now();

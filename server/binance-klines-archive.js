@@ -63,7 +63,7 @@ function utcYmd(d) {
 }
 
 function recentDates(days, now = new Date()) {
-  const n = Math.max(1, days || 6);
+  const n = Math.max(1, days || 14);
   const out = [];
   const base = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   for (let i = n - 1; i >= 0; i--) out.push(utcYmd(new Date(base - i * 86400e3)));
@@ -97,7 +97,7 @@ async function fetchDay(symbol, interval, ymd, opts = {}) {
 }
 
 async function fetchRecent(symbol, interval, opts = {}) {
-  const days = opts.days || 6;
+  const days = opts.days || 14;
   const dates = recentDates(days, opts.now ? new Date(opts.now) : new Date());
   const all = [];
   for (const ymd of dates) {
@@ -116,7 +116,7 @@ async function fetchRecent(symbol, interval, opts = {}) {
 
 async function warmMany(symbols, interval, opts = {}) {
   const cache = opts.cache;
-  const minBars = opts.minBars || 80;
+  const minBars = opts.minBars || 220;
   const lim = createLimiter({ maxConcurrent: opts.concurrency || 3, minIntervalMs: 40 });
   const list = (symbols || []).map((s) => String(s).toUpperCase());
   let done = 0;
