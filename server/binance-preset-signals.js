@@ -139,10 +139,33 @@ function signalComboAnd3(bars, i, Technicals, LiquiditySignals, opts = {}) {
   if (opts.maxStopAtr != null && a14 > 0) {
     if (Math.abs(s.entry - s.stop) / a14 > opts.maxStopAtr) return null;
   }
+  const conditions = {
+    trend: true, flow: true, buySide: true,
+    trendDir: get(trend, i), flowDir: get(flow, i), buyDir: get(buy, i),
+    windowBars,
+  };
   return {
     dir, direction: dir, score: 7, entry: s.entry, stop: s.stop, tp: s.tp,
     source: 'combo_and3', interval: opts.interval || '30m', t: bars[i].t, i,
+    conditions,
   };
+}
+
+/** Last-bar trend / flow / buy-side dirs for the live board (does not change combo entry rules). */
+function comboConditionSnapshot(bars, i, Technicals, LiquiditySignals, opts = {}) {
+  if (i < 50 || !bars || !bars[i]) return { trend: false, flow: false, buySide: false, trendDir: null, flowDir: null, buyDir: null };
+  try {
+    const window = bars.slice(Math.max(0, i + 1 - 260), i + 1);
+    const a = Technicals.analyze(window, window[window.length - 1].T + 1, { minStopPct: 1.5 });
+    const liq = LiquiditySignals.detect(window, {});
+    const last = window[window.length - 1];
+    const trendDir = dirTrend(a, last);
+    const flowDir = dirFlow(a, last);
+    const buyDir = dirBuySide(liq);
+    return { trend: !!trendDir, flow: !!flowDir, buySide: !!buyDir, trendDir, flowDir, buyDir, windowBars: opts.windowBars != null ? opts.windowBars : 3 };
+  } catch {
+    return { trend: false, flow: false, buySide: false, trendDir: null, flowDir: null, buyDir: null };
+  }
 }
 
 /** Apply entry filters used by live scanner (UTC cash / Friday). */
@@ -161,5 +184,5 @@ function dedupeKey(symbol, interval, closedAt, dir, mode) {
 
 module.exports = {
   usCashUTC, isFridayUTC, atr, stopsFromBar, dirTrend, dirFlow, dirBuySide,
-  inWin, agg10m, signalComboAnd3, applyEntryFilters, dedupeKey,
+  inWin, agg10m, signalComboAnd3, comboConditionSnapshot, applyEntryFilters, dedupeKey,
 };

@@ -37,7 +37,13 @@ describe('dashboard API + pages', () => {
       ok: true, cards: [], thirdParty: [{ name: 'Coinglass', use: 'OI', access: 'Paid', status: 'not_wired' }],
       forceOrderNote: 'Public WS not hooked',
     }));
-    app.get('/api/binance/signals', (req, res) => res.json([{ id: 1, ts: Date.now(), symbol: 'NVDAUSDT', direction: 'LONG', entry: 100, stop: 97, tp: 106, status: 'open' }]));
+    app.get('/api/binance/signals', (req, res) => res.json([{ id: 1, ts: Date.now(), symbol: 'NVDAUSDT', direction: 'LONG', entry: 100, stop: 97, tp: 106, status: 'open', statusLabel: 'taken', rr: 2, conditions: { trend: true, flow: true, buySide: true } }]));
+    app.get('/api/binance/signals/health', (req, res) => res.json({
+      ok: true, dryRun: true, preset: 'combo_30m_trend_flow_buyside_and3_uscash', interval: '30m',
+      lastScanAt: Date.now(), nextBarCloseAt: Date.now() + 1800e3, usCashOnly: true, universeCount: 62,
+      prices: { transport: 'ws', stale: false, reconnects: 0, watchdogRestarts: 0 },
+    }));
+    app.get('/signals', (req, res) => res.sendFile(path.join(PUB, 'signals.html')));
     app.get('/futures', (req, res) => res.sendFile(path.join(PUB, 'futures.html')));
     app.get('/positions', (req, res) => res.sendFile(path.join(PUB, 'positions.html')));
     app.get('/whales', (req, res) => res.sendFile(path.join(PUB, 'whales.html')));
@@ -48,7 +54,7 @@ describe('dashboard API + pages', () => {
     app.get('/futures-settings', (req, res) => res.sendFile(path.join(PUB, 'futures-settings.html')));
     app.get('/', (req, res) => res.redirect(302, '/futures'));
     app.get('/index.html', (req, res) => res.redirect(302, '/futures'));
-    for (const p of ['/signals', '/news', '/webhook', '/risk', '/paper', '/autotrader']) app.get(p, (req, res) => res.redirect(302, '/futures'));
+    for (const p of ['/news', '/webhook', '/risk', '/paper', '/autotrader']) app.get(p, (req, res) => res.redirect(302, '/futures'));
     for (const p of ['/options']) app.get(p, (req, res) => res.redirect(301, '/builder'));
     await new Promise((r) => { server = app.listen(0, '127.0.0.1', r); });
     base = 'http://127.0.0.1:' + server.address().port;
@@ -109,15 +115,23 @@ describe('dashboard API + pages', () => {
     assert.equal(whales.status, 200);
     const page = await fetch(base + '/futures', { headers: { accept: 'text/html', cookie }, redirect: 'manual' });
     assert.equal(page.status, 200);
-    for (const p of ['/positions', '/whales', '/builder', '/weekly', '/strategies', '/options-settings', '/futures-settings']) {
+    for (const p of ['/signals', '/positions', '/whales', '/builder', '/weekly', '/strategies', '/options-settings', '/futures-settings']) {
       const r = await fetch(base + p, { headers: { accept: 'text/html', cookie }, redirect: 'manual' });
       assert.equal(r.status, 200, p + ' ' + r.status);
     }
   });
 
+  it('unauthenticated /signals and health are owner-gated', async () => {
+    const html = await fetch(base + '/signals', { redirect: 'manual', headers: { accept: 'text/html' } });
+    assert.equal(html.status, 302);
+    assert.match(html.headers.get('location') || '', /\/login/);
+    const api = await json('/api/binance/signals/health');
+    assert.equal(api.status, 401);
+  });
+
   it('legacy mixed pages redirect away from index/backtest UI', async () => {
     const cookie = (await json('/api/auth/login', { method: 'POST', body: JSON.stringify({ password: 'dash-owner-pass' }) })).headers.get('set-cookie');
-    for (const p of ['/signals', '/paper', '/autotrader', '/index.html']) {
+    for (const p of ['/paper', '/autotrader', '/index.html']) {
       const r = await fetch(base + p, { headers: { cookie, accept: 'text/html' }, redirect: 'manual' });
       assert.equal(r.status, 302, p);
       assert.match(r.headers.get('location') || '', /\/futures/, p);
@@ -149,5 +163,31 @@ describe('dashboard API + pages', () => {
     const whales = fs.readFileSync(path.join(PUB, 'whales.html'), 'utf8');
     assert.doesNotMatch(whales, /Guest read-only/);
     assert.match(whales, /aggTrade|open-interest|Binance/i);
+    assert.match(shell, /Live Signals/);
+    assert.match(shell, /href: '\/signals'/);
+    const sigPage = fs.readFileSync(path.join(PUB, 'signals.html'), 'utf8');
+    const sigJs = fs.readFileSync(path.join(PUB, 'signals.js'), 'utf8');
+    assert.match(sigPage, /src="\/signals\.js"/);
+    assert.doesNotMatch(sigPage, /<script(?![^>]*src=)/);
+    assert.doesNotMatch(sigPage + sigJs, /\bbacktest results\b/i);
+    assert.match(sigJs, /EventSource/);
+    assert.match(sigJs, /5000/);
+    assert.match(sigJs, /10000/);
+    assert.match(sigPage, /Live Signals/);
+    assert.match(sigPage, /Signal feed/);
+    assert.match(sigPage, /Live prices/);
+  });
+
+  it('authed /signals HTML and health payload', async () => {
+    const cookie = (await json('/api/auth/login', { method: 'POST', body: JSON.stringify({ password: 'dash-owner-pass' }) })).headers.get('set-cookie');
+    const page = await fetch(base + '/signals', { headers: { accept: 'text/html', cookie }, redirect: 'manual' });
+    assert.equal(page.status, 200);
+    const html = await page.text();
+    assert.match(html, /Live Signals/);
+    assert.doesNotMatch(html, /<script(?![^>]*src=)/);
+    const h = await json('/api/binance/signals/health', { headers: { cookie } });
+    assert.equal(h.status, 200);
+    assert.equal(h.body.dryRun, true);
+    assert.equal(h.body.preset, 'combo_30m_trend_flow_buyside_and3_uscash');
   });
 });

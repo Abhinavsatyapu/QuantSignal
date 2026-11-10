@@ -1,6 +1,7 @@
 (function () {
   const PAGES = {
     futures: { section: 'futures', label: 'Futures Overview', href: '/futures' },
+    signals: { section: 'futures', label: 'Live Signals', href: '/signals' },
     positions: { section: 'futures', label: 'Positions & Orders', href: '/positions' },
     whales: { section: 'futures', label: 'Whale Footprints', href: '/whales' },
     'futures-settings': { section: 'futures', label: 'Futures Settings', href: '/futures-settings' },
@@ -75,6 +76,7 @@
     const nav = el('nav', 'app-nav', '');
     const fut = [
       ['futures', 'Overview'],
+      ['signals', 'Live Signals'],
       ['positions', 'Positions &amp; Orders'],
       ['whales', 'Whale Footprints'],
       ['futures-settings', 'Settings'],

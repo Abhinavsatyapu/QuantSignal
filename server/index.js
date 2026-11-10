@@ -211,7 +211,39 @@ bnApi.post('/scan', wrap(async (req, res) => { await bnTrader.scanOnce('manual')
 bnApi.post('/reconcile', wrap(async (req, res) => { const r = await bnTrader.reconcile(); res.json(r); }));
 bnApi.get('/events', (req, res) => res.json(require('./db').db.prepare('SELECT * FROM bn_events ORDER BY id DESC LIMIT ?').all(Math.min(500, Number(req.query.limit) || 100))));
 bnApi.get('/trades', (req, res) => res.json(require('./db').db.prepare('SELECT * FROM bn_trades ORDER BY id DESC LIMIT ?').all(Math.min(500, Number(req.query.limit) || 50))));
-bnApi.get('/signals', (req, res) => res.json(require('./db').db.prepare('SELECT * FROM bn_signals ORDER BY id DESC LIMIT ?').all(Math.min(200, Number(req.query.limit) || 40))));
+bnApi.get('/signals/health', (req, res) => {
+  try { res.json(bnTrader.signalsHealth()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+bnApi.get('/signals/board', (req, res) => {
+  try { res.json({ scans: bnTrader.liveScans(), health: bnTrader.signalsHealth() }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+bnApi.get('/signals/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+  const send = () => {
+    try {
+      const payload = {
+        serverNow: Date.now(),
+        health: bnTrader.signalsHealth(),
+        signals: bnTrader.signalsFeed(80),
+        board: bnTrader.liveScans(),
+        prices: bnTrader.state.prices ? bnTrader.state.prices.snapshot() : { transport: 'starting', marks: {}, lastUpdateAt: 0, stale: true },
+      };
+      res.write('data: ' + JSON.stringify(payload) + '\n\n');
+    } catch (e) { res.write('data: ' + JSON.stringify({ error: e.message, serverNow: Date.now() }) + '\n\n'); }
+  };
+  send();
+  const iv = setInterval(send, 2000);
+  req.on('close', () => clearInterval(iv));
+});
+bnApi.get('/signals', (req, res) => {
+  try { res.json(bnTrader.signalsFeed(req.query.limit)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
 app.get('/api/binance/whales', (req, res) => {
   res.json(bnWhales.snapshot());
 });
@@ -302,7 +334,7 @@ const PUB = path.join(config.ROOT, 'public');
 // Redirects first so static HTML (index.html / options.html) cannot leak mixed or legacy pages.
 app.get('/', (req, res) => res.redirect(302, '/futures'));
 app.get('/index.html', (req, res) => res.redirect(302, '/futures'));
-for (const p of ['/signals', '/news', '/webhook', '/risk', '/paper', '/autotrader']) {
+for (const p of ['/news', '/webhook', '/risk', '/paper', '/autotrader']) {
   app.get(p, (req, res) => res.redirect(302, '/futures'));
 }
 for (const p of ['/options', '/gamma', '/hedge', '/ratio', '/live-hedge', '/options-studio', '/gamma-book']) {
@@ -311,6 +343,7 @@ for (const p of ['/options', '/gamma', '/hedge', '/ratio', '/live-hedge', '/opti
 app.get('/lab', (req, res) => res.redirect(302, '/manual'));
 app.get('/derivatives', (req, res) => res.redirect(302, '/builder'));
 app.get('/positions', (req, res) => res.sendFile(path.join(PUB, 'positions.html')));
+app.get('/signals', (req, res) => res.sendFile(path.join(PUB, 'signals.html')));
 app.get('/futures', (req, res) => res.sendFile(path.join(PUB, 'futures.html')));
 app.get('/whales', (req, res) => res.sendFile(path.join(PUB, 'whales.html')));
 app.get('/futures-settings', (req, res) => res.sendFile(path.join(PUB, 'futures-settings.html')));

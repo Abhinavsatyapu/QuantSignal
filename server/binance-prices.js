@@ -5,6 +5,20 @@ const { EventEmitter } = require('events');
 const bn = require('./binance');
 
 const DEFAULT_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'AVAXUSDT'];
+const WS_BACKOFF_MIN = 1000;
+const WS_BACKOFF_MAX = 30000;
+
+function nextWsBackoff(prevMs) {
+  const prev = Number(prevMs) || 0;
+  if (prev <= 0) return WS_BACKOFF_MIN;
+  return Math.min(prev * 2, WS_BACKOFF_MAX);
+}
+
+function wsNeedsWatchdog(lastUpdateAt, transport, now, limitMs = 15000) {
+  if (transport !== 'ws') return false;
+  if (!lastUpdateAt) return true;
+  return (now - lastUpdateAt) > limitMs;
+}
 
 function Prices(opts = {}) {
   const symbols = (opts.symbols || DEFAULT_SYMBOLS).map((s) => String(s).toUpperCase());
@@ -19,9 +33,15 @@ function Prices(opts = {}) {
     marks: {}, // symbol → { markPrice, indexPrice, lastPrice, bid, ask, ts }
     ws: null,
     timers: [],
+    reconnectTimer: null,
+    stopped: false,
+    reconnects: 0,
+    watchdogRestarts: 0,
+    wsBackoffMs: 0,
   };
   const MAX_REFRESH_MS = Number(opts.maxRefreshMs) > 0 ? Number(opts.maxRefreshMs) : 5000;
   const STALE_MS = Number(opts.staleMs) > 0 ? Number(opts.staleMs) : 10000;
+  const WATCHDOG_MS = Number(opts.watchdogMs) > 0 ? Number(opts.watchdogMs) : 15000;
 
   let restBusy = false;
   async function restTick() {
@@ -104,7 +124,20 @@ function Prices(opts = {}) {
     }
   }
 
+  function scheduleReconnect(reason) {
+    if (state.stopped) return;
+    if (state.reconnectTimer) return;
+    state.wsBackoffMs = nextWsBackoff(state.wsBackoffMs);
+    state.reconnects += 1;
+    state.lastError = reason || state.lastError;
+    state.reconnectTimer = setTimeout(() => {
+      state.reconnectTimer = null;
+      connectWs();
+    }, state.wsBackoffMs);
+  }
+
   function connectWs() {
+    if (state.stopped) return;
     let WebSocket;
     try { WebSocket = require('ws'); } catch { state.transport = 'rest'; return; }
     const streams = symbols.flatMap((s) => {
@@ -113,14 +146,26 @@ function Prices(opts = {}) {
     }).join('/');
     const url = client.urls().ws + '/stream?streams=' + streams;
     try {
-      if (state.ws) { try { state.ws.close(); } catch {} }
+      if (state.ws) {
+        try { state.ws.removeAllListeners(); state.ws.on('error', () => {}); state.ws.close(); } catch {}
+        state.ws = null;
+      }
       const ws = new WebSocket(url);
       state.ws = ws;
       let opened = false;
       const failTimer = setTimeout(() => {
+        if (state.stopped) return;
         if (!opened) { try { ws.close(); } catch {}; state.transport = state.geoBlocked ? 'blocked' : 'rest'; }
       }, 8000);
-      ws.on('open', () => { opened = true; clearTimeout(failTimer); state.transport = 'ws'; state.lastUpdateAt = Date.now(); emitter.emit('ws', 'open'); });
+      state.timers.push(failTimer);
+      ws.on('open', () => {
+        opened = true; clearTimeout(failTimer);
+        state.wsBackoffMs = 0;
+        state.transport = 'ws';
+        state.lastUpdateAt = Date.now();
+        state.lastError = null;
+        emitter.emit('ws', 'open');
+      });
       ws.on('message', (buf) => {
         let msg; try { msg = JSON.parse(String(buf)); } catch { return; }
         const d = msg.data || msg;
@@ -138,8 +183,11 @@ function Prices(opts = {}) {
         emitter.emit('update', snapshot());
       });
       ws.on('close', () => {
-        state.transport = 'rest'; emitter.emit('ws', 'closed');
-        setTimeout(connectWs, 5000); // auto-reconnect; REST keeps ticking in parallel
+        if (state.ws === ws) state.ws = null;
+        clearTimeout(failTimer);
+        state.transport = state.geoBlocked ? 'blocked' : 'rest';
+        emitter.emit('ws', 'closed');
+        scheduleReconnect('websocket closed');
       });
       ws.on('error', (e) => {
         state.lastError = e.message;
@@ -149,6 +197,7 @@ function Prices(opts = {}) {
       });
     } catch (e) {
       state.lastError = e.message; state.transport = 'rest';
+      scheduleReconnect(e.message);
     }
   }
 
@@ -168,6 +217,9 @@ function Prices(opts = {}) {
       stale: ageMs == null || ageMs > STALE_MS,
       maxRefreshMs: MAX_REFRESH_MS,
       staleMs: STALE_MS,
+      reconnects: state.reconnects || 0,
+      watchdogRestarts: state.watchdogRestarts || 0,
+      wsBackoffMs: state.wsBackoffMs || 0,
       note: state.geoBlocked
         ? 'Binance returned HTTP 451 (geo-restricted) from this host. Move the Render service to Frankfurt or Singapore, or use a non-US egress IP.'
         : null,
@@ -175,6 +227,7 @@ function Prices(opts = {}) {
   }
 
   function start() {
+    state.stopped = false;
     // Always keep a REST heartbeat ≤5s so UI + bot stay fresh even if WS stalls.
     restTick();
     state.timers.push(setInterval(restTick, MAX_REFRESH_MS));
@@ -182,16 +235,31 @@ function Prices(opts = {}) {
       const age = state.lastUpdateAt ? Date.now() - state.lastUpdateAt : Infinity;
       if (age >= MAX_REFRESH_MS) restTick();
     }, 1000));
+    state.timers.push(setInterval(() => {
+      if (state.stopped) return;
+      if (!wsNeedsWatchdog(state.lastUpdateAt, state.transport, Date.now(), WATCHDOG_MS)) return;
+      state.watchdogRestarts += 1;
+      state.lastError = 'watchdog: websocket stale';
+      emitter.emit('ws', 'watchdog');
+      if (state.ws) { try { state.ws.close(); } catch {} } // close → scheduleReconnect
+      else scheduleReconnect('watchdog: websocket stale');
+    }, 5000));
     connectWs();
   }
   function stop() {
-    for (const t of state.timers) clearInterval(t);
+    state.stopped = true;
+    if (state.reconnectTimer) { clearTimeout(state.reconnectTimer); state.reconnectTimer = null; }
+    for (const t of state.timers) { clearInterval(t); clearTimeout(t); }
     state.timers = [];
-    if (state.ws) { try { state.ws.close(); } catch {} state.ws = null; }
+    if (state.ws) {
+      const prev = state.ws;
+      state.ws = null;
+      try { prev.removeAllListeners(); prev.on('error', () => {}); prev.close(); } catch {}
+    }
   }
   function mark(symbol) { const m = state.marks[String(symbol).toUpperCase()]; return m && m.markPrice > 0 ? m.markPrice : null; }
 
   return { state, emitter, start, stop, snapshot, mark, restTick, symbols };
 }
 
-module.exports = { Prices, DEFAULT_SYMBOLS };
+module.exports = { Prices, DEFAULT_SYMBOLS, nextWsBackoff, wsNeedsWatchdog, WS_BACKOFF_MIN, WS_BACKOFF_MAX };

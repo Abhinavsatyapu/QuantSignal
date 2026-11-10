@@ -17,3 +17,6 @@ test('no undeclared variables in the shared engines (browser + Node)', async () 
 test('no undeclared variables in the Strategy Builder page script', async () => {
   assert.deepEqual(await lint(['public/builder.js'], { browser: true }, { Strategy: 'readonly', Deriv: 'readonly' }), []);
 });
+test('no undeclared variables in Live Signals page script', async () => {
+  assert.deepEqual(await lint(['public/signals.js'], { browser: true }), []);
+});

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Live Signals · QuantSignal</title>
+<link rel="stylesheet" href="/ds.css">
+<link rel="stylesheet" href="/signals.css">
+</head>
+<body class="qs-app">
+<main>
+  <p class="page-sub muted sig-kicker">Binance USDⓈ-M · US equity TradFi perps</p>
+  <h1 class="page-title">Live Signals</h1>
+  <p class="page-sub" id="presetLine">Active preset: —</p>
+
+  <div class="hb-bar" id="heartbeat" aria-live="polite">
+    <span class="pill" id="hbEngine">Engine —</span>
+    <span class="pill" id="hbScan">Last scan —</span>
+    <span class="pill" id="hbBar">Next 30m close —</span>
+    <span class="pill" id="hbMode">DRY-RUN</span>
+    <span class="pill" id="hbFeed">Feed —</span>
+  </div>
+
+  <section class="panel">
+    <h2>Live prices <span id="priceFresh" class="pill">—</span></h2>
+    <div class="ticker" id="ticker"><p class="muted">Connecting to Binance price feed…</p></div>
+  </section>
+
+  <section class="panel">
+    <h2>Signal feed</h2>
+    <div class="table-wrap sig-feed" id="sigFeed"><p class="muted">Loading…</p></div>
+  </section>
+
+  <section class="panel">
+    <h2>Universe <span class="muted" id="uniCount"></span></h2>
+    <div class="uni-board" id="board"><p class="muted">Loading…</p></div>
+  </section>
+</main>
+<script src="/signals.js"></script>
+<script src="/shell.js"></script>
+<script src="/auth-ui.js"></script>
+</body>
+</html>

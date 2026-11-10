@@ -10,12 +10,13 @@ const bn = require('./binance');
 const { Prices, DEFAULT_SYMBOLS } = require('./binance-prices');
 const universe = require('./binance-universe');
 const sm = require('./binance-order-sm');
+const sigLive = require('./binance-signals-live');
 require('../public/indicators.js');
 require('../public/strategy-liquidity-signals.js');
 const { Technicals, LiquiditySignals } = globalThis;
 
 const state = {
-  startedAt: Date.now(), lastSignalAt: 0, lastScanAt: 0, nextScanAt: 0, lastReconcileAt: 0,
+  startedAt: Date.now(), lastSignalAt: 0, lastScanAt: 0, nextScanAt: 0, lastReconcileAt: 0, scanStartedAt: 0, lastScanDurationMs: 0, scanWatchdogRestarts: 0,
   lastListenKeyAt: 0, scanBusy: false, lastScanError: null, streamStatus: 'idle',
   pausedReason: null, day: null, dayStartEquity: null, dayRealizedPnl: 0,
   positionsMissingStops: [], lastError: null, client: null, symbolInfo: null,
@@ -777,7 +778,7 @@ async function reconcile() {
 async function scanOnce(reason) {
   const c = cfgBn();
   if (!c.scannerEnabled || !c.enabled || state.scanBusy) return;
-  state.scanBusy = true; state.lastScanError = null;
+  state.scanBusy = true; state.lastScanError = null; state.scanStartedAt = Date.now();
   try {
     const client = await ensureClient();
     if (!state.symbolInfo) await loadExchangeInfo();
@@ -840,9 +841,11 @@ async function scanOnce(reason) {
             maxStopAtr: filters.maxStopAtr != null ? filters.maxStopAtr : 2.5,
             interval: c.interval,
           });
+          a.comboConditions = (sig && sig.conditions) || presetSignals.comboConditionSnapshot(kl, kl.length - 1, Technicals, LiquiditySignals, { windowBars: Math.max(1, Number(c.liqWindowBars) || 3) });
           if (sig && sig.dir) {
             dir = sig.dir; score = sig.score || 7; sourceTag = 'combo_and3';
             a.entry = sig.entry; a.stop = sig.stop; a.target = sig.tp;
+            a.conditions = sig.conditions || a.comboConditions;
           }
         } else if (mode === 'any') {
           if (['LONG','SHORT'].includes(a.direction) && (a.score||0) >= c.minScore) dir = a.direction;
@@ -851,21 +854,43 @@ async function scanOnce(reason) {
         // Apply selectable study ruleset entry filters (OOS-validated when set)
         const ruleset = (c.studyRulesets && c.activeStudyRuleset && c.studyRulesets[c.activeStudyRuleset]) || null;
         const filters = { ...(c.entryFilters || {}), ...((ruleset && ruleset.rules) || {}) };
+        let skipReason = null;
+        const firedDir = dir;
         if (dir && filters.noFridayEntry) {
-          if (presetSignals.isFridayUTC(Date.now())) dir = null;
+          if (presetSignals.isFridayUTC(Date.now())) { skipReason = 'Friday entries disabled'; dir = null; }
         }
-        if (dir && filters.noLiquidityOnly && sourceTag === 'liquidity') dir = null;
+        if (dir && filters.noLiquidityOnly && sourceTag === 'liquidity') { skipReason = 'liquidity-only entries disabled'; dir = null; }
         if (dir && filters.usCashOnly) {
-          if (!presetSignals.usCashUTC(Date.now())) dir = null;
+          if (!presetSignals.usCashUTC(Date.now())) { skipReason = 'outside US cash hours'; dir = null; }
         }
-        if (dir && filters.minScore != null && (score || 0) < filters.minScore && sourceTag !== 'liquidity') dir = null;
+        if (dir && filters.minScore != null && (score || 0) < filters.minScore && sourceTag !== 'liquidity') { skipReason = 'score below minimum'; dir = null; }
+        a.signalDir = dir || null;
+        a.skipReason = skipReason;
+        a.conditions = a.conditions || a.comboConditions || null;
+        try {
+          store.db.prepare(`INSERT INTO bn_scans(symbol,interval,ts,closed_at,direction,score,data) VALUES(?,?,?,?,?,?,?)
+            ON CONFLICT(symbol,interval) DO UPDATE SET ts=excluded.ts, closed_at=excluded.closed_at, direction=excluded.direction, score=excluded.score, data=excluded.data`)
+            .run(symbol, c.interval, Date.now(), a.closedAt ?? null, dir || firedDir || a.direction || null, score ?? a.score ?? null, JSON.stringify(a));
+        } catch {}
+        const entryPx = a.entry ?? (kl.at(-1) && kl.at(-1).c) ?? null;
+        const stopPx = a.stop ?? null;
+        const tpPx = a.tp ?? a.target ?? null;
         if (dir) {
           const dedupeKey = 'bn|' + symbol + '|' + c.interval + '|' + (a.closedAt || Math.floor(Date.now() / 60e3)) + '|' + dir + '|' + mode;
-          await handleSignal({ source: sourceTag, symbol, direction: dir, entry: a.entry ?? kl.at(-1).c, stop: a.stop ?? null, tp: a.target ?? null, interval: c.interval, score, closedAt: a.closedAt, dedupeKey, raw: { indicators: a, liquidity: liq, ruleset: ruleset ? ruleset.id : null } });
+          await handleSignal({ source: sourceTag, symbol, direction: dir, entry: entryPx, stop: stopPx, tp: tpPx, interval: c.interval, score, closedAt: a.closedAt, dedupeKey, raw: { indicators: a, liquidity: liq, ruleset: ruleset ? ruleset.id : null, conditions: a.conditions || null } });
+        } else if (skipReason && firedDir) {
+          const dedupeKey = 'bn|' + symbol + '|' + c.interval + '|' + (a.closedAt || Math.floor(Date.now() / 60e3)) + '|' + firedDir + '|' + mode + '|skip';
+          insertSignal({
+            source: sourceTag, symbol, direction: firedDir, interval: c.interval,
+            entry: entryPx, stop: stopPx, tp: tpPx, score, closed_at: a.closedAt ?? null,
+            status: 'skipped', reason: skipReason, dedupe_key: dedupeKey,
+            raw: { conditions: a.conditions || null, skipReason, ruleset: ruleset ? ruleset.id : null },
+          });
         }
       } catch (e) { blog('warn', `scan ${symbol}: ${e.message}`); }
     }
     state.lastScanAt = Date.now();
+    state.lastScanDurationMs = state.scanStartedAt ? (state.lastScanAt - state.scanStartedAt) : 0;
     const ms = ({ '1m': 60e3, '3m': 180e3, '5m': 300e3, '15m': 900e3, '30m': 1800e3, '1h': 3600e3, '4h': 14400e3 })[c.interval] || 900e3;
     state.nextScanAt = Date.now() + Math.min(ms, 60e3);
   } catch (e) { state.lastScanError = e.message; blog('error', 'scan: ' + e.message); }
@@ -1026,6 +1051,66 @@ function health() {
   };
 }
 
+function signalsFeed(limit = 80) {
+  const n = Math.min(200, Math.max(1, Number(limit) || 80));
+  const rows = store.db.prepare('SELECT * FROM bn_signals ORDER BY id DESC LIMIT ?').all(n);
+  return rows.map(sigLive.enrichSignal);
+}
+
+function liveScans() {
+  const c = cfgBn();
+  const iv = c.interval || '30m';
+  const rows = store.db.prepare('SELECT * FROM bn_scans WHERE interval=?').all(iv);
+  const by = new Map(rows.map((r) => [r.symbol, r]));
+  const marks = { ...state.marks, ...(state.prices ? Object.fromEntries(Object.entries(state.prices.state.marks || {}).map(([k, v]) => [k, v.markPrice])) : {}) };
+  return (c.assets || []).map((sym) => {
+    const row = by.get(sym);
+    if (!row) return { symbol: sym, interval: iv, direction: null, conditions: { trend: false, flow: false, buySide: false }, mark: marks[sym] || null, ts: null, skipReason: null };
+    return sigLive.enrichScan(row, marks[sym]);
+  });
+}
+
+function signalsHealth() {
+  const h = health(), c = cfgBn();
+  const ps = state.prices ? state.prices.snapshot() : {};
+  const now = Date.now();
+  const scanStale = !state.lastScanAt || (now - state.lastScanAt) > 3 * 60e3;
+  const priceStale = !!ps.stale;
+  return {
+    ok: !state.lastScanError || !scanStale,
+    dryRun: h.dryRun,
+    preset: c.activePreset || null,
+    signalMode: c.signalMode || null,
+    interval: c.interval || '30m',
+    usCashOnly: !!(c.entryFilters && c.entryFilters.usCashOnly),
+    scannerEnabled: !!c.scannerEnabled,
+    scanBusy: !!state.scanBusy,
+    lastScanAt: state.lastScanAt || null,
+    lastScanAtIst: sigLive.formatIst(state.lastScanAt || null),
+    lastScanDurationMs: state.lastScanDurationMs || 0,
+    lastScanError: state.lastScanError || null,
+    nextScanAt: state.nextScanAt || null,
+    nextBarCloseAt: sigLive.nextBarCloseAt(c.interval || '30m', now),
+    nextBarCloseAtIst: sigLive.formatIst(sigLive.nextBarCloseAt(c.interval || '30m', now)),
+    barIntervalMs: sigLive.intervalMs(c.interval || '30m'),
+    lastSignalAt: state.lastSignalAt || null,
+    universeCount: (c.assets || []).length,
+    scanWatchdogRestarts: state.scanWatchdogRestarts || 0,
+    prices: {
+      transport: ps.transport || null,
+      lastUpdateAt: ps.lastUpdateAt || null,
+      ageMs: ps.ageMs == null ? null : ps.ageMs,
+      stale: priceStale,
+      staleMs: ps.staleMs || 10000,
+      reconnects: ps.reconnects || 0,
+      watchdogRestarts: ps.watchdogRestarts || 0,
+      lastError: ps.lastError || null,
+      geoBlocked: !!ps.geoBlocked,
+    },
+    startedAt: state.startedAt,
+  };
+}
+
 function status() {
   const h = health(), c = cfgBn();
   return {
@@ -1094,7 +1179,23 @@ function start() {
   });
   every(15000, async () => { await reconcile(); });
   every(60e3, async () => { refreshDay(equityNow()); checkDailyLimits(equityNow()); });
+  every(15e3, async () => {
+    const c2 = cfgBn();
+    if (!c2.scannerEnabled || !c2.enabled) return;
+    const now = Date.now();
+    if (state.scanBusy && state.scanStartedAt && now - state.scanStartedAt > 180e3) {
+      blog('warn', 'scan watchdog: resetting stuck scan');
+      state.scanBusy = false;
+      state.scanWatchdogRestarts = (state.scanWatchdogRestarts || 0) + 1;
+    }
+    if (!state.scanBusy && state.nextScanAt && now >= state.nextScanAt + 30e3) {
+      blog('warn', 'scan watchdog: overdue scan, restarting');
+      state.scanWatchdogRestarts = (state.scanWatchdogRestarts || 0) + 1;
+      await scanOnce('watchdog');
+    }
+  });
 }
+
 
 function stop() {
   for (const t of state.timers) clearInterval(t);
@@ -1105,6 +1206,7 @@ function stop() {
 
 module.exports = {
   state, start, stop, handleSignal, reconcile, scanOnce, refreshUniverse, health, status, setKill, modeInfo,
+  signalsFeed, signalsHealth, liveScans,
   positionsView, processPendings, finalizeEntry, attachProtection, protectiveOrders, transitionTrade, placeProtectiveWithRetry,
   sizePosition: bn.sizePosition, ensureTables, openTrades, pendingRows, equityNow, markOf, sm,
   _insertTrade: insertTrade, _closeTrade: closeTrade, _rememberCid: rememberCid, _cidTaken: cidTaken,
