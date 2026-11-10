@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<ownershipDocument>
+  <documentType>4</documentType>
+  <periodOfReport>2026-11-03</periodOfReport>
+  <issuer>
+    <issuerCik>0000320193</issuerCik>
+    <issuerName>Apple Inc.</issuerName>
+    <issuerTradingSymbol>AAPL</issuerTradingSymbol>
+  </issuer>
+  <reportingOwner>
+    <reportingOwnerId>
+      <rptOwnerCik>000123</rptOwnerCik>
+      <rptOwnerName>Newstead Jennifer</rptOwnerName>
+    </reportingOwnerId>
+    <reportingOwnerRelationship>
+      <isOfficer>1</isOfficer>
+      <officerTitle>SVP, GC</officerTitle>
+    </reportingOwnerRelationship>
+  </reportingOwner>
+  <aff10b5One>true</aff10b5One>
+  <nonDerivativeTable>
+    <nonDerivativeTransaction>
+      <securityTitle><value>Common Stock</value></securityTitle>
+      <transactionDate><value>2026-11-03</value></transactionDate>
+      <transactionCoding><transactionCode>S</transactionCode></transactionCoding>
+      <transactionAmounts>
+        <transactionShares><value>2399</value></transactionShares>
+        <transactionPricePerShare><value>325.75</value></transactionPricePerShare>
+        <transactionAcquiredDisposedCode><value>D</value></transactionAcquiredDisposedCode>
+      </transactionAmounts>
+    </nonDerivativeTransaction>
+  </nonDerivativeTable>
+</ownershipDocument>

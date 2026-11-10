@@ -5,6 +5,11 @@
  */
 const bn = require('./binance');
 const universe = require('./binance-universe');
+const store = require('./db');
+const { clusterPrints, updateWallMemory } = require('./whales-cluster');
+const { ForceOrderTape } = require('./whales-force-order');
+const institutions = require('./whales-institutions');
+const wutil = require('./whales-util');
 
 const DATA = 'https://fapi.binance.com'; // futures/data/* lives here
 const state = {
@@ -12,7 +17,9 @@ const state = {
   printNotionalUsd: 50_000, // whale print threshold
   wallNotionalUsd: 100_000,
   busy: false,
+  wallMemory: {},
 };
+const forceTape = ForceOrderTape({ store, symbols: [] });
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
@@ -68,20 +75,22 @@ function biasLabel(score) {
 
 async function whalePrints(symbol, { limit = 200, minNotional = state.printNotionalUsd } = {}) {
   const rows = await fapiGet('/fapi/v1/aggTrades', { symbol, limit });
+  const all = [];
   const prints = [];
   let buyN = 0, sellN = 0;
   for (const r of rows || []) {
     const px = Number(r.p), qty = Number(r.q), notional = px * qty;
-    if (!(notional >= minNotional)) continue;
     const side = r.m ? 'SELL' : 'BUY'; // m=true → buyer is maker → taker sell
+    const rec = { id: r.a, price: px, qty, notional: +notional.toFixed(2), side, ts: r.T, tsIst: toIST(r.T) };
+    all.push(rec);
+    if (!(notional >= minNotional)) continue;
     if (side === 'BUY') buyN += notional; else sellN += notional;
-    prints.push({
-      id: r.a, price: px, qty, notional: +notional.toFixed(2), side,
-      ts: r.T, tsIst: toIST(r.T),
-    });
+    prints.push(rec);
   }
   prints.sort((a, b) => b.notional - a.notional);
-  return { prints: prints.slice(0, 25), printBuyNotional: buyN, printSellNotional: sellN, scanned: (rows || []).length };
+  const clusters = clusterPrints(all, { windowMs: 3000, minClusterNotional: minNotional }).slice(0, 12)
+    .map((c) => ({ ...c, startIst: toIST(c.startTs), endIst: toIST(c.endTs) }));
+  return { prints: prints.slice(0, 25), clusters, printBuyNotional: buyN, printSellNotional: sellN, scanned: (rows || []).length };
 }
 
 async function openInterestBundle(symbol) {
@@ -150,14 +159,22 @@ async function bookWalls(symbol, { minNotional = state.wallNotionalUsd } = {}) {
     if (n >= minNotional) { walls.push({ side: 'ASK', price: px, qty, notional: +n.toFixed(2) }); wallAsk += n; }
   }
   walls.sort((a, b) => b.notional - a.notional);
-  return { walls: walls.slice(0, 12), wallBid, wallAsk };
+  const persisted = updateWallMemory(state.wallMemory, symbol, walls, Date.now(), { needSeen: 2, maxAgeMs: 30 * 60e3 });
+  state.wallMemory = persisted.memory;
+  return { walls: walls.slice(0, 12), persistentWalls: persisted.walls.slice(0, 12), wallBid, wallAsk };
 }
 
 /** Liquidations: REST has no full history; use recent allMarket force orders via premium index workaround — document WS. */
 async function recentLiquidations(symbol) {
-  // Binance does not expose a stable public REST history for forceOrders without listenKey.
-  // Return empty + note; UI can show "connect user stream for live forceOrder" or we poll markPrice for context.
-  return { liquidations: [], note: 'Live liquidations require WS !forceOrder@arr (public). REST history not offered without auth; not fabricated.' };
+  const rows = forceTape.recent({ symbol, limit: 20 });
+  const snap = forceTape.snapshot();
+  return {
+    liquidations: rows,
+    transport: snap.transport,
+    note: rows.length
+      ? 'Binance public WS !forceOrder@arr (persisted 48h). Largest force-order per symbol per second; not a complete history.'
+      : snap.note,
+  };
 }
 
 async function cardFor(symbol) {
@@ -231,7 +248,7 @@ async function refresh(opts = {}) {
     // Merge into cache by symbol
     const by = new Map(state.cards.map((c) => [c.symbol, c]));
     for (const c of cards) by.set(c.symbol, c);
-    state.cards = [...by.values()].sort((a, b) => Math.abs(b.score) - Math.abs(a.score));
+    state.cards = [...by.values()].sort((a, b) => String(a.symbol).localeCompare(String(b.symbol)));
     state.lastAt = Date.now();
     state.lastError = null;
     return { ok: true, cards: state.cards, batch: batch.length, universe: symbols.length, lastAt: state.lastAt };
@@ -244,10 +261,12 @@ async function refresh(opts = {}) {
 }
 
 function snapshot() {
+  const inst = institutions.panelSnapshot();
+  const fo = forceTape.snapshot();
   return {
     ok: true,
     venue: 'binance-usdsm',
-    universeNote: 'US equity TradFi perps only (no commodities). Binance public REST first-party.',
+    universeNote: 'US equity TradFi perps only (no commodities). Binance public REST and public !forceOrder stream, plus official lagged SEC / FINRA / Cboe panels.',
     printNotionalUsd: state.printNotionalUsd,
     wallNotionalUsd: state.wallNotionalUsd,
     lastAt: state.lastAt,
@@ -255,12 +274,29 @@ function snapshot() {
     lastError: state.lastError,
     universeSize: state.symbols.length,
     cards: state.cards,
-    thirdParty: [
-      { name: 'Coinglass', use: 'OI / liquidations dashboards', access: 'Paid API for full history; free web UI — not scraped', status: 'not_wired' },
-      { name: 'Unusual Whales', use: 'US stock options flow / dark pool for underlying', access: 'Paid API key required', status: 'not_wired' },
-      { name: 'SEC EDGAR 13F / Form 4', use: 'Institutional / insider filings', access: 'Free public EDGAR; delayed vs tape', status: 'not_wired' },
-    ],
-    forceOrderNote: 'Public WS !forceOrder@arr can stream liquidations live; REST history not available without user stream — UI shows note until WS hooked.',
+    blendedScore: false,
+    autoEntries: false,
+    liquidations: fo,
+    panels: {
+      perp: {
+        title: 'Perp tape (live, Binance)',
+        source: {
+          name: 'Binance USDⓈ-M public REST + !forceOrder@arr',
+          asOf: state.lastAt ? toIST(state.lastAt) : fo.asOf,
+          lag: fo.transport === 'ws' ? 'live stream' : (state.lastAt ? wutil.lagLabel(state.lastAt) : null),
+          note: 'Large prints, same-side clusters, OI / taker / top-trader ratios, and walls that persist across snapshots. No blended score.',
+          status: fo.transport === 'ws' || state.cards.length ? 'ok' : 'pending',
+        },
+        cards: state.cards,
+        liquidations: fo,
+      },
+      short: inst.short,
+      ats: inst.ats,
+      institutional: inst.institutional,
+      options: inst.options,
+    },
+    thirdParty: inst.thirdPartyPaid,
+    forceOrderNote: fo.note,
   };
 }
 
@@ -274,11 +310,19 @@ function signalFromCard(card, { minAbsScore = 25 } = {}) {
 }
 
 function start() {
+  try {
+    const cfg = require('./config').get().binance || {};
+    const symbols = (cfg.assets && cfg.assets.length) ? cfg.assets.slice() : [];
+    forceTape.setSymbols(symbols);
+    state.symbols = symbols;
+  } catch {}
+  forceTape.start();
+  institutions.start();
   refresh({ limit: 12 }).catch((e) => { state.lastError = e.message; });
   setInterval(() => { refresh({ limit: 12 }).catch(() => {}); }, 5 * 60e3);
 }
 
 module.exports = { start,
   state, refresh, snapshot, cardFor, biasScore, biasLabel, signalFromCard, whalePrints, openInterestBundle, ratioBundle, bookWalls,
-  toIST,
+  toIST, forceTape, institutions,
 };

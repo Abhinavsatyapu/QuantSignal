@@ -1,0 +1,336 @@
+{
+  "ok": true,
+  "zipBytes": 100719015,
+  "sourceUrl": "https://www.sec.gov/files/datastandardsinnovation/data/form-13f-data-sets/01jun2026-31aug2026_form13f.zip",
+  "periodOfReport": "30-JUN-2026",
+  "infoTableRows": 3830274,
+  "submissions": 11852,
+  "byTicker": {
+    "AAPL": {
+      "managers": 6112,
+      "totalShares": 9774060217.0,
+      "totalValueUsd": 2720585308268.0,
+      "impliedPriceMedianUsd": 289.36,
+      "valueUnit": "US dollars (not thousands) \u2014 implied quarter-end price matches the June 30 2026 print",
+      "top10": [
+        {
+          "manager": "BlackRock, Inc.",
+          "cik": "0002012383",
+          "filed": "07-AUG-2026",
+          "shares": 1162996939.0,
+          "value": 336524794350.0
+        },
+        {
+          "manager": "VANGUARD CAPITAL MANAGEMENT LLC",
+          "cik": "0002100119",
+          "filed": "13-AUG-2026",
+          "shares": 959107911.0,
+          "value": 277527465127.0
+        },
+        {
+          "manager": "STATE STREET CORP",
+          "cik": "0000093751",
+          "filed": "07-AUG-2026",
+          "shares": 615129929.0,
+          "value": 177993996255.0
+        },
+        {
+          "manager": "GEODE CAPITAL MANAGEMENT, LLC",
+          "cik": "0001214717",
+          "filed": "12-AUG-2026",
+          "shares": 371336543.0,
+          "value": 107174641700.0
+        },
+        {
+          "manager": "VANGUARD PORTFOLIO MANAGEMENT LLC",
+          "cik": "0002100121",
+          "filed": "13-AUG-2026",
+          "shares": 334119156.0,
+          "value": 96680718979.0
+        },
+        {
+          "manager": "FMR LLC",
+          "cik": "0000315066",
+          "filed": "13-AUG-2026",
+          "shares": 325348754.0,
+          "value": 94142915411.0
+        },
+        {
+          "manager": "MORGAN STANLEY",
+          "cik": "0000895421",
+          "filed": "13-AUG-2026",
+          "shares": 242614238.0,
+          "value": 70202856513.0
+        },
+        {
+          "manager": "Berkshire Hathaway Inc",
+          "cik": "0001067983",
+          "filed": "14-AUG-2026",
+          "shares": 227917808.0,
+          "value": 65950296923.0
+        },
+        {
+          "manager": "JPMORGAN CHASE & CO",
+          "cik": "0000019617",
+          "filed": "12-AUG-2026",
+          "shares": 228762008.0,
+          "value": 64451408654.0
+        },
+        {
+          "manager": "NORGES BANK",
+          "cik": "0001374170",
+          "filed": "12-AUG-2026",
+          "shares": 190726866.0,
+          "value": 55188725946.0
+        }
+      ]
+    },
+    "NVDA": {
+      "managers": 5959,
+      "totalShares": 16916233843.0,
+      "totalValueUsd": 3237433228110.0,
+      "impliedPriceMedianUsd": 200.0900000481595,
+      "valueUnit": "US dollars (not thousands) \u2014 implied quarter-end price matches the June 30 2026 print",
+      "top10": [
+        {
+          "manager": "BlackRock, Inc.",
+          "cik": "0002012383",
+          "filed": "07-AUG-2026",
+          "shares": 1941918386.0,
+          "value": 388558449933.0
+        },
+        {
+          "manager": "VANGUARD CAPITAL MANAGEMENT LLC",
+          "cik": "0002100119",
+          "filed": "13-AUG-2026",
+          "shares": 1540816358.0,
+          "value": 308301945072.0
+        },
+        {
+          "manager": "FMR LLC",
+          "cik": "0000315066",
+          "filed": "13-AUG-2026",
+          "shares": 1026051548.0,
+          "value": 205302654261.0
+        },
+        {
+          "manager": "STATE STREET CORP",
+          "cik": "0000093751",
+          "filed": "07-AUG-2026",
+          "shares": 1009783437.0,
+          "value": 202047567909.0
+        },
+        {
+          "manager": "GEODE CAPITAL MANAGEMENT, LLC",
+          "cik": "0001214717",
+          "filed": "12-AUG-2026",
+          "shares": 606216492.0,
+          "value": 120957505504.0
+        },
+        {
+          "manager": "VANGUARD PORTFOLIO MANAGEMENT LLC",
+          "cik": "0002100121",
+          "filed": "13-AUG-2026",
+          "shares": 517816949.0,
+          "value": 103609993325.0
+        },
+        {
+          "manager": "JPMORGAN CHASE & CO",
+          "cik": "0000019617",
+          "filed": "12-AUG-2026",
+          "shares": 449404578.0,
+          "value": 87620410963.0
+        },
+        {
+          "manager": "MORGAN STANLEY",
+          "cik": "0000895421",
+          "filed": "13-AUG-2026",
+          "shares": 356420089.0,
+          "value": 71316096193.0
+        },
+        {
+          "manager": "Invesco Ltd.",
+          "cik": "0000914208",
+          "filed": "14-AUG-2026",
+          "shares": 329593488.0,
+          "value": 65948361031.0
+        },
+        {
+          "manager": "NORGES BANK",
+          "cik": "0001374170",
+          "filed": "12-AUG-2026",
+          "shares": 325951734.0,
+          "value": 65219682456.0
+        }
+      ]
+    },
+    "TSLA": {
+      "managers": 4292,
+      "totalShares": 1702689463.0,
+      "totalValueUsd": 689931124310.0,
+      "impliedPriceMedianUsd": 420.6,
+      "valueUnit": "US dollars (not thousands) \u2014 implied quarter-end price matches the June 30 2026 print",
+      "top10": [
+        {
+          "manager": "BlackRock, Inc.",
+          "cik": "0002012383",
+          "filed": "07-AUG-2026",
+          "shares": 214123129.0,
+          "value": 90060187901.0
+        },
+        {
+          "manager": "VANGUARD CAPITAL MANAGEMENT LLC",
+          "cik": "0002100119",
+          "filed": "13-AUG-2026",
+          "shares": 184023551.0,
+          "value": 77400305550.0
+        },
+        {
+          "manager": "STATE STREET CORP",
+          "cik": "0000093751",
+          "filed": "07-AUG-2026",
+          "shares": 117456756.0,
+          "value": 49402311574.0
+        },
+        {
+          "manager": "GEODE CAPITAL MANAGEMENT, LLC",
+          "cik": "0001214717",
+          "filed": "12-AUG-2026",
+          "shares": 68914720.0,
+          "value": 28864073379.0
+        },
+        {
+          "manager": "Invesco Ltd.",
+          "cik": "0000914208",
+          "filed": "14-AUG-2026",
+          "shares": 55464442.0,
+          "value": 23328344382.0
+        },
+        {
+          "manager": "VANGUARD PORTFOLIO MANAGEMENT LLC",
+          "cik": "0002100121",
+          "filed": "13-AUG-2026",
+          "shares": 49550535.0,
+          "value": 20840955021.0
+        },
+        {
+          "manager": "Capital World Investors",
+          "cik": "0001422849",
+          "filed": "12-AUG-2026",
+          "shares": 45735669.0,
+          "value": 19235629659.0
+        },
+        {
+          "manager": "JPMORGAN CHASE & CO",
+          "cik": "0000019617",
+          "filed": "12-AUG-2026",
+          "shares": 41972287.0,
+          "value": 17285867586.0
+        },
+        {
+          "manager": "FMR LLC",
+          "cik": "0000315066",
+          "filed": "13-AUG-2026",
+          "shares": 39766224.0,
+          "value": 16725673841.0
+        },
+        {
+          "manager": "MORGAN STANLEY",
+          "cik": "0000895421",
+          "filed": "13-AUG-2026",
+          "shares": 38872087.0,
+          "value": 16349601265.0
+        }
+      ]
+    },
+    "HOOD": {
+      "managers": 1389,
+      "totalShares": 618814903.0,
+      "totalValueUsd": 60479122373.0,
+      "impliedPriceMedianUsd": 100.28,
+      "valueUnit": "US dollars (not thousands) \u2014 implied quarter-end price matches the June 30 2026 print",
+      "top10": [
+        {
+          "manager": "BlackRock, Inc.",
+          "cik": "0002012383",
+          "filed": "07-AUG-2026",
+          "shares": 67787066.0,
+          "value": 6797686961.0
+        },
+        {
+          "manager": "VANGUARD CAPITAL MANAGEMENT LLC",
+          "cik": "0002100119",
+          "filed": "13-AUG-2026",
+          "shares": 51655498.0,
+          "value": 5180013339.0
+        },
+        {
+          "manager": "VANGUARD PORTFOLIO MANAGEMENT LLC",
+          "cik": "0002100121",
+          "filed": "13-AUG-2026",
+          "shares": 37313830.0,
+          "value": 3741830873.0
+        },
+        {
+          "manager": "STATE STREET CORP",
+          "cik": "0000093751",
+          "filed": "07-AUG-2026",
+          "shares": 34671148.0,
+          "value": 3476822721.0
+        },
+        {
+          "manager": "FMR LLC",
+          "cik": "0000315066",
+          "filed": "13-AUG-2026",
+          "shares": 29907700.0,
+          "value": 2999144159.0
+        },
+        {
+          "manager": "Newlands Management Operations LLC",
+          "cik": "0001908450",
+          "filed": "14-AUG-2026",
+          "shares": 24158860.0,
+          "value": 2422650481.0
+        },
+        {
+          "manager": "GEODE CAPITAL MANAGEMENT, LLC",
+          "cik": "0001214717",
+          "filed": "12-AUG-2026",
+          "shares": 22597737.0,
+          "value": 2286882680.0
+        },
+        {
+          "manager": "JPMORGAN CHASE & CO",
+          "cik": "0000019617",
+          "filed": "12-AUG-2026",
+          "shares": 15803996.0,
+          "value": 1609321182.0
+        },
+        {
+          "manager": "NORGES BANK",
+          "cik": "0001374170",
+          "filed": "12-AUG-2026",
+          "shares": 11407553.0,
+          "value": 1143949415.0
+        },
+        {
+          "manager": "Index Venture Associates VI Ltd",
+          "cik": "0001755035",
+          "filed": "14-AUG-2026",
+          "shares": 10127528.0,
+          "value": 1015588508.0
+        }
+      ]
+    }
+  },
+  "caveats": [
+    "Lagged 45+ days; this file is Q2 2026 holdings (as of 30 Jun 2026), filed in July\u2013August 2026.",
+    "Long US equity and certain options only \u2014 no short positions, no cash, limited derivatives.",
+    "Index/ETF sponsors (BlackRock, Vanguard, State Street, Geode) dominate top-holder lists; that is not a directional bet.",
+    "The same sponsor can appear under several manager names; do not naively sum them.",
+    "VALUE in this 2026 dataset is in dollars (median implied AAPL ~$289, NVDA ~$200, TSLA ~$421, HOOD ~$100 as of 30 Jun 2026)."
+  ],
+  "cachedAt": "2026-11-10T14:36:00Z",
+  "asOfNote": "13F as of 30 Jun 2026, filed Jul\u2013Aug 2026 (01jun2026-31aug2026 ZIP). Lagged official holdings, not a live tape.",
+  "source": "SEC EDGAR Form 13F data set"
+}

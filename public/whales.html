@@ -4,45 +4,51 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
 <title>Whale Footprints · QuantSignal Futures</title>
-<link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/builder.css"><link rel="stylesheet" href="/ds.css">
-<style>
-.whale-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;margin:14px 0}
-.wcard{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel2);padding:14px 16px}
-.wcard h3{margin:0 0 6px;font-size:15px;display:flex;justify-content:space-between;align-items:center;gap:8px}
-.wcard .bias{font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px}
-.bias.WHALE_LONG,.bias.LEAN_LONG{background:var(--green-dim);color:var(--green)}
-.bias.WHALE_SHORT,.bias.LEAN_SHORT{background:var(--red-dim);color:var(--red)}
-.bias.NEUTRAL{background:rgba(148,163,184,.15);color:var(--muted)}
-.wcard dl{margin:8px 0 0;display:grid;grid-template-columns:1fr auto;gap:3px 10px;font-size:12px}
-.wcard dt{color:var(--muted)}.wcard dd{margin:0;text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono)}
-.prints{margin-top:8px;font-size:11px;max-height:90px;overflow:auto}
-.prints div{display:flex;justify-content:space-between;gap:8px;padding:2px 0;border-bottom:1px solid var(--line)}
-.meta{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);margin:8px 0;align-items:center}
-</style>
+<link rel="stylesheet" href="/ds.css">
+<link rel="stylesheet" href="/whales.css">
 </head>
 <body class="qs-app">
 <main>
+  <p class="page-sub muted whale-kicker">Binance USDⓈ-M · official lagged cash-market context</p>
   <h1 class="page-title">Whale Footprints</h1>
-  <p class="page-sub">US equity TradFi perps only. Large aggTrades, open-interest changes, top-trader and global long/short ratios, taker imbalance, and book walls. Liquidation tape is labeled when unavailable. Timestamps IST. Owner login required.</p>
+  <p class="page-sub">Live perp tape for US equity TradFi perps, plus official SEC / FINRA / Cboe panels. Each block is labeled with its source, as-of time and lag. Nothing here is an automatic entry, and there is no blended score.</p>
   <div class="meta">
     <span id="upd">Last refresh: —</span>
     <span id="uni">Universe: —</span>
     <span id="thr">Print ≥ $50k · Wall ≥ $100k</span>
-    <button class="btn ghost" id="btnRefresh" type="button">Refresh now</button>
+    <button class="btn ghost" id="btnRefresh" type="button">Refresh perp tape</button>
   </div>
-  <p class="page-sub" id="liqNote" style="font-size:12px;color:var(--muted)"></p>
-  <p class="page-sub" id="err" hidden style="color:var(--amber)"></p>
-  <div class="whale-grid" id="grid"><p class="muted">Loading whale cards…</p></div>
-  <section class="panel" style="margin-top:8px">
-    <h2>Sources</h2>
-    <p class="muted" id="sources" style="font-size:13px">Primary: Binance public REST (fapi aggTrades, openInterest, futures/data openInterestHist, top-trader &amp; global long/short, taker buy/sell, depth). Coinglass / Unusual Whales / EDGAR are listed as not wired (no paid keys; nothing is scraped). Public liquidation websocket is not hooked — the note below is shown rather than invented prints.</p>
-    <details class="details-toggle"><summary>How bias is chosen</summary>
-      <ol style="font-size:13px;color:var(--text2)">
-        <li>Score OI change, taker buy ratio, top-trader long ratio, large print imbalance, book wall skew.</li>
-        <li>Map score → WHALE_LONG / LEAN_LONG / NEUTRAL / LEAN_SHORT / WHALE_SHORT.</li>
-        <li>No commodities; US equity TradFi perps only.</li>
-      </ol>
-    </details>
+  <p class="page-sub" id="err" hidden></p>
+
+  <section class="panel" id="panelPerp">
+    <h2>Perp tape <span class="src-pill" id="perpSrc">Binance</span></h2>
+    <p class="src-line" id="perpMeta">Source and lag appear after the first refresh.</p>
+    <div class="liq-tape" id="liqTape"><p class="muted">Liquidation stream starting…</p></div>
+    <div class="whale-grid" id="grid"><p class="muted">Loading perp cards…</p></div>
+  </section>
+
+  <section class="panel" id="panelShort">
+    <h2>Cash short positioning <span class="src-pill" id="shortSrc">FINRA</span></h2>
+    <p class="src-line" id="shortMeta"></p>
+    <div id="shortBody"><p class="muted">Loading official short data…</p></div>
+  </section>
+
+  <section class="panel" id="panelAts">
+    <h2>Dark pool / ATS <span class="src-pill" id="atsSrc">FINRA weekly</span></h2>
+    <p class="src-line" id="atsMeta"></p>
+    <div id="atsBody"><p class="muted">Loading weekly ATS / OTC…</p></div>
+  </section>
+
+  <section class="panel" id="panelInst">
+    <h2>Institutional filings <span class="src-pill" id="instSrc">SEC EDGAR</span></h2>
+    <p class="src-line" id="instMeta"></p>
+    <div id="instBody"><p class="muted">Loading 13F / Form 4 / 13D-G…</p></div>
+  </section>
+
+  <section class="panel" id="panelOpt">
+    <h2>Options unusual activity <span class="src-pill" id="optSrc">Cboe delayed</span></h2>
+    <p class="src-line" id="optMeta"></p>
+    <div id="optBody"><p class="muted">Loading delayed options screen…</p></div>
   </section>
 </main>
 <script src="/whales.js"></script>

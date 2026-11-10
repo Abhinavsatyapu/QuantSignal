@@ -20,3 +20,6 @@ test('no undeclared variables in the Strategy Builder page script', async () => 
 test('no undeclared variables in Live Signals page script', async () => {
   assert.deepEqual(await lint(['public/signals.js'], { browser: true }), []);
 });
+test('no undeclared variables in Whale Footprints page script', async () => {
+  assert.deepEqual(await lint(['public/whales.js'], { browser: true }), []);
+});

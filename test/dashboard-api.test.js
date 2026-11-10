@@ -162,7 +162,10 @@ describe('dashboard API + pages', () => {
     assert.match(pos, /LIMIT_WORKING|entryStatus|protectionStatus/);
     const whales = fs.readFileSync(path.join(PUB, 'whales.html'), 'utf8');
     assert.doesNotMatch(whales, /Guest read-only/);
-    assert.match(whales, /aggTrade|open-interest|Binance/i);
+    assert.match(whales, /Binance/i);
+    assert.match(whales, /Institutional filings/);
+    assert.doesNotMatch(whales, /How bias is chosen/);
+    assert.match(whales, /src="\/whales\.js"/);
     assert.match(shell, /Live Signals/);
     assert.match(shell, /href: '\/signals'/);
     const sigPage = fs.readFileSync(path.join(PUB, 'signals.html'), 'utf8');
