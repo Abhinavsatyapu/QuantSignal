@@ -11,6 +11,7 @@ const { Prices, DEFAULT_SYMBOLS } = require('./binance-prices');
 const universe = require('./binance-universe');
 const sm = require('./binance-order-sm');
 const sigLive = require('./binance-signals-live');
+const { createKlineCache } = require('./binance-klines-cache');
 require('../public/indicators.js');
 require('../public/strategy-liquidity-signals.js');
 const { Technicals, LiquiditySignals } = globalThis;
@@ -775,16 +776,42 @@ async function reconcile() {
   return { mode: mi.placingOn, positions: posBySym.size, missingStops: missing.length };
 }
 
+const klineCache = createKlineCache();
+const SCAN_ABORT_MS = 120000;
+const yieldLoop = () => new Promise((r) => setImmediate(r));
+
+async function getScanKlines(symbol, interval, signal) {
+  const client = await ensureClient();
+  const limit = klineCache.limitFor(symbol, interval);
+  const fresh = await client.klines(symbol, interval, limit, { signal, timeoutMs: 8000, priority: 'normal' });
+  return klineCache.put(symbol, interval, fresh);
+}
+
+function abortScan(reason) {
+  const msg = reason || 'scan aborted by watchdog';
+  if (state.scanAbort) {
+    try { state.scanAbort.abort(msg); } catch {}
+  }
+  state.lastScanError = msg;
+  state.scanWatchdogRestarts = (state.scanWatchdogRestarts || 0) + 1;
+}
+
 async function scanOnce(reason) {
   const c = cfgBn();
   if (!c.scannerEnabled || !c.enabled || state.scanBusy) return;
+  const ac = new AbortController();
+  state.scanAbort = ac;
   state.scanBusy = true; state.lastScanError = null; state.scanStartedAt = Date.now();
+  state.scanProgress = { done: 0, total: (c.assets || []).length, reason: reason || 'scan' };
   try {
     const client = await ensureClient();
     if (!state.symbolInfo) await loadExchangeInfo();
     for (const symbol of c.assets) {
+      if (ac.signal.aborted) throw new Error(ac.signal.reason || 'scan aborted');
+      await yieldLoop();
       try {
-        const kl = await client.klines(symbol, c.interval, 200);
+        const kl = await getScanKlines(symbol, c.interval, ac.signal);
+        state.scanProgress.done += 1;
         if (!kl.length) continue;
         state.marks[symbol] = kl[kl.length - 1].c;
         const candles = kl.map((k) => [k.t, k.o, k.h, k.l, k.c, k.v]);
@@ -893,8 +920,16 @@ async function scanOnce(reason) {
     state.lastScanDurationMs = state.scanStartedAt ? (state.lastScanAt - state.scanStartedAt) : 0;
     const ms = ({ '1m': 60e3, '3m': 180e3, '5m': 300e3, '15m': 900e3, '30m': 1800e3, '1h': 3600e3, '4h': 14400e3 })[c.interval] || 900e3;
     state.nextScanAt = Date.now() + Math.min(ms, 60e3);
-  } catch (e) { state.lastScanError = e.message; blog('error', 'scan: ' + e.message); }
-  finally { state.scanBusy = false; }
+    blog('info', `scan ${reason || ''} done ${state.scanProgress.done}/${state.scanProgress.total} in ${state.lastScanDurationMs}ms`);
+  } catch (e) {
+    state.lastScanError = e.message;
+    state.lastScanDurationMs = state.scanStartedAt ? (Date.now() - state.scanStartedAt) : 0;
+    blog('error', 'scan: ' + e.message);
+  }
+  finally {
+    if (state.scanAbort === ac) state.scanAbort = null;
+    state.scanBusy = false;
+  }
 }
 
 function setKill(on, reason) {
@@ -1085,10 +1120,14 @@ function signalsHealth() {
     usCashOnly: !!(c.entryFilters && c.entryFilters.usCashOnly),
     scannerEnabled: !!c.scannerEnabled,
     scanBusy: !!state.scanBusy,
+    scanStartedAt: state.scanStartedAt || null,
+    scanStartedAtIst: sigLive.formatIst(state.scanStartedAt || null),
+    scanProgress: state.scanProgress || null,
     lastScanAt: state.lastScanAt || null,
     lastScanAtIst: sigLive.formatIst(state.lastScanAt || null),
     lastScanDurationMs: state.lastScanDurationMs || 0,
     lastScanError: state.lastScanError || null,
+    scanAbortMs: SCAN_ABORT_MS,
     nextScanAt: state.nextScanAt || null,
     nextBarCloseAt: sigLive.nextBarCloseAt(c.interval || '30m', now),
     nextBarCloseAtIst: sigLive.formatIst(sigLive.nextBarCloseAt(c.interval || '30m', now)),
@@ -1166,9 +1205,10 @@ function start() {
   const boot = async () => {
     try { await loadExchangeInfo(); } catch {}
     try { await reconcile(); } catch (e) { blog('warn', 'startup reconcile: ' + e.message); }
+    // First scan before universe re-screen — liquidity snapshots compete for the same REST budget.
+    try { await scanOnce('startup'); } catch (e) { blog('warn', 'startup scan: ' + e.message); }
     try { await refreshUniverse(false); } catch (e) { blog('warn', 'startup universe: ' + e.message); }
     every(6 * 3600e3, async () => { await refreshUniverse(false); });
-    try { await scanOnce('startup'); } catch (e) { blog('warn', 'startup scan: ' + e.message); }
   };
   boot().catch((e) => blog('warn', 'startup boot: ' + (e && e.message)));
   const every = (ms, fn) => { const id = setInterval(() => { fn().catch((e) => blog('warn', e.message)); }, ms); state.timers.push(id); };
@@ -1179,14 +1219,18 @@ function start() {
   });
   every(15000, async () => { await reconcile(); });
   every(60e3, async () => { refreshDay(equityNow()); checkDailyLimits(equityNow()); });
-  every(15e3, async () => {
+  every(5e3, async () => {
     const c2 = cfgBn();
     if (!c2.scannerEnabled || !c2.enabled) return;
     const now = Date.now();
-    if (state.scanBusy && state.scanStartedAt && now - state.scanStartedAt > 180e3) {
-      blog('warn', 'scan watchdog: resetting stuck scan');
-      state.scanBusy = false;
-      state.scanWatchdogRestarts = (state.scanWatchdogRestarts || 0) + 1;
+    if (state.scanBusy && state.scanStartedAt && now - state.scanStartedAt > SCAN_ABORT_MS) {
+      blog('warn', 'scan watchdog: aborting stuck scan after ' + (now - state.scanStartedAt) + 'ms');
+      abortScan('scan aborted after ' + Math.round((now - state.scanStartedAt) / 1000) + 's');
+      // Give the aborted loop a moment to unwind, then start a fresh pass.
+      setTimeout(() => {
+        if (!state.scanBusy) scanOnce('watchdog').catch((e) => blog('warn', 'watchdog scan: ' + e.message));
+      }, 250);
+      return;
     }
     if (!state.scanBusy && state.nextScanAt && now >= state.nextScanAt + 30e3) {
       blog('warn', 'scan watchdog: overdue scan, restarting');
@@ -1206,7 +1250,7 @@ function stop() {
 
 module.exports = {
   state, start, stop, handleSignal, reconcile, scanOnce, refreshUniverse, health, status, setKill, modeInfo,
-  signalsFeed, signalsHealth, liveScans,
+  signalsFeed, signalsHealth, liveScans, abortScan, klineCache, SCAN_ABORT_MS,
   positionsView, processPendings, finalizeEntry, attachProtection, protectiveOrders, transitionTrade, placeProtectiveWithRetry,
   sizePosition: bn.sizePosition, ensureTables, openTrades, pendingRows, equityNow, markOf, sm,
   _insertTrade: insertTrade, _closeTrade: closeTrade, _rememberCid: rememberCid, _cidTaken: cidTaken,

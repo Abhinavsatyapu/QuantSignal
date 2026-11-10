@@ -79,7 +79,7 @@
     const stale = isStale();
     const scanAge = h.lastScanAt ? (Date.now() - h.lastScanAt) : null;
     const engineStale = !h.lastScanAt || (scanAge != null && scanAge > 180000) || !!h.lastScanError;
-    setPill($('hbEngine'), engineStale ? 'Engine STALE' : 'Engine OK', engineStale ? 'stale' : 'ok');
+    setPill($('hbEngine'), engineStale ? 'Engine STALE' : 'Engine LIVE', engineStale ? 'stale' : 'ok');
     setPill($('hbScan'), 'Last scan ' + (h.lastScanAtIst || fmtIst(h.lastScanAt)));
     setPill($('hbBar'), 'Next 30m close ' + (h.nextBarCloseAtIst || fmtIst(h.nextBarCloseAt)));
     setPill($('hbMode'), h.dryRun === false ? 'LIVE' : 'DRY-RUN', h.dryRun === false ? 'stale' : 'ok');

@@ -10,6 +10,7 @@ const { clusterPrints, updateWallMemory } = require('./whales-cluster');
 const { ForceOrderTape } = require('./whales-force-order');
 const institutions = require('./whales-institutions');
 const wutil = require('./whales-util');
+const limiter = require('./binance-limiter');
 
 const DATA = 'https://fapi.binance.com'; // futures/data/* lives here
 const state = {
@@ -29,7 +30,10 @@ async function dataGet(path, params = {}) {
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v != null) q.set(k, String(v));
   const url = DATA + path + (q.toString() ? '?' + q : '');
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  const res = await limiter.schedule(
+    () => fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8000) }),
+    { priority: 'low' },
+  );
   if (!res.ok) {
     const t = await res.text().catch(() => '');
     const err = new Error(`Binance data ${res.status}: ${t.slice(0, 160)}`);
@@ -318,7 +322,8 @@ function start() {
   } catch {}
   forceTape.start();
   institutions.start();
-  refresh({ limit: 12 }).catch((e) => { state.lastError = e.message; });
+  // Delay the first REST batch so the signal scanner can finish its warmup klines.
+  setTimeout(() => { refresh({ limit: 12 }).catch((e) => { state.lastError = e.message; }); }, 45000);
   setInterval(() => { refresh({ limit: 12 }).catch(() => {}); }, 5 * 60e3);
 }
 

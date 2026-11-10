@@ -4,6 +4,7 @@
 // Signing uses HMAC-SHA256. Server time is synced to avoid -1021 drift.
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
+const limiter = require('./binance-limiter');
 
 const URLS = {
   // fapi.binance.com returns HTTP 451 from many cloud/US IPs; www.binance.com/fapi proxies the same public endpoints.
@@ -58,10 +59,23 @@ function Client(opts = {}) {
   const emitter = new EventEmitter();
   const urls = () => URLS[state.network === 'live' ? 'live' : 'testnet'];
 
-  async function raw(method, path, { query = {}, signed = false, body = null, publicOk = false } = {}, attempt = 0) {
+  async function raw(method, path, { query = {}, signed = false, body = null, publicOk = false, signal = null, timeoutMs = 8000, priority = 'normal' } = {}, attempt = 0) {
+    if (signal && signal.aborted) throw limiter.abortError(signal);
     if (Date.now() < state.rateLimitedUntil) {
       const wait = state.rateLimitedUntil - Date.now();
-      await sleep(Math.min(wait, 5000));
+      await sleep(Math.min(wait, 3000));
+    }
+    const run = () => rawOnce(method, path, { query, signed, body, publicOk, signal, timeoutMs, priority }, attempt);
+    // Signed / already-inside-limiter recursive retries skip the queue to preserve attempt state.
+    if (attempt > 0) return run();
+    return limiter.schedule(run, { signal, priority: signed ? 'high' : priority });
+  }
+
+  async function rawOnce(method, path, { query = {}, signed = false, body = null, publicOk = false, signal = null, timeoutMs = 8000, priority = 'normal' } = {}, attempt = 0) {
+    if (signal && signal.aborted) throw limiter.abortError(signal);
+    if (Date.now() < state.rateLimitedUntil) {
+      const wait = state.rateLimitedUntil - Date.now();
+      await sleep(Math.min(wait, 3000));
     }
     // Unsigned market-data GETs ALWAYS use live www.binance.com — even in dry-run/testnet mode —
     // so exchangeInfo/klines see the full TRADIFI equity universe (testnet lists are truncated).
@@ -86,33 +100,46 @@ function Client(opts = {}) {
     const key = env('BINANCE_API_KEY');
     if (key) headers['X-MBX-APIKEY'] = key;
     let res;
+    const timeout = Number(timeoutMs) > 0 ? Number(timeoutMs) : 8000;
+    let fetchSignal = AbortSignal.timeout(timeout);
+    if (signal) {
+      const ac = new AbortController();
+      const onAbort = () => ac.abort(signal.reason || 'aborted');
+      if (signal.aborted) onAbort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+      fetchSignal = AbortSignal.any ? AbortSignal.any([fetchSignal, ac.signal]) : ac.signal;
+      // If AbortSignal.any is missing, still honor timeout:
+      if (!AbortSignal.any) setTimeout(() => { try { ac.abort('timeout'); } catch {} }, timeout);
+    }
     try {
-      res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(15000) });
+      res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined, signal: fetchSignal });
     } catch (e) {
-      if (attempt < 4) { await sleep(250 * 2 ** attempt); return raw(method, path, { query, signed, body }, attempt + 1); }
+      if (signal && signal.aborted) throw limiter.abortError(signal);
+      if (attempt < 1) { await sleep(200 * 2 ** attempt); return raw(method, path, { query, signed, body, publicOk, signal, timeoutMs, priority }, attempt + 1); }
       state.lastError = e.message; throw e;
     }
     const text = await res.text();
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
     if (res.status === 429 || res.status === 418) {
-      const retry = Number(res.headers.get('retry-after') || 2) * 1000;
+      const retry = Math.min(5000, Math.max(250, Number(res.headers.get('retry-after') || 1) * 1000 || 1000));
       state.rateLimitedUntil = Date.now() + retry;
-      if (attempt < 5) { await sleep(retry); return raw(method, path, { query, signed, body }, attempt + 1); }
+      try { limiter.pause(retry); } catch {}
+      if (attempt < 2) { await sleep(retry); return raw(method, path, { query, signed, body, publicOk, signal, timeoutMs, priority }, attempt + 1); }
     }
     // -1021 timestamp drift: resync and retry once
     if (data && data.code === -1021 && attempt < 2) {
       await syncTime();
-      return raw(method, path, { query, signed, body }, attempt + 1);
+      return raw(method, path, { query, signed, body, publicOk, signal, timeoutMs, priority }, attempt + 1);
     }
     if (!res.ok) {
       const err = Object.assign(new Error((data && (data.msg || data.message)) || ('HTTP ' + res.status)), { status: res.status, code: data && data.code, data });
       state.lastError = err.message;
       // Geo-block on fapi → fall back to www.binance.com public proxy for unsigned GETs
       if ((res.status === 451 || res.status === 403) && !signed && method === 'GET' && attempt < 2 && urls().publicRest && !String(u).startsWith(urls().publicRest)) {
-        return raw(method, path, { query, signed, body, publicOk: true }, attempt + 1);
+        return raw(method, path, { query, signed, body, publicOk: true, signal, timeoutMs, priority }, attempt + 1);
       }
-      if (attempt < 3 && res.status >= 500) { await sleep(300 * 2 ** attempt); return raw(method, path, { query, signed, body, publicOk }, attempt + 1); }
+      if (attempt < 2 && res.status >= 500) { await sleep(300 * 2 ** attempt); return raw(method, path, { query, signed, body, publicOk, signal, timeoutMs, priority }, attempt + 1); }
       throw err;
     }
     return data;
@@ -128,15 +155,16 @@ function Client(opts = {}) {
     return state.timeOffsetMs;
   }
 
-  const publicGet = (path, query) => raw('GET', path, { query });
+  const publicGet = (path, query, opts = {}) => raw('GET', path, { query, ...opts });
   const signedGet = (path, query) => raw('GET', path, { query, signed: true });
   const signedPost = (path, query) => raw('POST', path, { query, signed: true });
   const signedDelete = (path, query) => raw('DELETE', path, { query, signed: true });
 
   async function exchangeInfo() { return publicGet('/fapi/v1/exchangeInfo'); }
   async function markPrice(symbol) { return publicGet('/fapi/v1/premiumIndex', symbol ? { symbol } : {}); }
-  async function klines(symbol, interval, limit = 200) {
-    const rows = await publicGet('/fapi/v1/klines', { symbol, interval, limit });
+  async function klines(symbol, interval, limit = 200, opts = {}) {
+    const rows = await publicGet('/fapi/v1/klines', { symbol, interval, limit }, opts);
+    if (!Array.isArray(rows)) return [];
     return rows.map((r) => ({ t: r[0], o: +r[1], h: +r[2], l: +r[3], c: +r[4], v: +r[5], T: r[6], closed: true }));
   }
   async function positionRisk(symbol) {
