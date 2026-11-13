@@ -1,10 +1,11 @@
 name: keepalive
 # Pings the Render free instance so it does not spin down (free web services sleep after ~15 min idle).
-# Set the repository variable RENDER_HEALTH_URL (Settings → Secrets and variables → Actions → Variables),
-# e.g. https://quantsignal.onrender.com/health
+# GitHub scheduled workflows are often delayed by hours, so this is a backup only — also ping from
+# an external 5-minute monitor (or upgrade the Render plan off free for always-on).
+# Override with repo variable RENDER_HEALTH_URL if the service URL changes.
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 permissions: {}
 jobs:
@@ -14,7 +15,7 @@ jobs:
     steps:
       - name: Ping /health
         env:
-          URL: ${{ vars.RENDER_HEALTH_URL || 'https://quantsignal.onrender.com/health' }}
+          URL: ${{ vars.RENDER_HEALTH_URL || 'https://quantsignal-xnrq.onrender.com/health' }}
         run: |
           for i in 1 2 3; do
             code=$(curl -s -o /tmp/body -w '%{http_code}' --max-time 90 "$URL") || code=000

@@ -107,12 +107,14 @@ test('Live Signals badge uses Engine LIVE when the scan is fresh', () => {
 
 test('parseBanUntil and fail-fast ban helpers', () => {
   httpUtil._resetBanForTests();
-  const ms = httpUtil.parseBanUntil('Way too many requests; IP(1.2.3.4) banned until 1794511548522. Please use the websocket');
-  assert.equal(ms, 1794511548522);
-  assert.equal(httpUtil.parseBanUntil('banned until 1794511548'), 1794511548000);
-  httpUtil.noteBan('IP banned until 1794511548522');
-  assert.equal(httpUtil.isBanned(1794511548522 - 1000), true);
-  assert.equal(httpUtil.isBanned(1794511548522 + 1000), false);
+  const untilMs = Date.now() + 7 * 86400e3;
+  const untilSec = Math.floor(untilMs / 1000);
+  const ms = httpUtil.parseBanUntil('Way too many requests; IP(1.2.3.4) banned until ' + untilMs + '. Please use the websocket');
+  assert.equal(ms, untilMs);
+  assert.equal(httpUtil.parseBanUntil('banned until ' + untilSec), untilSec * 1000);
+  httpUtil.noteBan('IP banned until ' + untilMs);
+  assert.equal(httpUtil.isBanned(untilMs - 1000), true);
+  assert.equal(httpUtil.isBanned(untilMs + 1000), false);
   httpUtil._resetBanForTests();
   assert.equal(httpUtil.isBanned(), false);
 });
@@ -167,4 +169,13 @@ test('Technicals.analyze expects objects and a numeric now, not arrays with opti
   assert.throws(() => globalThis.Technicals.analyze(asArrays, { minStopPct: 1.5 }), /220 completed candles/);
   const src = fs.readFileSync(path.join(__dirname, '../server/binance-trader.js'), 'utf8');
   assert.match(src, /Technicals\.analyze\(\s*kl\s*,\s*Date\.now\(\)/);
+});
+
+test('dry-run entries skip markPrice and liquidity REST while fapi is IP-banned', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../server/binance-trader.js'), 'utf8');
+  const handle = src.slice(src.indexOf('async function handleSignal'), src.indexOf('async function reconcile'));
+  assert.match(handle, /mark > 0\) && !httpUtil\.isBanned\(\)/);
+  assert.match(handle, /Liquidity REST skipped/);
+  assert.match(handle, /No WS mark during REST IP ban/);
+  assert.ok(!/if \(!\(mark > 0\)\) \{[\s\S]*ensureClient\(\)\)\.markPrice/.test(handle));
 });

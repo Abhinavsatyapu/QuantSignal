@@ -506,22 +506,28 @@ async function handleSignal(sig) {
     if (day && c.dailyProfitHaltEnabled && c.dailyProfitTargetPct > 0 && day.dayPct >= c.dailyProfitTargetPct) return reject(`Daily profit halt (+${day.dayPct.toFixed(2)}%)`);
 
     let mark = markOf(sig.symbol);
-    if (!(mark > 0)) {
+    if (!(mark > 0) && !httpUtil.isBanned()) {
       try { const m = await (await ensureClient()).markPrice(sig.symbol); mark = Number(m.markPrice); state.marks[sig.symbol] = mark; }
       catch (e) { return reject('No mark: ' + e.message); }
     }
-    if (!(mark > 0)) return reject('No mark for ' + sig.symbol);
+    if (!(mark > 0)) return reject(httpUtil.isBanned() ? 'No WS mark during REST IP ban' : 'No mark for ' + sig.symbol);
 
-    // Liquidity filter (Binance bot only — options Builder is unchanged)
-    try {
-      const liq = await universe.liquiditySnapshot(await ensureClient(), sig.symbol, {
-        minQuoteVolume24h: c.minQuoteVolume24h, maxSpreadBps: c.maxSpreadBps,
-        minDepthUsd: c.minDepthUsd, minOpenInterestUsd: c.minOpenInterestUsd,
-        maxNotionalPctOfDepth: c.maxNotionalPctOfDepth,
-      });
-      if (!liq.ok) return reject('Illiquid: ' + liq.reasons.join('; '));
-      sig._liq = liq;
-    } catch (e) { return reject('Liquidity check failed: ' + e.message); }
+    // Liquidity filter (Binance bot only — options Builder is unchanged).
+    // During a fapi IP ban, skip book/ticker REST so dry-run entries can still
+    // paper-trade from the curated universe + WebSocket marks.
+    if (httpUtil.isBanned()) {
+      blog('info', `Liquidity REST skipped for ${sig.symbol} (fapi IP ban; curated universe + WS mark)`);
+    } else {
+      try {
+        const liq = await universe.liquiditySnapshot(await ensureClient(), sig.symbol, {
+          minQuoteVolume24h: c.minQuoteVolume24h, maxSpreadBps: c.maxSpreadBps,
+          minDepthUsd: c.minDepthUsd, minOpenInterestUsd: c.minOpenInterestUsd,
+          maxNotionalPctOfDepth: c.maxNotionalPctOfDepth,
+        });
+        if (!liq.ok) return reject('Illiquid: ' + liq.reasons.join('; '));
+        sig._liq = liq;
+      } catch (e) { return reject('Liquidity check failed: ' + e.message); }
+    }
 
     const sign = dirSign(sig.direction);
     const ref = sig.entry > 0 ? sig.entry : mark;
