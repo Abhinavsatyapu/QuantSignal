@@ -14,3 +14,4 @@ screenshots/*.tmp
 scripts/out/klines/
 scripts/out/*.log
 screenshots/
+__pycache__/
