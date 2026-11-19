@@ -8,7 +8,7 @@
 const crypto = require('crypto');
 
 const COOKIE = 'qs_session';
-const MAX_AGE_MS = 7 * 24 * 3600e3;
+const MAX_AGE_MS = 365 * 24 * 3600e3;   // sign in once per device; changing OWNER_PASSWORD still signs everyone out
 const LOGIN_WINDOW_MS = 60e3;
 const LOGIN_MAX = 10;
 
@@ -257,7 +257,7 @@ function redactSecrets(obj) {
   return walk(obj);
 }
 
-function safeNext(raw, fallback = '/futures') {
+function safeNext(raw, fallback = '/') {
   const s = String(raw == null ? '' : raw).trim();
   if (!s.startsWith('/') || s.startsWith('//') || s.includes('\\') || s.includes('://') || /[\u0000-\u001f]/.test(s)) return fallback;
   const pathOnly = s.split('?')[0].split('#')[0];

@@ -332,11 +332,11 @@ app.all(/^\/api\/.*/, (req, res) => res.status(404).json({ error: 'Unknown API e
 // ------------------------------------------------------------------ frontend
 const PUB = path.join(config.ROOT, 'public');
 // Redirects first so static HTML (index.html / options.html) cannot leak mixed or legacy pages.
-app.get('/', (req, res) => res.redirect(302, '/futures'));
-app.get('/index.html', (req, res) => res.redirect(302, '/futures'));
-for (const p of ['/news', '/webhook', '/risk', '/paper', '/autotrader']) {
-  app.get(p, (req, res) => res.redirect(302, '/futures'));
-}
+// chatgpt-version: the original QuantSignal Terminal is the home page again. It picks its view from the path.
+const terminal = (req, res) => res.sendFile(path.join(PUB, 'index.html'));
+app.get('/', terminal);
+app.get('/index.html', terminal);
+for (const p of ['/dashboard', '/news', '/webhook', '/risk', '/paper', '/autotrader']) app.get(p, terminal);
 for (const p of ['/options', '/gamma', '/hedge', '/ratio', '/live-hedge', '/options-studio', '/gamma-book']) {
   app.get(p, (req, res) => res.redirect(301, '/builder'));
 }

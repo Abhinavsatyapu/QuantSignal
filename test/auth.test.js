@@ -130,11 +130,11 @@ describe('HTML form login (no JS) and safe next', () => {
   it('safeNext allows same-origin paths and rejects open redirects', () => {
     assert.equal(auth.safeNext('/positions'), '/positions');
     assert.equal(auth.safeNext('/futures?x=1'), '/futures?x=1');
-    assert.equal(auth.safeNext('//evil.example'), '/futures');
-    assert.equal(auth.safeNext('https://evil.example'), '/futures');
-    assert.equal(auth.safeNext('/\\evil'), '/futures');
-    assert.equal(auth.safeNext('/login'), '/futures');
-    assert.equal(auth.safeNext(''), '/futures');
+    assert.equal(auth.safeNext('//evil.example'), '/');
+    assert.equal(auth.safeNext('https://evil.example'), '/');
+    assert.equal(auth.safeNext('/\\evil'), '/');
+    assert.equal(auth.safeNext('/login'), '/');
+    assert.equal(auth.safeNext(''), '/');
   });
 
   it('form POST /login sets the session cookie and 303s to a safe next path', async () => {
@@ -163,7 +163,7 @@ describe('HTML form login (no JS) and safe next', () => {
       body: new URLSearchParams({ password: 'owner-secret-test', next: '//evil.example' }).toString(),
     });
     assert.equal(open.status, 303);
-    assert.equal(open.headers.get('location'), '/futures');
+    assert.equal(open.headers.get('location'), '/');
 
     const bad = await fetch(base + '/login', {
       method: 'POST',

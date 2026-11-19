@@ -6,10 +6,10 @@
   var btn = document.getElementById('btn');
   function safeNext(raw) {
     var s = String(raw || '');
-    if (s.indexOf('/') !== 0 || s.indexOf('//') === 0) return '/futures';
+    if (s.indexOf('/') !== 0 || s.indexOf('//') === 0) return '/';
     return s;
   }
-  var next = safeNext((nextField && nextField.value) || '/futures');
+  var next = safeNext((nextField && nextField.value) || '/');
   form.addEventListener('submit', function (e) {
     if (typeof fetch !== 'function') return;
     e.preventDefault();
