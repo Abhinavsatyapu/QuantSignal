@@ -12,6 +12,7 @@ const SRC = {
   yahoo: process.env.YAHOO_BASE || "https://query1.finance.yahoo.com/v8/finance/chart/",
   stooq: process.env.STOOQ_BASE || "https://stooq.com/q/d/l/?i=d&s=",
   cboe: process.env.CBOE_BASE || "https://cdn-api.cboe.com/api/global/delayed_quotes/options/",
+  cboeHist: process.env.CBOE_HIST || "https://cdn.cboe.com/api/global/delayed_quotes/charts/historical/",
   hl: process.env.HL_API || "https://api.hyperliquid.xyz/info",
 };
 const HIST_FILE = process.env.ZONE_HISTORY || "/tmp/zone-history.json";
@@ -59,20 +60,38 @@ async function credit() {
 }
 
 // ---------- daily prices (Yahoo, Stooq backup) ----------
-async function daily(sym) {
+const why = e => (e && (e.cause && (e.cause.code || e.cause.message)) || e.message || String(e));
+async function daily(sym, log) {
+  const tried = [];
+  // 1) Cboe daily history (same host family as the option chains, reachable from cloud servers)
   try {
-    const j = await get(SRC.yahoo + encodeURIComponent(sym) + "?range=2y&interval=1d");
-    const r = j.chart.result[0], q = r.indicators.quote[0], adj = r.indicators.adjclose?.[0]?.adjclose;
-    const rows = r.timestamp.map((t, i) => ({ d: new Date(t * 1000).toISOString().slice(0, 10), c: (adj || q.close)[i] })).filter(x => Number.isFinite(x.c));
-    if (rows.length > 100) return rows;
-  } catch (e) { /* fall through */ }
-  const t = await get(SRC.stooq + sym.toLowerCase() + ".us", "text");
-  const rows = t.trim().split(/\r?\n/).slice(1).map(l => l.split(",")).map(x => ({ d: x[0], c: Number(x[4]) })).filter(x => Number.isFinite(x.c));
-  if (rows.length < 100) throw new Error("no daily prices for " + sym);
-  return rows.slice(-520);
+    const j = await get(SRC.cboeHist + encodeURIComponent(sym) + ".json");
+    const arr = Array.isArray(j.data) ? j.data : Array.isArray(j.data && j.data.data) ? j.data.data : [];
+    const rows = arr.map(x => ({ d: String(x.date || x.Date || "").slice(0, 10), c: Number(x.close ?? x.Close) })).filter(x => x.d && Number.isFinite(x.c) && x.c > 0).sort((a, b) => a.d < b.d ? -1 : 1);
+    if (rows.length > 100) return rows.slice(-520);
+    tried.push("cboe: " + (arr.length ? arr.length + " rows" : "unexpected format " + JSON.stringify(j).slice(0, 120)));
+  } catch (e) { tried.push("cboe: " + why(e)); }
+  // 2) Yahoo (two hosts)
+  for (const host of [SRC.yahoo, SRC.yahoo.replace("query1", "query2")]) {
+    try {
+      const j = await get(host + encodeURIComponent(sym) + "?range=2y&interval=1d");
+      const r = j.chart.result[0], q = r.indicators.quote[0], adj = r.indicators.adjclose?.[0]?.adjclose;
+      const rows = r.timestamp.map((t, i) => ({ d: new Date(t * 1000).toISOString().slice(0, 10), c: (adj || q.close)[i] })).filter(x => Number.isFinite(x.c));
+      if (rows.length > 100) return rows;
+    } catch (e) { tried.push(new URL(host).host + ": " + why(e)); }
+    if (host === SRC.yahoo.replace("query1", "query2")) break;
+  }
+  // 3) Stooq
+  try {
+    const t = await get(SRC.stooq + sym.toLowerCase() + ".us", "text");
+    const rows = t.trim().split(/\r?\n/).slice(1).map(l => l.split(",")).map(x => ({ d: x[0], c: Number(x[4]) })).filter(x => Number.isFinite(x.c));
+    if (rows.length >= 100) return rows.slice(-520);
+    tried.push("stooq: " + t.slice(0, 60));
+  } catch (e) { tried.push("stooq: " + why(e)); }
+  throw new Error(sym + " daily prices unavailable (" + tried.join("; ") + ")");
 }
 async function breadth() {
-  const [rsp, spy, qqq] = await Promise.all(["RSP", "SPY", "QQQ"].map(daily));
+  const rsp = await daily("RSP"), spy = await daily("SPY"), qqq = await daily("QQQ");
   const m = new Map(spy.map(x => [x.d, x.c])), ratio = rsp.filter(x => m.has(x.d)).map(x => ({ d: x.d, v: x.c / m.get(x.d) }));
   const rv = ratio.map(x => x.v), e50 = ema(rv, 50).at(-1), chg = n => (rv.at(-1) / at(rv, n) - 1) * 100;
   const s = spy.map(x => x.c), e20 = ema(s, 20).at(-1), sma200 = mean(s.slice(-200)), spy10 = (s.at(-1) / at(s, 10) - 1) * 100;
@@ -145,8 +164,14 @@ async function gamma(log) {
   const spy = await gexFor("SPY", true), qqq = await gexFor("QQQ", true).catch(() => null);
   const names = [], fails = []; let i = 0;
   const tickers = [...new Set(uni.map(x => x.t))].filter(t => !["SPY", "QQQ"].includes(t));
-  async function worker() { while (i < tickers.length) { const t = tickers[i++]; try { const g = await gexFor(t); const u = uni.find(x => x.t === t); names.push({ ...g, sector: sectorOf(t), chg: u && u.prev > 0 && u.mark > 0 ? (u.mark / u.prev - 1) * 100 : null }); } catch (e) { fails.push(t); } await new Promise(r => setTimeout(r, 250)); } }
-  await Promise.all([worker(), worker()]);
+  const reasons = {}, sleep = ms => new Promise(r => setTimeout(r, ms));
+  async function worker() { while (i < tickers.length) { const t = tickers[i++];
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try { const g = await gexFor(t); const u = uni.find(x => x.t === t); names.push({ ...g, sector: sectorOf(t), chg: u && u.prev > 0 && u.mark > 0 ? (u.mark / u.prev - 1) * 100 : null }); break; }
+      catch (e) { const k = e.status ? "HTTP " + e.status : why(e); if ((e.status === 429 || e.status >= 500 || !e.status) && attempt < 2) { await sleep(2000 * (attempt + 1)); continue; } reasons[k] = (reasons[k] || 0) + 1; fails.push(t); break; }
+    }
+    await sleep(400); } }
+  await worker();
   const pos = names.filter(n => n.norm > 0).length, br = names.length ? pos / names.length * 100 : null;
   history[day] = { breadth: br, spyNorm: spy.norm, n: names.length }; const days = Object.keys(history).sort(); for (const d of days.slice(0, -400)) delete history[d]; saveHist();
   const series = Object.keys(history).sort().map(d => [d, history[d].breadth, history[d].spyNorm]);
@@ -155,7 +180,7 @@ async function gamma(log) {
     sector: s, n: a.length, posBreadth: a.filter(x => x.norm > 0).length / a.length * 100, avgNorm: mean(a.map(x => x.norm)),
     medChg: median(a.map(x => x.chg).filter(Number.isFinite)), names: a.sort((x, y) => y.norm - x.norm).map(x => [x.t, +x.norm.toFixed(3)]),
   })).sort((a, b) => b.n - a.n);
-  if (log) log(`zone gamma: ${names.length} names, ${fails.length} without listed options`);
+  if (log) log(`zone gamma: ${names.length} names ok, ${fails.length} skipped ${JSON.stringify(reasons)}`);
   return { day, spy, qqq, breadth: br, names: names.length, missing: fails.length, d1: back(1) != null ? br - back(1) : null, d7: back(7) != null ? br - back(7) : null,
            pctile: pctRank(bvals, br), historyDays: series.length, series: series.slice(-60), cohorts,
            tide: back(1) == null ? "BUILDING" : (br - (back(5) ?? back(1))) <= -3 ? "FALLING" : (br - (back(5) ?? back(1))) >= 3 ? "RISING" : "FLAT",
