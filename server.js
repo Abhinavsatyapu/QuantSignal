@@ -151,6 +151,30 @@ async function avRegime(req, res, url) {
   } catch (e) { send(502, { error: "Alpha Vantage: " + e.message }); }
 }
 
+// ---------------- Hyperliquid stock-perp contexts (no key) ----------------
+// metaAndAssetCtxs gives each xyz perp's oracle price (the underlying stock while US markets are open), mark price,
+// previous-day price and funding. Called directly from this server; cached 15 s and shared by every open page.
+const HL_API = process.env.HL_API || "https://api.hyperliquid.xyz/info";
+const hlCache = { at: 0, data: null }; let hlInflight = null;
+async function hlAssets(req, res) {
+  const send = (code, body) => { res.writeHead(code, { "Content-Type": "application/json", "Cache-Control": "no-store" }); res.end(JSON.stringify(body)); };
+  try {
+    if (!hlCache.data || Date.now() - hlCache.at > 15000) {
+      hlInflight = hlInflight || (async () => {
+        const r = await fetch(HL_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "metaAndAssetCtxs", dex: "xyz" }), signal: AbortSignal.timeout(15000) });
+        const [meta, ctxs] = await r.json();
+        if (!meta || !Array.isArray(meta.universe) || !Array.isArray(ctxs)) throw new Error("unexpected Hyperliquid response");
+        const rows = meta.universe.map((u, i) => ({ u, c: ctxs[i] || {} })).filter(x => !x.u.isDelisted).map(({ u, c }) => ({
+          symbol: u.name, ticker: String(u.name).split(":").pop(), mark: num(c.markPx), oracle: num(c.oraclePx), mid: num(c.midPx), prevDay: num(c.prevDayPx),
+          funding: num(c.funding), openInterest: num(c.openInterest), dayVolume: num(c.dayNtlVlm), maxLeverage: u.maxLeverage }));
+        hlCache.data = { source: "Hyperliquid xyz", updatedAt: new Date().toISOString(), rows }; hlCache.at = Date.now();
+      })().finally(() => { hlInflight = null; });
+      await hlInflight;
+    }
+    send(200, hlCache.data);
+  } catch (e) { if (hlCache.data) return send(200, { ...hlCache.data, warning: "stale: " + e.message }); send(502, { error: "Hyperliquid: " + e.message }); }
+}
+
 http.createServer((req, res) => {
   const url = new URL(req.url, "http://x"), ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0];
   if (url.pathname === "/health") { res.writeHead(200); return res.end("ok"); }
@@ -170,6 +194,7 @@ http.createServer((req, res) => {
   }
   if (!valid(cookie(req).qs)) {
     if (url.pathname.startsWith("/api/")) { res.writeHead(401, { ...sec, "Content-Type": "application/json" }); return res.end(JSON.stringify({ error: "Sign in required" })); } res.writeHead(200, { ...sec, "Content-Type": "text/html; charset=utf-8" }); return res.end(login()); }
+  if (url.pathname === "/api/hl/assets") return hlAssets(req, res);
   if (url.pathname === "/api/av/quotes") return avQuotes(req, res, url);
   if (url.pathname === "/api/av/regime") return avRegime(req, res, url);
   if (url.pathname.startsWith("/api/")) return proxy(req, res, url);

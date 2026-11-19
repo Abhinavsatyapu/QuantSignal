@@ -14,10 +14,11 @@ This branch is the original ChatGPT-built QuantSignal Terminal, unchanged, behin
 ## Claude additions (design + data, rules unchanged)
 * `site/claude.css`, `site/claude-sheet.css` — new design layer loaded after ChatGPT's styles; grouped menu with icons,
   sign-out button, sticky header, mono numbers, phone tab strip. ChatGPT's scripts are untouched.
-* `site/claude-av.js` + `/api/av/*` in `server.js` — **Market regime** (S&P 500 / Nasdaq-100 trend, SPY volatility
-  percentile, breadth of the stock perps, 10-year yield, news sentiment → Risk-on / Neutral / Risk-off) and
-  **Stock vs perp** (real NYSE/Nasdaq price vs Hyperliquid perp, perp premium/discount). Alpha Vantage key stays on
-  the server; quotes are cached 30 s and shared by all tabs (bulk endpoint, 100 symbols per call).
+* `site/claude-av.js` + `/api/hl/assets` in `server.js` — no API key needed:
+  **Market regime** from Hyperliquid daily candles (S&P 500 and Nasdaq-100 perp trend vs 50/200-day, Nasdaq-100 realised
+  volatility percentile, TLT bonds, breadth of the stock perps → Risk-on / Neutral / Risk-off) and **Stock vs perp**
+  (Hyperliquid oracle = real stock price during US hours vs perp mark, gap, 24h change, volume, funding).
+* `/api/av/*` — optional Alpha Vantage endpoints (bulk quotes, regime with rates + news) if `ALPHAVANTAGE_API_KEY` is set.
 
 ## Settings (Render → Environment)
 | Variable | Meaning |
