@@ -168,10 +168,15 @@ async function gamma(log) {
   async function worker() { while (i < tickers.length) { const t = tickers[i++];
     for (let attempt = 0; attempt < 3; attempt++) {
       try { const g = await gexFor(t); const u = uni.find(x => x.t === t); names.push({ ...g, sector: sectorOf(t), chg: u && u.prev > 0 && u.mark > 0 ? (u.mark / u.prev - 1) * 100 : null }); break; }
-      catch (e) { const k = e.status ? "HTTP " + e.status : why(e); if ((e.status === 429 || e.status >= 500 || !e.status) && attempt < 2) { await sleep(2000 * (attempt + 1)); continue; } reasons[k] = (reasons[k] || 0) + 1; fails.push(t); break; }
+      catch (e) { const k = e.status ? "HTTP " + e.status : why(e); if ((e.status === 429 || e.status >= 500 || !e.status) && attempt < 2) { await sleep((e.status === 429 ? 8000 : 2000) * (attempt + 1)); continue; } reasons[k] = (reasons[k] || 0) + 1; fails.push(t); break; }
     }
     await sleep(400); } }
   await worker();
+  // second, slower pass for names Cboe throttled (HTTP 429)
+  const throttled = fails.filter(t => !names.some(n => n.t === t)); const retry = [];
+  if (reasons["HTTP 429"]) { delete reasons["HTTP 429"]; for (const t of throttled) retry.push(t); fails.length = 0; await sleep(30000);
+    for (const t of retry) { try { const g = await gexFor(t); const u = uni.find(x => x.t === t); names.push({ ...g, sector: sectorOf(t), chg: u && u.prev > 0 && u.mark > 0 ? (u.mark / u.prev - 1) * 100 : null }); }
+      catch (e) { const k = e.status ? "HTTP " + e.status : why(e); reasons[k] = (reasons[k] || 0) + 1; fails.push(t); } await sleep(1500); } }
   const pos = names.filter(n => n.norm > 0).length, br = names.length ? pos / names.length * 100 : null;
   history[day] = { breadth: br, spyNorm: spy.norm, n: names.length }; const days = Object.keys(history).sort(); for (const d of days.slice(0, -400)) delete history[d]; saveHist();
   const series = Object.keys(history).sort().map(d => [d, history[d].breadth, history[d].spyNorm]);
