@@ -1,8 +1,8 @@
 # Backtest: QuantSignal signals with the site's exact rules
 
-* `gen_signals.js` runs the site's own `public/indicators.js` (`Technicals.analyze`) on every closed candle,
+* `gen_signals.js` runs the site's own `site/indicators.js` (`Technicals.analyze`) on every closed candle,
   using the same 320-candle window the live page fetches.
-* `paper_exact.py` replays trades with the rules of `public/paper-engine.js`: 0.5% risk, 10% margin cap, 5×,
+* `paper_exact.py` replays trades with the rules of `site/paper-engine.js`: 0.5% risk, 10% margin cap, 5×,
   10 positions, 0.05% fee, 0.02% slippage, stop / single 2R-3R-4R net target / opposite signal / 70% partial at
   ±10% of initial margin.
 * `fetch_data.py` downloads candles (Binance USDT-M stock perps + Yahoo) on a machine with internet.

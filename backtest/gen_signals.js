@@ -1,6 +1,6 @@
 // Runs ChatGPT's own Technicals.analyze() bar by bar, on the same 320-candle window the live site fetches.
 // usage: node gen_signals.js <csv folder> <bar minutes> <out.json>
-require('../public/indicators.js');   // the site's own signal engine
+require('../site/indicators.js');   // the site's own signal engine
 const fs = require('fs'), path = require('path');
 const [dir, mins, out] = process.argv.slice(2), dur = Number(mins) * 60000, WIN = 320;
 const res = {};
