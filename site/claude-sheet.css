@@ -1,0 +1,11 @@
+/* Claude design layer for Sheet Scenario Lab: same fonts and accent as the dashboard. Loaded after sheet-lab.css. */
+:root{--cyan:#7fb0ff;--green:#2fc27a;--red:#f2626d;--line:#212a37;--muted:#8a96a6;font-family:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;background:#0b0f14}
+body{background:#0b0f14;-webkit-font-smoothing:antialiased}
+header{background:rgba(11,15,20,.9);backdrop-filter:blur(10px);position:sticky;top:0;z-index:10}
+h1{font-weight:600;letter-spacing:-.04em}
+input,select,textarea,button{font-family:inherit}
+input[type=number],code,.metric-grid strong,td{font-variant-numeric:tabular-nums}
+.metric-grid strong,.callout b{font-family:"IBM Plex Mono",ui-monospace,monospace}
+button{background:#4d8dff;color:#fff}
+input:focus,select:focus{border-color:#4d8dff;box-shadow:0 0 0 3px rgba(77,141,255,.18);outline:none}
+:focus-visible{outline:2px solid #4d8dff;outline-offset:2px}

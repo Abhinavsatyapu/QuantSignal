@@ -47,6 +47,110 @@ async function proxy(req, res, url) {
   } finally { clearTimeout(timer); }
 }
 
+// ---------------- Alpha Vantage (live US stock quotes) ----------------
+// Key stays on the server (ALPHAVANTAGE_API_KEY). One cached snapshot is shared by every open page, so a refresh
+// costs at most ceil(symbols/100) bulk calls per AV_TTL seconds regardless of how many tabs are open.
+const AV_KEY = process.env.ALPHAVANTAGE_API_KEY || "";
+const AV_BASE = process.env.AV_BASE || "https://www.alphavantage.co/query";
+const AV_TTL = Math.max(15, Number(process.env.AV_TTL || 30)) * 1000;
+let avEntitlement = process.env.AV_ENTITLEMENT || "realtime";      // falls back to "delayed" if realtime isn't on the plan
+const avCache = new Map();                                         // symbol -> {quote, at}
+let avLastError = "", avLastAt = 0, avInflight = null;
+const num = v => { const n = Number(String(v ?? "").replace("%", "")); return Number.isFinite(n) ? n : null; };
+async function avCall(params) {
+  const u = new URL(AV_BASE); for (const [k, v] of Object.entries({ ...params, apikey: AV_KEY })) if (v) u.searchParams.set(k, v);
+  const r = await fetch(u, { signal: AbortSignal.timeout(20000) }); const j = await r.json();
+  const note = j.Information || j.Note || j["Error Message"] || (j.message && !j.data ? j.message : "");
+  return { j, note: note ? String(note) : "" };
+}
+function normBulk(x) {
+  const price = num(x.close ?? x.price), prev = num(x.previous_close);
+  return { symbol: String(x.symbol || "").toUpperCase(), price, prevClose: prev, change: num(x.change) ?? (price != null && prev != null ? price - prev : null),
+           changePct: num(x.change_percent) ?? (price != null && prev ? (price / prev - 1) * 100 : null), volume: num(x.volume),
+           time: x.timestamp || null, extended: x.extended_hours_quote != null ? num(x.extended_hours_quote) : null };
+}
+async function avRefresh(symbols) {
+  const fresh = symbols.filter(s => { const c = avCache.get(s); return !c || Date.now() - c.at > AV_TTL; });
+  for (let i = 0; i < fresh.length; i += 100) {
+    const batch = fresh.slice(i, i + 100);
+    let { j, note } = await avCall({ function: "REALTIME_BULK_QUOTES", symbol: batch.join(","), entitlement: avEntitlement });
+    if (!Array.isArray(j.data) && avEntitlement === "realtime" && /entitle|realtime|real-time/i.test(note)) {
+      avEntitlement = "delayed"; ({ j, note } = await avCall({ function: "REALTIME_BULK_QUOTES", symbol: batch.join(","), entitlement: avEntitlement }));
+    }
+    if (!Array.isArray(j.data)) { avLastError = note || "Alpha Vantage returned no data"; throw new Error(avLastError); }
+    const now = Date.now();
+    for (const x of j.data) { const q = normBulk(x); if (q.symbol && q.price != null) avCache.set(q.symbol, { quote: q, at: now }); }
+    for (const s of batch) if (!avCache.has(s)) avCache.set(s, { quote: { symbol: s, price: null, missing: true }, at: now });
+  }
+  avLastError = ""; avLastAt = Date.now();
+}
+async function avQuotes(req, res, url) {
+  const send = (code, body) => { res.writeHead(code, { "Content-Type": "application/json", "Cache-Control": "no-store" }); res.end(JSON.stringify(body)); };
+  if (!AV_KEY) return send(503, { error: "Alpha Vantage key not set. Add ALPHAVANTAGE_API_KEY in Render → Environment." });
+  const symbols = [...new Set(String(url.searchParams.get("symbols") || "").toUpperCase().split(",").map(s => s.trim()).filter(s => /^[A-Z][A-Z0-9.\-]{0,9}$/.test(s)))].slice(0, 400);
+  if (!symbols.length) return send(400, { error: "Pass ?symbols=TSLA,NVDA" });
+  try {
+    if (avInflight) await avInflight.catch(() => {});                // another tab is refreshing: reuse its results
+    avInflight = avRefresh(symbols).finally(() => { avInflight = null; }); await avInflight;
+  }
+  catch (e) { if (![...symbols].some(s => avCache.has(s))) return send(502, { error: "Alpha Vantage: " + e.message }); }
+  send(200, { source: "Alpha Vantage", entitlement: avEntitlement, ttlSec: AV_TTL / 1000, updatedAt: avLastAt ? new Date(avLastAt).toISOString() : null,
+              warning: avLastError || null, quotes: symbols.map(s => (avCache.get(s) || { quote: { symbol: s, price: null, missing: true } }).quote) });
+}
+
+// ---------------- Market regime (Alpha Vantage) ----------------
+// Slow-moving inputs are cached for hours, so the regime costs a handful of AV calls per day.
+const regimeCache = { at: 0, data: null }, REGIME_TTL = 15 * 60e3;
+const sma = (a, n) => a.length >= n ? a.slice(-n).reduce((x, y) => x + y, 0) / n : null;
+async function avDaily(symbol) {
+  const { j, note } = await avCall({ function: "TIME_SERIES_DAILY_ADJUSTED", symbol, outputsize: "full" });
+  const ts = j["Time Series (Daily)"]; if (!ts) throw new Error(note || "no daily data for " + symbol);
+  return Object.entries(ts).map(([d, v]) => ({ d, c: Number(v["5. adjusted close"] ?? v["4. close"]) })).filter(x => Number.isFinite(x.c)).sort((a, b) => a.d < b.d ? -1 : 1).slice(-400);
+}
+function trendOf(rows) {
+  const c = rows.map(r => r.c), last = c.at(-1), s50 = sma(c, 50), s200 = sma(c, 200);
+  const rets = c.slice(1).map((v, i) => Math.log(v / c[i]));
+  const vol20 = k => { const r = rets.slice(k - 20, k); const m = r.reduce((a, b) => a + b, 0) / r.length; return Math.sqrt(r.reduce((a, b) => a + (b - m) ** 2, 0) / (r.length - 1) * 252) * 100; };
+  const volNow = vol20(rets.length), hist = []; for (let k = Math.max(20, rets.length - 252); k <= rets.length; k++) hist.push(vol20(k));
+  return { date: rows.at(-1).d, price: last, sma50: s50, sma200: s200, above50: last > s50, above200: last > s200, golden: s50 > s200,
+           ret20: (last / c.at(-21) - 1) * 100, vol20: volNow, volPctile: Math.round(hist.filter(v => v <= volNow).length / hist.length * 100) };
+}
+async function buildRegime(breadth) {
+  const [spy, qqq] = await Promise.all([avDaily("SPY"), avDaily("QQQ")]);
+  const S = trendOf(spy), Q = trendOf(qqq);
+  let rates = null, news = null;
+  try { const { j } = await avCall({ function: "TREASURY_YIELD", interval: "daily", maturity: "10year" });
+        const d = (j.data || []).filter(x => x.value !== ".").slice(0, 25); if (d.length > 20) rates = { date: d[0].date, y10: Number(d[0].value), chg20bp: Math.round((Number(d[0].value) - Number(d[20].value)) * 100) }; } catch {}
+  try { const { j } = await avCall({ function: "NEWS_SENTIMENT", topics: "financial_markets", sort: "LATEST", limit: "50" });
+        const f = (j.feed || []).map(x => Number(x.overall_sentiment_score)).filter(Number.isFinite); if (f.length) news = { score: f.reduce((a, b) => a + b, 0) / f.length, articles: f.length }; } catch {}
+  const trend = [S.above200, S.above50, S.golden, Q.above200, Q.above50].filter(Boolean).length;          // 0..5
+  const vol = S.volPctile >= 80 ? "stressed" : S.volPctile >= 50 ? "elevated" : "calm";
+  let label = "Neutral";
+  if (trend >= 4 && vol !== "stressed" && !(breadth && breadth.upPct < 35)) label = "Risk-on";
+  if (trend <= 1 || (vol === "stressed" && trend <= 3) || (breadth && breadth.upPct < 25 && trend <= 2)) label = "Risk-off";
+  const why = [`Trend ${trend}/5 (S&P ${S.above200 ? "above" : "below"} 200-day, Nasdaq-100 ${Q.above200 ? "above" : "below"} 200-day)`,
+               `Volatility ${vol} (SPY 20-day ${S.vol20.toFixed(1)}%, ${S.volPctile}th percentile of the past year)`];
+  if (breadth) why.push(`Breadth ${breadth.upPct.toFixed(0)}% of ${breadth.n} stock perps up today`);
+  if (rates) why.push(`10-year yield ${rates.y10.toFixed(2)}% (${rates.chg20bp >= 0 ? "+" : ""}${rates.chg20bp} bp in 20 days)`);
+  if (news) why.push(`News mood ${news.score >= 0.15 ? "bullish" : news.score <= -0.15 ? "bearish" : "neutral"} (${news.score.toFixed(2)} across ${news.articles} articles)`);
+  return { label, trend, vol, spy: S, qqq: Q, rates, news, breadth, why, updatedAt: new Date().toISOString() };
+}
+async function avRegime(req, res, url) {
+  const send = (code, body) => { res.writeHead(code, { "Content-Type": "application/json", "Cache-Control": "no-store" }); res.end(JSON.stringify(body)); };
+  if (!AV_KEY) return send(503, { error: "Alpha Vantage key not set. Add ALPHAVANTAGE_API_KEY in Render → Environment." });
+  const up = num(url.searchParams.get("up")), n = num(url.searchParams.get("n"));
+  const breadth = up != null && n ? { upPct: up / n * 100, n } : null;
+  try {
+    if (!regimeCache.data || Date.now() - regimeCache.at > REGIME_TTL) { regimeCache.data = await buildRegime(null); regimeCache.at = Date.now(); }
+    const d = regimeCache.data;                 // breadth is live (from the page); recompute label with it
+    const out = breadth ? await (async () => { const r = { ...d, breadth }; let label = "Neutral";
+      if (d.trend >= 4 && d.vol !== "stressed" && breadth.upPct >= 35) label = "Risk-on";
+      if (d.trend <= 1 || (d.vol === "stressed" && d.trend <= 3) || (breadth.upPct < 25 && d.trend <= 2)) label = "Risk-off";
+      r.label = label; r.why = [...d.why.filter(w => !w.startsWith("Breadth")), `Breadth ${breadth.upPct.toFixed(0)}% of ${n} stock perps up today`]; return r; })() : d;
+    send(200, out);
+  } catch (e) { send(502, { error: "Alpha Vantage: " + e.message }); }
+}
+
 http.createServer((req, res) => {
   const url = new URL(req.url, "http://x"), ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0];
   if (url.pathname === "/health") { res.writeHead(200); return res.end("ok"); }
@@ -66,6 +170,8 @@ http.createServer((req, res) => {
   }
   if (!valid(cookie(req).qs)) {
     if (url.pathname.startsWith("/api/")) { res.writeHead(401, { ...sec, "Content-Type": "application/json" }); return res.end(JSON.stringify({ error: "Sign in required" })); } res.writeHead(200, { ...sec, "Content-Type": "text/html; charset=utf-8" }); return res.end(login()); }
+  if (url.pathname === "/api/av/quotes") return avQuotes(req, res, url);
+  if (url.pathname === "/api/av/regime") return avRegime(req, res, url);
   if (url.pathname.startsWith("/api/")) return proxy(req, res, url);
   let p = path.normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[\/\\])+/, "");
   let file = path.join(SITE, p);
