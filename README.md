@@ -18,6 +18,10 @@ This branch is the original ChatGPT-built QuantSignal Terminal, unchanged, behin
   **Market regime** from Hyperliquid daily candles (S&P 500 and Nasdaq-100 perp trend vs 50/200-day, Nasdaq-100 realised
   volatility percentile, TLT bonds, breadth of the stock perps → Risk-on / Neutral / Risk-off) and **Stock vs perp**
   (Hyperliquid oracle = real stock price during US hours vs perp mark, gap, 24h change, volume, funding).
+* `zone.js` + `site/zone.html` — **Zone Monitor** (free data, no keys): credit regime from FRED (HY/IG spreads, HY yield,
+  10-year), RSP/SPY breadth (Yahoo, Stooq backup), gamma from Cboe delayed option chains (SPY/QQQ net GEX and gamma flip,
+  +GEX breadth across the stock-perp universe, daily tide history, industry cohorts), swing-low check, regime dial and a
+  rule-based claims/payrolls calendar. Refreshes credit 6 h, breadth 15 min, gamma 60 min. `ZONE=off` disables it.
 * `/api/av/*` — optional Alpha Vantage endpoints (bulk quotes, regime with rates + news) if `ALPHAVANTAGE_API_KEY` is set.
 
 ## Settings (Render → Environment)

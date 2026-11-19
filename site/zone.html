@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zone Monitor · QuantSignal</title>
+<meta name="theme-color" content="#0b0f14">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Zone Monitor — terminal bands in the dashboard's design system. Single dark theme by choice. */
+:root{--bg:#0b0f14;--bg2:#0e131a;--panel:#11171f;--panel2:#151c26;--line:#212a37;--line2:#2c3746;--ink:#e6ebf2;--ink2:#aab4c3;--muted:#7d8899;
+  --accent:#4d8dff;--green:#2fc27a;--red:#f2626d;--amber:#e6a23c;--f-sans:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;--f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;color-scheme:dark}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 var(--f-sans);-webkit-font-smoothing:antialiased}
+a{color:#8fb6ff;text-decoration:none}
+.mono,.band,.chip,table{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 18px;background:rgba(11,15,20,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.top h1{margin:0;font:700 15px var(--f-mono);letter-spacing:.06em;text-transform:uppercase}
+.top .back{font:500 13px var(--f-sans);color:var(--ink2);border:1px solid var(--line2);border-radius:8px;padding:5px 10px}
+.top .meta{margin-left:auto;font:12px var(--f-mono);color:var(--muted);display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+button{font:600 12px var(--f-mono);color:var(--ink);background:transparent;border:1px solid var(--line2);border-radius:8px;padding:6px 10px;cursor:pointer}
+button:hover{border-color:var(--muted)}:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+main{max-width:1180px;margin:0 auto;padding:14px 14px 40px;display:grid;gap:12px}
+.banner{border:1px solid var(--line2);background:var(--panel);border-radius:10px;padding:10px 14px;font:12.5px/1.6 var(--f-mono);color:var(--ink2)}
+.banner b{color:var(--ink)}
+.strip{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font:12px var(--f-mono);color:var(--muted)}
+.chip{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line2);border-radius:999px;padding:3px 10px;font-size:12px;color:var(--ink2);white-space:nowrap}
+.chip b{color:var(--ink)}.chip.hot{border-color:rgba(230,162,60,.5);color:var(--amber)}
+.band{border-radius:10px;padding:14px 16px;border:1px solid var(--line);background:var(--panel);font-size:14px;line-height:1.75}
+.band .head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin-bottom:4px}
+.band .title{font:700 14px var(--f-mono);letter-spacing:.05em;text-transform:uppercase}
+.band .sub{color:var(--ink2);font-size:13px}
+.band.fear{background:linear-gradient(180deg,#2a1418,#1d1216);border-color:#4a2228}.band.fear .title{color:#ff8f97}
+.band.watch{background:linear-gradient(180deg,#2a2112,#1c1810);border-color:#4a3a1c}.band.watch .title{color:#f0b65c}
+.band.calm{background:linear-gradient(180deg,#10241b,#0f1b16);border-color:#1f4a35}.band.calm .title{color:#5fdc9c}
+.band.neutral .title{color:#9cc0ff}
+.tag{display:inline-block;font:700 11.5px var(--f-mono);letter-spacing:.06em;padding:2px 8px;border-radius:6px;background:var(--panel2);color:var(--ink2);border:1px solid var(--line2)}
+.tag.red{background:#e2454f;color:#fff;border-color:#e2454f}.tag.amber{background:#d18f24;color:#140d02;border-color:#d18f24}.tag.green{background:#1fa565;color:#04120b;border-color:#1fa565}.tag.blue{background:#2f6fe0;color:#fff;border-color:#2f6fe0}
+.pos{color:var(--green)}.neg{color:var(--red)}.amb{color:var(--amber)}.dim{color:var(--muted)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.card{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:16px}
+.card h2{margin:0 0 8px;font:700 13px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink2)}
+.big{font:600 26px var(--f-mono);letter-spacing:-.01em}
+.bars{display:flex;align-items:flex-end;gap:3px;height:70px;margin-top:12px;padding-bottom:2px;border-bottom:1px solid var(--line)}
+.bars i{flex:1;min-width:4px;border-radius:2px 2px 0 0;background:var(--green)}.bars i.down{background:var(--red)}
+.dial{display:flex;gap:6px;align-items:center}.dial span{width:11px;height:11px;border-radius:50%;background:var(--line2)}.dial span.on{background:var(--green)}
+.parts{margin:10px 0 0;padding:0;list-style:none;display:grid;gap:4px;font:12.5px var(--f-mono)}
+.parts li::before{content:"✗ ";color:var(--red)}.parts li.ok::before{content:"✓ ";color:var(--green)}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:620px}
+th{position:sticky;top:0;background:var(--panel2);color:var(--muted);font:600 10.5px var(--f-sans);letter-spacing:.08em;text-transform:uppercase;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line2)}
+td{padding:8px 10px;border-bottom:1px solid var(--line)}tbody tr:last-child td{border-bottom:0}tbody tr:hover{background:#141b25}
+td.n,th.n{text-align:right}.names{color:var(--muted);font-size:11.5px;max-width:300px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.note{color:var(--muted);font-size:12px;line-height:1.6}
+.skeleton{color:var(--muted);font:12.5px var(--f-mono)}
+@media (max-width:760px){.top{position:static}.grid2{grid-template-columns:1fr}.top .meta{margin-left:0;width:100%}.band{font-size:13px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="back" href="/">← Dashboard</a>
+  <h1>Zone Monitor</h1><span id="dialTag" class="tag">…</span>
+  <div class="meta"><span id="clock"></span><span id="ages"></span><button id="refresh" type="button">↻ Refresh</button><a class="back" href="/logout">Sign out</a></div>
+</header>
+<main>
+  <div id="banner" class="banner skeleton">Loading market data…</div>
+  <div id="econ" class="strip"></div>
+  <section id="credit" class="band"><span class="skeleton">Credit regime loading (FRED)…</span></section>
+  <section id="breadth" class="band"><span class="skeleton">Breadth loading (RSP / SPY)…</span></section>
+  <section id="backdrop" class="band"><span class="skeleton">Gamma backdrop loading (Cboe option chains, takes a minute after a restart)…</span></section>
+  <div class="grid2">
+    <section class="card" id="tide"><h2>Gamma tide</h2><span class="skeleton">Loading…</span></section>
+    <section class="card" id="regime"><h2>Regime</h2><span class="skeleton">Loading…</span></section>
+  </div>
+  <section class="card"><h2>GEX cohorts · by industry</h2><p class="note" id="cohortNote"></p><div class="tablewrap"><table><thead><tr><th>Industry group</th><th class="n">N</th><th class="n">+GEX breadth</th><th class="n">Avg GEX</th><th class="n">Median 24h</th><th>Most / least positive gamma</th></tr></thead><tbody id="cohorts"><tr><td colspan="6" class="skeleton">Loading…</td></tr></tbody></table></div></section>
+  <p class="note">Sources: FRED (ICE BofA HY/IG option-adjusted spreads, HY effective yield, 10-year Treasury; daily) · Yahoo Finance / Stooq (RSP, SPY, QQQ daily closes) · Cboe public option chains (≈15 min delayed; GEX = gamma × open interest × 100 × spot² × 1%, calls positive, puts negative — a common convention, not dealer positioning data) · Hyperliquid (stock-perp universe, 24h moves). Free-data version: numbers differ from paid gamma feeds. Context only — not trading rules.</p>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const f = (v, d = 2) => v == null || !Number.isFinite(v) ? '—' : v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+const sp = (v, d = 1, u = '%') => v == null || !Number.isFinite(v) ? '—' : (v > 0 ? '+' : '') + v.toFixed(d) + u;
+const bp = v => v == null ? '—' : (v > 0 ? '+' : '') + v + 'bp';
+const c = v => v > 0 ? 'pos' : v < 0 ? 'neg' : '';
+const money = v => { const a = Math.abs(v); return (v < 0 ? '−$' : '$') + (a >= 1e9 ? f(a / 1e9, 2) + 'B' : f(a / 1e6, 0) + 'M'); };
+const tagCls = s => ({ FEAR: 'red', WATCH: 'amber', CALM: 'green', EASING: 'green', BROADENING: 'green', NARROWING: 'red', MIXED: 'amber', BULL: 'green', BEAR: 'red', NEUTRAL: 'amber', FALLING: 'red', RISING: 'green', FLAT: 'amber', BUILDING: '' }[s] || '');
+const age = s => s == null ? '—' : s < 90 ? s + 's' : s < 5400 ? Math.round(s / 60) + 'm' : Math.round(s / 3600) + 'h';
+
+function render(z) {
+  const C = z.credit, B = z.breadth, G = z.gamma, D = z.dial;
+  $('#dialTag').textContent = D.label + ' ' + D.score + '/' + D.max; $('#dialTag').className = 'tag ' + tagCls(D.label);
+  $('#ages').textContent = `credit ${age(z.ages.credit)} · breadth ${age(z.ages.breadth)} · gamma ${age(z.ages.gamma)} old`;
+
+  // banner: swing-low check
+  if (B && G) {
+    const need = [], q = B.qqq; if (G.breadth < 36) need.push(`+GEX breadth ${f(G.breadth, 0)}% (needs ≥ 36%)`); if (G.spy.norm <= 0) need.push(`SPY gamma ${f(G.spy.norm, 2)} (needs above 0)`); if (q.bounce < 3) need.push(`bounce ${sp(q.bounce)} off the low (needs ≥ +3%)`);
+    $('#banner').className = 'banner';
+    $('#banner').innerHTML = q.fromHigh > -3 ? `QQQ ${sp(q.fromHigh)} from its ${esc(q.highDay)} high · no correction under way` :
+      `${need.length ? '⏳ Swing low <b>NOT confirmed</b>' : '✅ Swing low <b>confirmed</b>'} — QQQ ${sp(q.fromHigh)} off the ${esc(q.highDay)} high, low so far ${f(q.low)} on ${esc(q.lowDay)}, now ${f(q.last)}${need.length ? ' · missing: ' + need.map(esc).join('; ') : ''} <span class="dim">(closes as of ${esc(B.asOf)})</span>`;
+  } else if (z.errors.breadth || z.errors.gamma) $('#banner').textContent = 'Some sources are unavailable right now: ' + Object.entries(z.errors).filter(e => e[1]).map(e => e[0] + ' (' + e[1] + ')').join(' · ');
+
+  $('#econ').innerHTML = '<span>📅 ECON</span>' + z.econ.map(e => `<span class="chip ${e.inDays <= 1 ? 'hot' : ''}"><b>${esc(e.name.split(' (')[0])}</b> ${new Date(e.date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })} · ${esc(e.time)} · ${e.inDays === 0 ? 'today' : 'in ' + e.inDays + 'd'}</span>`).join('');
+
+  if (C) {
+    $('#credit').className = 'band ' + (C.state === 'FEAR' ? 'fear' : C.state === 'WATCH' ? 'watch' : 'calm');
+    $('#credit').innerHTML = `<div class="head"><span class="title">🏛 Credit regime</span><span class="tag ${tagCls(C.state)}">${C.state}</span>${C.atHighs ? '<span class="tag red">AT THE HIGHS</span>' : ''}<span><b>${f(C.hy)}%</b> vs line ${f(C.line)}% (${bp(C.vsLineBp)}) · 90-day peak ${f(C.peak90)}% on ${esc(C.peakDay)} · week <span class="tag ${tagCls(C.week)}">${C.week}</span> month <span class="tag ${tagCls(C.month)}">${C.month}</span></span></div>
+      <div class="sub">spread HY ${f(C.hy)}% <b>${C.trend}</b> · Δ5 ${bp(C.d5)} (${C.d5pct}th pct) · Δ20 ${bp(C.d20)} · Δ60 ${bp(C.d60)}${C.ig != null ? ` · IG ${f(C.ig)}% (Δ60 ${bp(C.igD60)})` : ''}${C.t10 != null ? ` | 10-yr Treasury ${f(C.t10)}% · Δ20 ${bp(C.t10d20)} · Δ60 ${bp(C.t10d60)}` : ''}${C.hyYield != null ? ` | cost: HY yield ${f(C.hyYield)}% · Δ60 ${bp(C.hyYieldD60)}${C.driver ? ' — driven by <b>' + esc(C.driver) + '</b>' : ''}` : ''} <span class="dim">· as of ${esc(C.asOf)}</span></div>`;
+  } else $('#credit').innerHTML = `<span class="skeleton">${z.loading.credit ? 'Credit regime loading (FRED)…' : 'Credit data unavailable: ' + esc(z.errors.credit || 'waiting')}</span>`;
+
+  if (B) {
+    $('#breadth').className = 'band ' + (B.state === 'BROADENING' ? 'calm' : B.state === 'NARROWING' ? 'fear' : 'watch');
+    $('#breadth').innerHTML = `<div class="head"><span class="title">◺ Breadth RSP/SPY</span><span class="tag ${tagCls(B.state)}">${B.state}</span><span>ratio ${f(B.ratio, 4)} ${B.aboveEma50 ? 'above' : 'below'} EMA50 · Δ10 ${sp(B.d10)} · Δ20 ${sp(B.d20)}</span></div>
+      <div class="sub">SPY 10d ${sp(B.spy10)} → ${B.spy10 < 0 && B.d10 > 0 ? 'mega-cap led fall, the average stock holding up better' : B.spy10 < 0 ? 'broad selling' : B.d10 > 0 ? 'rally led by the average stock' : 'mega-cap led rally'} · SPY ${B.spyAboveEma20 ? 'above' : '<b class="neg">below</b>'} EMA20 (5d ${sp(B.spy5)}) · ${B.spyAbove200 ? 'above' : '<b class="neg">below</b>'} the 200-day <span class="dim">· as of ${esc(B.asOf)}</span></div>`;
+  } else $('#breadth').innerHTML = `<span class="skeleton">${z.loading.breadth ? 'Breadth loading…' : 'Breadth unavailable: ' + esc(z.errors.breadth || 'waiting')}</span>`;
+
+  if (G) {
+    const s = G.spy, q = G.qqq;
+    $('#backdrop').className = 'band ' + (s.norm > 0 ? 'calm' : 'fear');
+    $('#backdrop').innerHTML = `<div class="head"><span class="title">⚡ Gamma backdrop</span><span class="tag ${s.norm > 0 ? 'green' : 'red'}">${s.norm > 0 ? 'POSITIVE GAMMA' : 'NEGATIVE GAMMA'}</span><span>SPY gex ${sp(s.norm, 3, '')} · net ${money(s.net)} per 1% move${s.flip ? ` · gamma flip ≈ ${f(s.flip)} (spot ${f(s.spot)}, ${s.spot > s.flip ? 'above' : 'below'} the flip)` : ' · no gamma flip within ±12%'}</span></div>
+      <div class="sub">${s.norm > 0 ? 'Dealers long gamma: moves tend to get dampened, dips bought, ranges hold.' : 'Dealers short gamma: moves tend to get amplified both ways; size down, expect wider swings.'}${q ? ` · QQQ gex ${sp(q.norm, 3, '')}${q.flip ? ' · flip ≈ ' + f(q.flip) : ''}` : ''} <span class="dim">· Cboe chains ${esc(s.quoteTime || '')} (≈15 min delayed)</span></div>`;
+    const bars = G.series.map(x => x[1]), maxb = Math.max(60, ...bars.filter(Number.isFinite));
+    $('#tide').innerHTML = `<h2>Gamma tide <span class="tag ${tagCls(G.tide)}">${G.tide}</span></h2>
+      <div class="big">${f(G.breadth, 1)}% <span class="dim" style="font-size:13px">of ${G.names} names with positive gamma</span></div>
+      <div class="note mono">Δ1d ${sp(G.d1, 1, 'pp')} · Δ7d ${sp(G.d7, 1, 'pp')} · ${G.pctile != null && G.historyDays > 5 ? G.pctile + 'th percentile of ' + G.historyDays + ' days' : 'history building: ' + G.historyDays + ' day' + (G.historyDays === 1 ? '' : 's') + ' so far'}</div>
+      <div class="bars" aria-label="+GEX breadth by day">${G.series.map((x, i) => `<i title="${esc(x[0])}: ${f(x[1], 1)}%" class="${i && x[1] < G.series[i - 1][1] ? 'down' : ''}" style="height:${Math.max(4, x[1] / maxb * 100)}%"></i>`).join('')}</div>
+      <p class="note">${G.tide === 'FALLING' ? 'Fewer names under positive gamma: support is draining; fade gap-ups, smaller size.' : G.tide === 'RISING' ? 'Positive gamma spreading: dips tend to get absorbed.' : G.tide === 'BUILDING' ? 'The tide needs a few trading days of snapshots to read direction.' : 'Tide flat.'} ${G.missing} perps have no listed US options and are skipped.</p>`;
+    $('#cohortNote').textContent = `${G.cohorts.length} groups · +GEX breadth = share of the group's names whose net gamma is positive · avg GEX from −1 (all put gamma) to +1 (all call gamma)`;
+    $('#cohorts').innerHTML = G.cohorts.map(r => `<tr><td><b>${esc(r.sector)}</b>${r.n < 6 ? ' <span class="dim">thin</span>' : ''}</td><td class="n">${r.n}</td><td class="n ${r.posBreadth >= 60 ? 'pos' : r.posBreadth < 35 ? 'neg' : ''}">${f(r.posBreadth, 1)}%</td><td class="n ${c(r.avgNorm)}">${sp(r.avgNorm, 2, '')}</td><td class="n ${c(r.medChg)}">${sp(r.medChg)}</td><td class="names">${r.names.length <= 5 ? r.names.map(x => esc(x[0])).join(', ') : r.names.slice(0, 3).map(x => esc(x[0])).join(', ') + ' … ' + r.names.slice(-2).map(x => esc(x[0])).join(', ')}</td></tr>`).join('');
+  } else { const msg = z.loading.gamma ? 'Reading Cboe option chains for ~120 names (about a minute after a restart)…' : 'Gamma unavailable: ' + esc(z.errors.gamma || 'waiting'); $('#backdrop').innerHTML = `<span class="skeleton">${msg}</span>`; $('#tide').innerHTML = `<h2>Gamma tide</h2><span class="skeleton">${msg}</span>`; }
+
+  $('#regime').innerHTML = `<h2>Regime <span class="tag ${tagCls(D.label)}">${D.label}</span></h2><div class="dial" aria-label="${D.score} of ${D.max}">${D.parts.map(p => `<span class="${p[1] ? 'on' : ''}"></span>`).join('')}<b class="mono" style="margin-left:6px">${D.score}/${D.max}</b></div>
+    <ul class="parts">${D.parts.map(p => `<li class="${p[1] ? 'ok' : ''}">${esc(p[0])}</li>`).join('')}</ul>
+    <p class="note">${D.label === 'BEAR' ? '→ Buying is fighting the tape: bounces tend to fail until breadth and gamma repair.' : D.label === 'BULL' ? '→ Tailwinds aligned: dips are more likely to be bought.' : '→ Mixed signals: be selective, normal-to-small size.'} Context only.</p>`;
+}
+let busy = false;
+async function load() {
+  if (busy) return; busy = true;
+  try { const r = await fetch('/api/zone', { headers: { accept: 'application/json' } }); if (r.status === 401) return location.assign('/'); render(await r.json()); }
+  catch (e) { $('#banner').textContent = 'Could not reach the server: ' + e.message; }
+  finally { busy = false; }
+}
+$('#refresh').onclick = load;
+setInterval(() => { $('#clock').textContent = new Date().toLocaleTimeString(); }, 1000);
+load(); setInterval(() => { if (!document.hidden) load(); }, 60000);
+</script>
+</body>
+</html>
