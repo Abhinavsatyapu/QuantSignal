@@ -30,6 +30,7 @@ This branch is the original ChatGPT-built QuantSignal Terminal, unchanged, behin
 | `OWNER_PASSWORD` | the dashboard password |
 | `SESSION_SECRET` | random string that signs logins |
 | `UPSTREAM` | optional; backend for `/api/*` (default: the ChatGPT site) |
+| `DATABASE_URL` | Neon (or any Postgres) connection string; keeps Zone Monitor history and last readings across restarts |
 | `ALPHAVANTAGE_API_KEY` | premium Alpha Vantage key for Market regime + Stock vs perp |
 | `AV_ENTITLEMENT` | optional; `realtime` (default, falls back to `delayed`) |
 

@@ -1,1 +1,1 @@
-{ "name": "quantsignal-chatgpt", "private": true, "description": "QuantSignal Terminal (ChatGPT version) behind a password", "engines": { "node": ">=20" }, "scripts": { "start": "node server.js" } }
+{ "name": "quantsignal-chatgpt", "private": true, "description": "QuantSignal Terminal (ChatGPT version) behind a password", "dependencies": { "pg": "8.13.1" }, "engines": { "node": ">=20" }, "scripts": { "start": "node server.js" } }

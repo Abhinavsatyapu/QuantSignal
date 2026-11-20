@@ -5,7 +5,7 @@
 //                   +GEX breadth across the stock-perp universe, history kept per trading day
 //   Regime dial   : combines trend, credit, breadth and gamma. Context only — never a trading rule.
 "use strict";
-const fs = require("fs");
+const fs = require("fs"), store = require("./store");
 
 const SRC = {
   fred: process.env.FRED_BASE || "https://fred.stlouisfed.org/graph/fredgraph.csv?id=",
@@ -15,7 +15,6 @@ const SRC = {
   cboeHist: process.env.CBOE_HIST || "https://cdn.cboe.com/api/global/delayed_quotes/charts/historical/",
   hl: process.env.HL_API || "https://api.hyperliquid.xyz/info",
 };
-const HIST_FILE = process.env.ZONE_HISTORY || "/tmp/zone-history.json";
 const UA = { "User-Agent": "Mozilla/5.0 (QuantSignal Zone Monitor)" };
 
 // ---------- small helpers ----------
@@ -156,29 +155,28 @@ async function universe() {
   } catch { return Object.values(SECTOR).join(" ").split(" ").map(t => ({ t })); }
 }
 
-let history = (() => { try { return JSON.parse(fs.readFileSync(HIST_FILE, "utf8")); } catch { return {}; } })();   // day -> {breadth, spyNorm, n}
-const saveHist = () => { try { fs.writeFileSync(HIST_FILE, JSON.stringify(history)); } catch {} };
+let history = {};   // day -> {breadth, spyNorm, n}; loaded from Neon (or /tmp) at start
 
 async function gamma(log) {
   const uni = await universe(), day = nyNow().day;
   const spy = await gexFor("SPY", true), qqq = await gexFor("QQQ", true).catch(() => null);
   const names = [], fails = []; let i = 0;
   const tickers = [...new Set(uni.map(x => x.t))].filter(t => !["SPY", "QQQ"].includes(t));
-  const reasons = {}, sleep = ms => new Promise(r => setTimeout(r, ms));
+  const reasons = {}, throttled = [], sleep = ms => new Promise(r => setTimeout(r, ms));
   async function worker() { while (i < tickers.length) { const t = tickers[i++];
     for (let attempt = 0; attempt < 3; attempt++) {
       try { const g = await gexFor(t); const u = uni.find(x => x.t === t); names.push({ ...g, sector: sectorOf(t), chg: u && u.prev > 0 && u.mark > 0 ? (u.mark / u.prev - 1) * 100 : null }); break; }
-      catch (e) { const k = e.status ? "HTTP " + e.status : why(e); if ((e.status === 429 || e.status >= 500 || !e.status) && attempt < 2) { await sleep((e.status === 429 ? 8000 : 2000) * (attempt + 1)); continue; } reasons[k] = (reasons[k] || 0) + 1; fails.push(t); break; }
+      catch (e) { const k = e.status ? "HTTP " + e.status : why(e); if ((e.status === 429 || e.status >= 500 || !e.status) && attempt < 2) { await sleep((e.status === 429 ? 8000 : 2000) * (attempt + 1)); continue; } if (e.status === 429) throttled.push(t); else { reasons[k] = (reasons[k] || 0) + 1; fails.push(t); } break; }
     }
     await sleep(400); } }
   await worker();
   // second, slower pass for names Cboe throttled (HTTP 429)
-  const throttled = fails.filter(t => !names.some(n => n.t === t)); const retry = [];
-  if (reasons["HTTP 429"]) { delete reasons["HTTP 429"]; for (const t of throttled) retry.push(t); fails.length = 0; await sleep(30000);
-    for (const t of retry) { try { const g = await gexFor(t); const u = uni.find(x => x.t === t); names.push({ ...g, sector: sectorOf(t), chg: u && u.prev > 0 && u.mark > 0 ? (u.mark / u.prev - 1) * 100 : null }); }
+  if (throttled.length) { await sleep(30000);
+    for (const t of throttled) { try { const g = await gexFor(t); const u = uni.find(x => x.t === t); names.push({ ...g, sector: sectorOf(t), chg: u && u.prev > 0 && u.mark > 0 ? (u.mark / u.prev - 1) * 100 : null }); }
       catch (e) { const k = e.status ? "HTTP " + e.status : why(e); reasons[k] = (reasons[k] || 0) + 1; fails.push(t); } await sleep(1500); } }
   const pos = names.filter(n => n.norm > 0).length, br = names.length ? pos / names.length * 100 : null;
-  history[day] = { breadth: br, spyNorm: spy.norm, n: names.length }; const days = Object.keys(history).sort(); for (const d of days.slice(0, -400)) delete history[d]; saveHist();
+  history[day] = { breadth: br, spyNorm: spy.norm, n: names.length }; const days = Object.keys(history).sort(); for (const d of days.slice(0, -400)) delete history[d];
+  try { await store.saveDay(day, history[day]); } catch (e) { if (log) log("zone history save failed: " + e.message); }
   const series = Object.keys(history).sort().map(d => [d, history[d].breadth, history[d].spyNorm]);
   const bvals = series.map(x => x[1]).filter(Number.isFinite), back = n => series.length > n ? series[series.length - 1 - n][1] : null;
   const cohorts = Object.entries(names.reduce((m, n) => ((m[n.sector] = m[n.sector] || []).push(n), m), {})).map(([s, a]) => ({
@@ -223,17 +221,24 @@ const cache = { credit: null, breadth: null, gamma: null, at: {}, err: {} }, TTL
 const running = {};
 async function refresh(key, fn, log) {
   if (running[key]) return running[key];
-  running[key] = (async () => { try { cache[key] = await fn(log); cache.at[key] = Date.now(); cache.err[key] = null; } catch (e) { cache.err[key] = e.message; if (log) log(`zone ${key}: ${e.message}`); } finally { running[key] = null; } })();
+  running[key] = (async () => { try { cache[key] = await fn(log); cache.at[key] = Date.now(); cache.err[key] = null; store.saveCache(key, cache[key], cache.at[key]).catch(e => log && log("zone cache save failed: " + e.message)); } catch (e) { cache.err[key] = e.message; if (log) log(`zone ${key}: ${e.message}`); } finally { running[key] = null; } })();
   return running[key];
 }
-function start(log) {
+async function start(log) {
+  // restore the last saved readings and day history first, so a restarted server shows data immediately
+  try {
+    history = await store.loadHistory();
+    const saved = await store.loadCache();
+    for (const k of ["credit", "breadth", "gamma"]) if (saved[k]) { cache[k] = saved[k].data; cache.at[k] = saved[k].at; }
+    if (log) log(`zone store: ${store.mode()} · ${Object.keys(history).length} days of history · restored ${Object.keys(saved).join(", ") || "nothing"}`);
+  } catch (e) { if (log) log("zone store unavailable, using memory only: " + e.message); }
   const tick = () => { for (const [k, fn] of [["credit", credit], ["breadth", breadth], ["gamma", gamma]]) if (!cache.at[k] || Date.now() - cache.at[k] > TTL[k]) refresh(k, fn, log); };
   tick(); setInterval(tick, 60e3).unref();
 }
 function snapshot() {
   const c = cache.credit, b = cache.breadth, g = cache.gamma;
   return { updatedAt: new Date().toISOString(), ny: nyNow(), credit: c, breadth: b, gamma: g, econ: econ(), dial: dial(c, b, g),
-           ages: Object.fromEntries(Object.entries(cache.at).map(([k, v]) => [k, v ? Math.round((Date.now() - v) / 1000) : null])), errors: cache.err,
+           store: store.mode(), ages: Object.fromEntries(Object.entries(cache.at).map(([k, v]) => [k, v ? Math.round((Date.now() - v) / 1000) : null])), errors: cache.err,
            loading: Object.fromEntries(["credit", "breadth", "gamma"].map(k => [k, !!running[k]])) };
 }
 module.exports = { start, snapshot, _test: { credit, breadth, gamma, gexFor, bsGamma, parseOcc, dial, econ } };
