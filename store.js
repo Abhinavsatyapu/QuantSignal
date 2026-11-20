@@ -15,6 +15,7 @@ if (URL_) {
   mode = "postgres";
   ready = pool.query(`
     CREATE TABLE IF NOT EXISTS zone_history (day date PRIMARY KEY, breadth double precision, spy_norm double precision, n integer, updated_at timestamptz NOT NULL DEFAULT now());
+    ALTER TABLE zone_history ADD COLUMN IF NOT EXISTS extra jsonb;
     CREATE TABLE IF NOT EXISTS zone_cache (key text PRIMARY KEY, data jsonb NOT NULL, at timestamptz NOT NULL);`);
 }
 const fileRead = () => { try { return JSON.parse(fs.readFileSync(FILE, "utf8")); } catch { return {}; } };
@@ -23,14 +24,14 @@ const fileWrite = o => { try { fs.writeFileSync(FILE, JSON.stringify(o)); } catc
 async function loadHistory() {
   if (!pool) return fileRead().history || fileRead();
   await ready;
-  const r = await pool.query("SELECT to_char(day,'YYYY-MM-DD') AS day, breadth, spy_norm, n FROM zone_history ORDER BY day DESC LIMIT 400");
-  return Object.fromEntries(r.rows.map(x => [x.day, { breadth: x.breadth, spyNorm: x.spy_norm, n: x.n }]));
+  const r = await pool.query("SELECT to_char(day,'YYYY-MM-DD') AS day, breadth, spy_norm, n, extra FROM zone_history ORDER BY day DESC LIMIT 400");
+  return Object.fromEntries(r.rows.map(x => [x.day, { breadth: x.breadth, spyNorm: x.spy_norm, n: x.n, cohorts: x.extra && x.extra.cohorts || null }]));
 }
 async function saveDay(day, v) {
   if (!pool) { const o = fileRead(); const h = o.history || {}; h[day] = v; fileWrite({ ...o, history: h }); return; }
   await ready;
-  await pool.query(`INSERT INTO zone_history (day, breadth, spy_norm, n, updated_at) VALUES ($1,$2,$3,$4,now())
-    ON CONFLICT (day) DO UPDATE SET breadth=EXCLUDED.breadth, spy_norm=EXCLUDED.spy_norm, n=EXCLUDED.n, updated_at=now()`, [day, v.breadth, v.spyNorm, v.n]);
+  await pool.query(`INSERT INTO zone_history (day, breadth, spy_norm, n, extra, updated_at) VALUES ($1,$2,$3,$4,$5,now())
+    ON CONFLICT (day) DO UPDATE SET breadth=EXCLUDED.breadth, spy_norm=EXCLUDED.spy_norm, n=EXCLUDED.n, extra=EXCLUDED.extra, updated_at=now()`, [day, v.breadth, v.spyNorm, v.n, JSON.stringify({ cohorts: v.cohorts || null })]);
 }
 async function loadCache() {
   if (!pool) return fileRead().cache || {};

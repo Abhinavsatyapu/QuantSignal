@@ -4,143 +4,194 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Zone Monitor · QuantSignal</title>
-<meta name="theme-color" content="#0b0f14">
+<meta name="theme-color" content="#0d1117">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-/* Zone Monitor — terminal bands in the dashboard's design system. Single dark theme by choice. */
-:root{--bg:#0b0f14;--bg2:#0e131a;--panel:#11171f;--panel2:#151c26;--line:#212a37;--line2:#2c3746;--ink:#e6ebf2;--ink2:#aab4c3;--muted:#7d8899;
-  --accent:#4d8dff;--green:#2fc27a;--red:#f2626d;--amber:#e6a23c;--f-sans:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;--f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;color-scheme:dark}
-*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 var(--f-sans);-webkit-font-smoothing:antialiased}
-a{color:#8fb6ff;text-decoration:none}
-.mono,.band,.chip,table{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
-.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 18px;background:rgba(11,15,20,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
-.top h1{margin:0;font:700 15px var(--f-mono);letter-spacing:.06em;text-transform:uppercase}
-.top .back{font:500 13px var(--f-sans);color:var(--ink2);border:1px solid var(--line2);border-radius:8px;padding:5px 10px}
-.top .meta{margin-left:auto;font:12px var(--f-mono);color:var(--muted);display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-button{font:600 12px var(--f-mono);color:var(--ink);background:transparent;border:1px solid var(--line2);border-radius:8px;padding:6px 10px;cursor:pointer}
-button:hover{border-color:var(--muted)}:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-main{max-width:1180px;margin:0 auto;padding:14px 14px 40px;display:grid;gap:12px}
-.banner{border:1px solid var(--line2);background:var(--panel);border-radius:10px;padding:10px 14px;font:12.5px/1.6 var(--f-mono);color:var(--ink2)}
-.banner b{color:var(--ink)}
-.strip{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font:12px var(--f-mono);color:var(--muted)}
-.chip{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line2);border-radius:999px;padding:3px 10px;font-size:12px;color:var(--ink2);white-space:nowrap}
-.chip b{color:var(--ink)}.chip.hot{border-color:rgba(230,162,60,.5);color:var(--amber)}
-.band{border-radius:10px;padding:14px 16px;border:1px solid var(--line);background:var(--panel);font-size:14px;line-height:1.75}
-.band .head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin-bottom:4px}
-.band .title{font:700 14px var(--f-mono);letter-spacing:.05em;text-transform:uppercase}
-.band .sub{color:var(--ink2);font-size:13px}
-.band.fear{background:linear-gradient(180deg,#2a1418,#1d1216);border-color:#4a2228}.band.fear .title{color:#ff8f97}
-.band.watch{background:linear-gradient(180deg,#2a2112,#1c1810);border-color:#4a3a1c}.band.watch .title{color:#f0b65c}
-.band.calm{background:linear-gradient(180deg,#10241b,#0f1b16);border-color:#1f4a35}.band.calm .title{color:#5fdc9c}
-.band.neutral .title{color:#9cc0ff}
-.tag{display:inline-block;font:700 11.5px var(--f-mono);letter-spacing:.06em;padding:2px 8px;border-radius:6px;background:var(--panel2);color:var(--ink2);border:1px solid var(--line2)}
-.tag.red{background:#e2454f;color:#fff;border-color:#e2454f}.tag.amber{background:#d18f24;color:#140d02;border-color:#d18f24}.tag.green{background:#1fa565;color:#04120b;border-color:#1fa565}.tag.blue{background:#2f6fe0;color:#fff;border-color:#2f6fe0}
-.pos{color:var(--green)}.neg{color:var(--red)}.amb{color:var(--amber)}.dim{color:var(--muted)}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.card{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:16px}
-.card h2{margin:0 0 8px;font:700 13px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink2)}
-.big{font:600 26px var(--f-mono);letter-spacing:-.01em}
-.bars{display:flex;align-items:flex-end;gap:3px;height:70px;margin-top:12px;padding-bottom:2px;border-bottom:1px solid var(--line)}
-.bars i{flex:1;min-width:4px;border-radius:2px 2px 0 0;background:var(--green)}.bars i.down{background:var(--red)}
-.dial{display:flex;gap:6px;align-items:center}.dial span{width:11px;height:11px;border-radius:50%;background:var(--line2)}.dial span.on{background:var(--green)}
-.parts{margin:10px 0 0;padding:0;list-style:none;display:grid;gap:4px;font:12.5px var(--f-mono)}
-.parts li::before{content:"✗ ";color:var(--red)}.parts li.ok::before{content:"✓ ";color:var(--green)}
-.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
-table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:620px}
-th{position:sticky;top:0;background:var(--panel2);color:var(--muted);font:600 10.5px var(--f-sans);letter-spacing:.08em;text-transform:uppercase;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line2)}
-td{padding:8px 10px;border-bottom:1px solid var(--line)}tbody tr:last-child td{border-bottom:0}tbody tr:hover{background:#141b25}
-td.n,th.n{text-align:right}.names{color:var(--muted);font-size:11.5px;max-width:300px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.note{color:var(--muted);font-size:12px;line-height:1.6}
-.skeleton{color:var(--muted);font:12.5px var(--f-mono)}
-@media (max-width:760px){.top{position:static}.grid2{grid-template-columns:1fr}.top .meta{margin-left:0;width:100%}.band{font-size:13px}}
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* Zone Monitor — laid out like the pertsoft print: full-width terminal bands, then cards, then the ticker-levels table. */
+:root{--bg:#0d1117;--bg2:#111722;--panel:#151b26;--panel2:#1b2230;--line:#232c3b;--line2:#2f3a4c;--ink:#e8ecf2;--ink2:#b3bccb;--muted:#7f8a9c;
+  --green:#34c77b;--red:#f0596a;--amber:#e8a93a;--blue:#6aa5ff;--m:"IBM Plex Mono",ui-monospace,Menlo,monospace;color-scheme:dark}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:13.5px/1.6 var(--m);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+a{color:var(--blue);text-decoration:none}b,strong{font-weight:700;color:var(--ink)}
+button,select,input{font:600 12.5px var(--m);color:var(--ink);background:var(--panel2);border:1px solid var(--line2);border-radius:8px;padding:6px 11px}
+button{cursor:pointer}button:hover{border-color:var(--muted)}:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.pos{color:var(--green)}.neg{color:var(--red)}.amb{color:var(--amber)}.dim{color:var(--muted)}.ink2{color:var(--ink2)}
+.tag{display:inline-block;font:700 12px var(--m);letter-spacing:.04em;padding:1px 9px;border-radius:7px;border:1px solid var(--line2);color:var(--ink2);background:var(--panel2);white-space:nowrap}
+.tag.red{background:#e0434f;border-color:#e0434f;color:#fff}.tag.amber{background:#d79a2b;border-color:#d79a2b;color:#1a1204}.tag.green{background:#1f9d5c;border-color:#1f9d5c;color:#04140b}
+.tag.grey{background:#3a4456;border-color:#3a4456;color:#dfe5ee}.tag.ored{background:transparent;border-color:#e0434f;color:#ff8a94}
+.tag.sm{font-size:10.5px;padding:0 6px;border-radius:5px}
+.swing{margin:10px 14px 0;border:1px solid var(--line2);border-radius:10px;padding:9px 14px;color:var(--ink2);background:var(--bg2)}
+.swing.ok{border-color:#1f6b45;background:#0f1d16;color:#a7e7c4}
+.hdr{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 14px;padding:12px 14px 0;margin-top:10px;background:#121823;border-bottom:1px solid var(--line)}
+.hdr h1{margin:0 0 10px;font:700 21px var(--m);letter-spacing:.08em}.hdr .sub{margin-bottom:12px;color:var(--muted);font-size:12px}
+.tabs{display:flex;gap:4px;flex-wrap:wrap}.tabs a,.tabs span{display:block;padding:9px 16px;border-radius:9px 9px 0 0;font:700 13.5px var(--m);letter-spacing:.06em;color:var(--muted);background:#182030;border:1px solid var(--line);border-bottom:0}
+.tabs .on{background:var(--bg);color:var(--ink)}.tabs span{opacity:.55}
+.hdr .right{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-bottom:8px;color:var(--muted);font-size:12px}
+.band{padding:9px 14px;border-bottom:1px solid var(--line)}.band .row{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
+.band .t{font-weight:700;letter-spacing:.04em}
+.econ{background:#121823}.econ .t{color:var(--amber)}.chip{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line2);border-radius:999px;padding:1px 11px;white-space:nowrap}
+.chip.today{border-color:#7a5a1c;background:#241c0e;color:#f0c66c}
+.credit{background:#22151a}.credit .t{color:#ff7d88}.credit.calm{background:#10201a}.credit.calm .t{color:#5fdc9c}.credit.watch{background:#221c10}.credit.watch .t{color:#f0b65c}
+.breadth{background:#1d1820}.breadth .t{color:#ff9aa4}.breadth.good{background:#121e1a}.breadth.good .t{color:#6fe0a6}
+.detail{color:var(--ink2);margin-top:4px}
+main{padding:14px;display:grid;gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}
+.card h2{margin:0 0 6px;font:700 13px var(--m);letter-spacing:.08em;text-transform:uppercase}
+.tide.falling{border-color:#7a2a35;background:#1d1419}.tide.falling h2{color:#ff6b78;font-size:19px}
+.tide.rising{border-color:#1f6b45;background:#111d17}.tide.rising h2{color:#4fd68c;font-size:19px}.tide h2{font-size:19px}
+.tide p{margin:6px 0;font-size:15px}.washed{border:1px solid #c9952b;border-radius:10px;padding:10px 14px;margin:10px 0;background:#1f1a12}
+.washed b:first-child{color:var(--amber)}
+.bars{display:flex;align-items:flex-end;gap:3px;height:80px;margin:8px 0 4px}.bars i{flex:1;min-width:3px;border-radius:2px 2px 0 0}
+.regime{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;border-left:4px solid #b3303c}
+.regime.bull{border-left-color:#1f9d5c}.regime .lbl{font-size:12px;color:var(--muted);letter-spacing:.06em}
+.dots{letter-spacing:2px}.gate{margin-top:6px;color:#ff6b78;font-weight:600}.gate.ok{color:#5fdc9c}.gate.amb{color:var(--amber)}
+.parts{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:6px;color:var(--ink2);font-size:12.5px}
+.tw{overflow:auto;border:1px solid var(--line);border-radius:10px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{position:sticky;top:0;background:#1a2231;text-align:left;font:600 11px var(--m);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:7px 9px;white-space:nowrap;vertical-align:bottom}
+td{padding:7px 9px;border-top:1px solid var(--line);white-space:nowrap;vertical-align:top}th.n,td.n{text-align:right}
+tr.thin td:first-child{color:var(--muted)}.small{font-size:11px;color:var(--muted)}
+.spark{display:inline-flex;align-items:flex-end;gap:1px;height:18px}.spark i{width:3px;border-radius:1px}
+.toolbar{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center}.toolbar .k{font-size:11px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+.toolbar .v{font-weight:700;font-size:14.5px}
+th.grp{text-align:center;font-size:11.5px;letter-spacing:.1em}th.g1{background:#172443;color:#7fb0ff}th.g2{background:#2a2414;color:#f0c050}
+td.mv{font-size:11px;line-height:1.3}
+.notice{color:var(--muted);font-size:12px;line-height:1.7}
+footer{padding:0 14px 30px;color:var(--muted);font-size:12px;line-height:1.7}
+@media (max-width:760px){.hdr h1{font-size:17px}.tabs a,.tabs span{padding:7px 10px;font-size:12px}body{font-size:12.5px}}
 </style>
 </head>
 <body>
-<header class="top">
-  <a class="back" href="/">← All dashboards</a> <a class="back" href="/terminal">Terminal</a>
-  <h1>Zone Monitor</h1><span id="dialTag" class="tag">…</span>
-  <div class="meta"><span id="clock"></span><span id="ages"></span><button id="refresh" type="button">↻ Refresh</button><a class="back" href="/logout">Sign out</a></div>
-</header>
+<div class="swing" id="swing">Loading…</div>
+<div class="hdr">
+  <h1>🎯 ZONE MONITOR</h1><span class="sub" id="sub"></span>
+  <nav class="tabs" aria-label="Zone Monitor views">
+    <a class="on" href="#levels">TICKER LEVELS</a>
+    <a href="https://live-options-dashboard.onrender.com" target="_blank" rel="noopener">🔄 REVERSALS</a>
+    <a href="https://live-options-dashboard.onrender.com" target="_blank" rel="noopener">📅 WEEKLY</a>
+    <span title="Not built yet: needs your engine's Airpocket logic">AIRPOCKET</span>
+  </nav>
+  <div class="right"><span id="count"></span><a href="/">← All dashboards</a><a href="/terminal">Terminal</a><span id="clock"></span><button id="refresh" type="button">↻ Refresh</button><a href="/logout">Sign out</a></div>
+</div>
+<div class="band econ"><div class="row" id="econ"></div></div>
+<div class="band credit" id="credit"><span class="dim">Credit regime loading…</span></div>
+<div class="band breadth" id="breadth"><span class="dim">Breadth loading…</span></div>
 <main>
-  <div id="banner" class="banner skeleton">Loading market data…</div>
-  <div id="econ" class="strip"></div>
-  <section id="credit" class="band"><span class="skeleton">Credit regime loading (FRED)…</span></section>
-  <section id="breadth" class="band"><span class="skeleton">Breadth loading (RSP / SPY)…</span></section>
-  <section id="backdrop" class="band"><span class="skeleton">Gamma backdrop loading (Cboe option chains, takes a minute after a restart)…</span></section>
-  <div class="grid2">
-    <section class="card" id="tide"><h2>Gamma tide</h2><span class="skeleton">Loading…</span></section>
-    <section class="card" id="regime"><h2>Regime</h2><span class="skeleton">Loading…</span></section>
-  </div>
-  <section class="card"><h2>GEX cohorts · by industry</h2><p class="note" id="cohortNote"></p><div class="tablewrap"><table><thead><tr><th>Industry group</th><th class="n">N</th><th class="n">+GEX breadth</th><th class="n">Avg GEX</th><th class="n">Median 24h</th><th>Most / least positive gamma</th></tr></thead><tbody id="cohorts"><tr><td colspan="6" class="skeleton">Loading…</td></tr></tbody></table></div></section>
-  <p class="note">Sources: FRED (ICE BofA HY/IG option-adjusted spreads, HY effective yield, 10-year Treasury; daily) · Yahoo Finance / Stooq (RSP, SPY, QQQ daily closes) · Cboe public option chains (≈15 min delayed; GEX = gamma × open interest × 100 × spot² × 1%, calls positive, puts negative — a common convention, not dealer positioning data) · Hyperliquid (stock-perp universe, 24h moves). Free-data version: numbers differ from paid gamma feeds. Context only — not trading rules.</p>
+  <div id="errs"></div>
+  <section class="card tide" id="tide"><h2>GAMMA TIDE</h2><p class="dim">Loading…</p></section>
+  <section class="card regime" id="regime"></section>
+  <section class="card"><h2>GEXBR COHORTS</h2><div class="small" id="cohMeta"></div>
+    <div class="tw" style="margin-top:8px"><table><thead><tr><th>Industry group</th><th class="n">N</th><th class="n">Res</th><th class="n">+GEX breadth</th><th class="n">Pct</th><th class="n">5D</th><th>30 sessions</th><th>Most / least positive gamma</th></tr></thead><tbody id="coh"><tr><td colspan="8" class="dim">Loading…</td></tr></tbody></table></div></section>
+  <section class="card toolbar" id="lvbar"></section>
+  <section class="card" id="levels"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><h2 style="margin:0">Ticker levels</h2><input id="q" placeholder="Filter symbol or group" aria-label="Filter tickers" style="min-width:220px"><span class="small" id="lvNote"></span></div>
+    <div class="tw" style="max-height:900px"><table><thead>
+      <tr><th></th><th class="grp g1" colspan="4">◆ DAILY BASELINE — previous session's last levels</th><th class="grp g2" colspan="6">◆ INTRADAY NOW — latest levels</th></tr>
+      <tr><th>Symbol</th><th class="n">Put wall</th><th class="n">Flip</th><th class="n">Call wall</th><th class="n">GEX</th><th class="n">Spot</th><th class="n">Put wall</th><th class="n">Flip</th><th class="n">Call wall</th><th class="n">GEX</th><th class="n">ΔGEX 1D</th></tr>
+    </thead><tbody id="lv"><tr><td colspan="11" class="dim">Loading…</td></tr></tbody></table></div></section>
+  <section class="card notice"><b>Not on this page yet</b> (shown on your pertsoft print, but their logic isn't available to rebuild): Credit reaction by industry, O-GAP backdrop, Ignition context, Market OFI tide, Signal tape, Ignition / Confirmed break / Broke D−1 scans, Bot phase, GEX phase and Options-flow velocity (these use the Unusual Whales feed and your engine). Push your engine code and they can be rebuilt exactly.</section>
 </main>
+<footer id="foot"></footer>
 <script>
-const $ = s => document.querySelector(s);
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const f = (v, d = 2) => v == null || !Number.isFinite(v) ? '—' : v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
-const sp = (v, d = 1, u = '%') => v == null || !Number.isFinite(v) ? '—' : (v > 0 ? '+' : '') + v.toFixed(d) + u;
-const bp = v => v == null ? '—' : (v > 0 ? '+' : '') + v + 'bp';
-const c = v => v > 0 ? 'pos' : v < 0 ? 'neg' : '';
-const money = v => { const a = Math.abs(v); return (v < 0 ? '−$' : '$') + (a >= 1e9 ? f(a / 1e9, 2) + 'B' : f(a / 1e6, 0) + 'M'); };
-const tagCls = s => ({ FEAR: 'red', WATCH: 'amber', CALM: 'green', EASING: 'green', BROADENING: 'green', NARROWING: 'red', MIXED: 'amber', BULL: 'green', BEAR: 'red', NEUTRAL: 'amber', FALLING: 'red', RISING: 'green', FLAT: 'amber', BUILDING: '' }[s] || '');
-const age = s => s == null ? '—' : s < 90 ? s + 's' : s < 5400 ? Math.round(s / 60) + 'm' : Math.round(s / 3600) + 'h';
+const $ = s => document.querySelector(s), esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const f = (v, d = 2) => v == null || !Number.isFinite(+v) ? '—' : (+v).toFixed(d), sg = (v, d = 1) => v == null || !Number.isFinite(+v) ? '—' : (v > 0 ? '+' : '') + (+v).toFixed(d);
+const bp = v => v == null ? '—' : (v > 0 ? '+' : '') + v + 'bp', cls = v => v > 0 ? 'pos' : v < 0 ? 'neg' : '';
+const tagFor = s => ({ FEAR: 'red', WATCH: 'amber', CALM: 'grey', EASING: 'green' }[s] || 'grey');
+const gexTag = v => v == null ? '' : `<span class="tag sm ${v > 0.3 ? 'green' : v < -0.3 ? 'red' : 'grey'}">${v > 0.3 ? 'POS' : v < -0.3 ? 'NEG' : 'NEU'}</span>`;
+const md = d => d ? new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : '—';
+let S = null;
 
+function swing(s) {
+  const el = $('#swing'); if (!s) { el.textContent = 'Swing-low check needs daily prices (QQQ).'; return; }
+  el.className = 'swing' + (s.confirmed ? ' ok' : '');
+  const miss = s.missing.map(([k, v, need]) => need ? `${k} ${v == null ? '—' : k.includes('breadth') ? f(v, 0) + ' %' : f(v, 2)} (needs ${need})` : k).join('; ');
+  el.innerHTML = !s.inPullback ? `🟢 No pullback — QQQ ${sg(s.fromHigh)} % from its ${md(s.highDay)} high (${f(s.high)}), now ${f(s.last)} · as of ${s.asOf}`
+    : s.confirmed ? `✅ Swing low confirmed — QQQ ${sg(s.fromHigh)} % off the ${md(s.highDay)} high, low ${f(s.low)} on ${md(s.lowDay)}, now ${f(s.last)}`
+    : `⏳ Swing low NOT confirmed — QQQ ${sg(s.fromHigh)} % off the ${md(s.highDay)} high, low so far ${f(s.low)} on ${md(s.lowDay)}, now ${f(s.last)} · missing: ${esc(miss)} (close of ${s.asOf}, updated once a day)`;
+}
+function econ(list) {
+  const today = list.filter(e => e.inDays === 0), next = list.filter(e => e.inDays > 0).slice(0, 3), short = n => n.replace(/ \(.*\)/, '').replace('Nonfarm payrolls', 'NFP').replace('Jobless claims', 'JOBLESS');
+  $('#econ').innerHTML = `<span class="t">📅 TODAY — ECON DATA</span>` + (today.length ? today.map(e => `<span class="chip today"><b>${esc(short(e.name))}</b> ${esc(e.time)}</span>`).join('') : '<span class="dim">no scheduled release</span>')
+    + `<span class="dim">│ NEXT</span>` + next.map(e => `<span class="chip"><b>${esc(short(e.name))}</b> ${new Date(e.date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })} · ${esc(e.time)} <b class="amb">in ${e.inDays}d</b></span>`).join('');
+}
+function credit(c, err) {
+  const el = $('#credit'); if (!c) { el.innerHTML = `<span class="t">🏛 CREDIT REGIME</span> <span class="dim">${esc(err || 'loading…')}</span>`; return; }
+  el.className = 'band credit ' + (c.state === 'FEAR' ? '' : c.state === 'WATCH' ? 'watch' : 'calm');
+  el.innerHTML = `<div class="row"><span class="t">🏛 CREDIT REGIME</span><span class="tag ${tagFor(c.state)}">${c.state}</span>${c.unresolved ? `<span class="tag ored">UNRESOLVED${c.atHighs ? ' · at the highs' : ''}</span>` : c.atHighs ? '<span class="tag ored">AT THE HIGHS</span>' : ''}
+    <span><b>${f(c.hy)}%</b> vs line <b>${f(c.line)}%</b> (${bp(c.vsLineBp)}${c.vsLineBp > 0 ? ' to go' : ''})${c.scareSince ? ` · scare since ${c.scareSince}` : ''}, peak ${f(c.peak90)}% on ${c.peakDay}${c.fearDriven ? ' <b class="neg">FEAR-DRIVEN</b> — spread moving, money running to safety' : ''}</span>
+    <span>· week <span class="tag ${tagFor(c.week)}">${c.week}</span> (spread ${bp(c.d5)} / leg ${bp(c.t10d5)}) · month <span class="tag ${tagFor(c.month)}">${c.month}</span> (spread ${bp(c.d20)} / leg ${bp(c.t10d20)})</span></div>
+    <div class="detail"><b>spread</b> HY ${f(c.hy)}% <b>${c.trend}</b> · Δ5 ${bp(c.d5)} (${c.d5pct ?? '—'}th pct) · Δ20 ${bp(c.d20)} · Δ60 ${bp(c.d60)} · IG ${f(c.ig)}% (Δ60 ${bp(c.igD60)}) │ <b>Treasury leg</b> ${f(c.t10)}% · Δ20 ${bp(c.t10d20)} · Δ60 ${bp(c.t10d60)} │ <b>cost</b> HY yield ${f(c.hyYield)}% · Δ60 ${bp(c.hyYieldD60)}${c.driver ? ` — <b>driven by ${esc(c.driver)}</b>` : ''}${S && S.breadth && S.breadth.hygIef != null ? ` · HYG/IEF 60d ${sg(S.breadth.hygIef)}% (${S.breadth.hygIef < 0 ? 'agrees: widening' : 'disagrees'})` : ''} <span class="dim">· as of ${c.asOf}</span></div>`;
+}
+function breadth(b, err) {
+  const el = $('#breadth'); if (!b) { el.innerHTML = `<span class="t">📐 BREADTH RSP/SPY</span> <span class="dim">${esc(err || 'loading…')}</span>`; return; }
+  el.className = 'band breadth' + (b.state === 'BROADENING' ? ' good' : '');
+  el.innerHTML = `<div class="row"><span class="t">📐 BREADTH RSP/SPY</span><span class="tag ${b.state === 'BROADENING' ? 'amber' : b.state === 'NARROWING' ? 'red' : 'grey'}">${b.state}</span>
+    <span>ratio ${f(b.ratio, 4)} ${b.aboveEma50 ? 'above' : 'below'} EMA50 · Δ10 ${sg(b.d10)}% · Δ20 ${sg(b.d20)}% · SPY 10d ${sg(b.spy10)}% → <b>${esc(b.tell)}</b> · SPY ${b.spyAboveEma20 ? 'above' : '<b class="neg">below</b>'} EMA20 · 5d ${sg(b.spy5)}% <span class="dim">· as of ${b.asOf}</span></span></div>`;
+}
+function tide(g, err) {
+  const el = $('#tide'); if (!g) { el.className = 'card tide'; el.innerHTML = `<h2>GAMMA TIDE</h2><p class="dim">${esc(err || 'Loading… (first run takes a few minutes)')}</p>`; return; }
+  const fall = g.tide === 'FALLING', L = g.leg, ser = g.series.slice(-45);
+  el.className = 'card tide ' + g.tide.toLowerCase();
+  const bars = ser.map((x, i) => { const up = i ? x[1] >= ser[i - 1][1] : true, h = Math.max(4, (x[1] ?? 0)); return `<i title="${x[0]} · ${f(x[1], 1)}%" style="height:${h}%;background:${i === ser.length - 1 ? '#ff7d88' : up ? '#2fc27a' : '#e0505e'}"></i>`; }).join('');
+  el.innerHTML = `<h2>GAMMA TIDE ${g.tide}</h2>
+    <p>gexbr <b>${f(g.breadth, 0)}%</b> ${fall ? 'and draining' : g.tide === 'RISING' ? 'and building' : ''} (${sg(g.d7)}pp/7d) across ${g.names} names. ${fall ? 'Falling tide: fewer names with dealers long gamma — moves get less support.' : g.tide === 'RISING' ? 'Rising tide: more names with dealers long gamma.' : ''}</p>
+    ${L ? `<p class="ink2">${L.kind} leg · ${L.sessions} sessions since the ${L.since} ${L.kind === 'DRAIN' ? 'peak' : 'trough'}${L.kind === 'DRAIN' ? ` · ${sg(L.offTrough, 1)}pp off the ${L.trough} trough` : ` · ${sg(L.offPeak, 1)}pp from the leg high`}</p>` : ''}
+    ${g.pctile != null && g.pctile <= 5 && g.historyDays >= 20 ? `<div class="washed"><b>WASHED OUT</b> gexbr ${f(g.breadth, 1)}% = <b>${g.pctile}th</b> percentile of the stored history (${g.historyDays} sessions)</div>` : ''}
+    <div class="small" style="display:flex;justify-content:space-between"><span>${ser[0] ? ser[0][0] : ''} (${ser.length} sessions)</span><span>${g.day} ${f(g.breadth, 1)}% (${g.pctile ?? '—'}th pct)</span></div>
+    <div class="bars">${bars || '<span class="dim">History builds one bar per trading day.</span>'}</div>
+    <div class="small">3d <b class="${cls(g.d3)}">${sg(g.d3)}pp</b> · 7d <b class="${cls(g.d7)}">${sg(g.d7)}pp</b> · 10d <b class="${cls(g.d10)}">${sg(g.d10)}pp</b> · raw ${f(g.breadth, 1)}% · ${g.pctile ?? '—'}th pct · ${g.source === 'alpaca' ? 'Alpaca open interest' : 'Cboe delayed chains'}${g.missing ? ` · ${g.missing} names skipped` : ''}</div>`;
+}
+function regime(d, g) {
+  const el = $('#regime'), bull = d.label === 'BULL', dots = d.parts.map(p => `<span style="color:${p[1] ? '#2fc27a' : '#e0505e'}">●</span>`).join('');
+  const path = g ? g.series.slice(-10).map(x => f(x[1], 0)).join('→') : '';
+  el.className = 'card regime' + (bull ? ' bull' : '');
+  el.innerHTML = `<span class="lbl">REGIME</span><span class="tag ${bull ? 'green' : d.label === 'BEAR' ? 'red' : 'amber'}" style="font-size:16px;padding:3px 12px">${d.label}</span>
+    <span class="lbl">BULL DIAL</span><span class="dots">${dots}</span><b>${d.score}/${d.max}</b>
+    ${g ? `<span class="dim">│</span><span class="lbl">+GEX BREADTH</span><b style="font-size:20px">${f(g.breadth, 0)}%</b><span class="small">${path}</span>${g.spyPrev != null ? '' : ''}` : ''}
+    <div style="flex-basis:100%"></div>
+    <div class="parts">${d.parts.map(p => `<span><span class="${p[1] ? 'pos' : 'neg'}">${p[1] ? '✓' : '✗'}</span> ${esc(p[0])}</span>`).join('')}</div>
+    <div style="flex-basis:100%" class="gate ${bull ? 'ok' : d.label === 'BEAR' ? '' : 'amb'}">→ ${bull ? 'BUY OPEN — trend, credit and gamma line up. Context only.' : d.label === 'BEAR' ? 'BUY GATED — regime against you: bounces tend to fail. Context only.' : 'MIXED — size down, be selective. Context only.'}</div>`;
+}
+function cohorts(g) {
+  if (!g) return;
+  $('#cohMeta').textContent = `${g.dispersion != null ? `Cohort dispersion ${f(g.dispersion, 1)}pp` : ''} · through ${g.day} · descriptive: where the breadth sits, not what happens next. Res = one name's weight in the group.`;
+  $('#coh').innerHTML = g.cohorts.map(c => { const col = c.posBreadth >= 75 ? 'pos' : c.posBreadth <= 33 ? 'neg' : '';
+    const sp = c.spark.map(v => `<i style="height:${Math.max(2, v / 100 * 18)}px;background:${v >= 50 ? '#2fc27a' : '#e0505e'}"></i>`).join('');
+    return `<tr class="${c.thin ? 'thin' : ''}"><td>${esc(c.sector)}${c.thin ? ' <span class="small">· thin</span>' : ''}</td><td class="n">${c.n}</td><td class="n">${f(c.res, 1)}pp</td><td class="n ${col}"><b>${f(c.posBreadth, 1)}%</b></td><td class="n">${c.pct ?? '—'}</td><td class="n">${sg(c.d5)}</td><td><span class="spark">${sp}</span></td>
+      <td class="small">${c.names.length <= 6 ? c.names.map(x => `<span class="${x[1] > 0 ? 'pos' : 'neg'}">${esc(x[0])}</span>`).join(' ') : `<span class="pos">${c.names.slice(0, 3).map(x => esc(x[0])).join(' ')}</span> / <span class="neg">${c.names.slice(-3).map(x => esc(x[0])).join(' ')}</span>`}</td></tr>`; }).join('');
+}
+function mv(now, base) {
+  if (now == null) return '—'; if (base == null) return `<b>${f(now)}</b>`;
+  const d = now - base; return `<b>${f(now)}</b><div class="mv ${d > 0 ? 'pos' : d < 0 ? 'amb' : 'dim'}">${Math.abs(d) < 1e-9 ? 'held' : (d > 0 ? '↑ +' : '↓ ') + f(d)}</div>`;
+}
+function levels(L) {
+  const q = ($('#q').value || '').trim().toUpperCase();
+  const rows = L.rows.filter(r => !q || r.t.includes(q) || r.sector.toUpperCase().includes(q));
+  $('#count').textContent = L.rows.length + ' tickers';
+  $('#lvNote').textContent = L.baseDay ? `baseline ${L.baseDay} · now ${L.day}` : 'baseline appears after the first full session is stored';
+  $('#lv').innerHTML = rows.map(r => { const n = r.now, b = r.base, chg = b && b.spot ? (n.spot / b.spot - 1) * 100 : null, dg = b ? n.norm - b.norm : null;
+    return `<tr><td><b>${esc(r.t)}</b><div class="small">${esc(r.sector)}</div></td>
+      <td class="n">${f(b && b.putWall)}</td><td class="n">${f(b && b.flip)}</td><td class="n">${f(b && b.callWall)}</td><td class="n">${b ? sg(b.norm, 2) + '<div>' + gexTag(b.norm) + '</div>' : '—'}</td>
+      <td class="n"><b>${f(n.spot)}</b>${chg != null ? `<div class="mv ${cls(chg)}">${sg(chg, 2)}% vs base</div>` : ''}</td>
+      <td class="n">${mv(n.putWall, b && b.putWall)}</td><td class="n">${mv(n.flip, b && b.flip)}</td><td class="n">${mv(n.callWall, b && b.callWall)}</td>
+      <td class="n">${sg(n.norm, 2)}<div>${gexTag(n.norm)}</div></td><td class="n ${cls(dg)}">${sg(dg, 2)}</td></tr>`; }).join('') || `<tr><td colspan="11" class="dim">${L.rows.length ? 'No match' : 'Levels appear after the first gamma run.'}</td></tr>`;
+}
 function render(z) {
-  const C = z.credit, B = z.breadth, G = z.gamma, D = z.dial;
-  $('#dialTag').textContent = D.label + ' ' + D.score + '/' + D.max; $('#dialTag').className = 'tag ' + tagCls(D.label);
-  $('#ages').textContent = `credit ${age(z.ages.credit)} · breadth ${age(z.ages.breadth)} · gamma ${age(z.ages.gamma)} old`;
-
-  // banner: swing-low check
-  if (B && G) {
-    const need = [], q = B.qqq; if (G.breadth < 36) need.push(`+GEX breadth ${f(G.breadth, 0)}% (needs ≥ 36%)`); if (G.spy.norm <= 0) need.push(`SPY gamma ${f(G.spy.norm, 2)} (needs above 0)`); if (q.bounce < 3) need.push(`bounce ${sp(q.bounce)} off the low (needs ≥ +3%)`);
-    $('#banner').className = 'banner';
-    $('#banner').innerHTML = q.fromHigh > -3 ? `QQQ ${sp(q.fromHigh)} from its ${esc(q.highDay)} high · no correction under way` :
-      `${need.length ? '⏳ Swing low <b>NOT confirmed</b>' : '✅ Swing low <b>confirmed</b>'} — QQQ ${sp(q.fromHigh)} off the ${esc(q.highDay)} high, low so far ${f(q.low)} on ${esc(q.lowDay)}, now ${f(q.last)}${need.length ? ' · missing: ' + need.map(esc).join('; ') : ''} <span class="dim">(closes as of ${esc(B.asOf)})</span>`;
-  } else if (z.errors.breadth || z.errors.gamma) $('#banner').textContent = 'Some sources are unavailable right now: ' + Object.entries(z.errors).filter(e => e[1]).map(e => e[0] + ' (' + e[1] + ')').join(' · ');
-
-  $('#econ').innerHTML = '<span>📅 ECON</span>' + z.econ.map(e => `<span class="chip ${e.inDays <= 1 ? 'hot' : ''}"><b>${esc(e.name.split(' (')[0])}</b> ${new Date(e.date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })} · ${esc(e.time)} · ${e.inDays === 0 ? 'today' : 'in ' + e.inDays + 'd'}</span>`).join('');
-
-  if (C) {
-    $('#credit').className = 'band ' + (C.state === 'FEAR' ? 'fear' : C.state === 'WATCH' ? 'watch' : 'calm');
-    $('#credit').innerHTML = `<div class="head"><span class="title">🏛 Credit regime</span><span class="tag ${tagCls(C.state)}">${C.state}</span>${C.atHighs ? '<span class="tag red">AT THE HIGHS</span>' : ''}<span><b>${f(C.hy)}%</b> vs line ${f(C.line)}% (${bp(C.vsLineBp)}) · 90-day peak ${f(C.peak90)}% on ${esc(C.peakDay)} · week <span class="tag ${tagCls(C.week)}">${C.week}</span> month <span class="tag ${tagCls(C.month)}">${C.month}</span></span></div>
-      <div class="sub">spread HY ${f(C.hy)}% <b>${C.trend}</b> · Δ5 ${bp(C.d5)} (${C.d5pct}th pct) · Δ20 ${bp(C.d20)} · Δ60 ${bp(C.d60)}${C.ig != null ? ` · IG ${f(C.ig)}% (Δ60 ${bp(C.igD60)})` : ''}${C.t10 != null ? ` | 10-yr Treasury ${f(C.t10)}% · Δ20 ${bp(C.t10d20)} · Δ60 ${bp(C.t10d60)}` : ''}${C.hyYield != null ? ` | cost: HY yield ${f(C.hyYield)}% · Δ60 ${bp(C.hyYieldD60)}${C.driver ? ' — driven by <b>' + esc(C.driver) + '</b>' : ''}` : ''} <span class="dim">· as of ${esc(C.asOf)}</span></div>`;
-  } else $('#credit').innerHTML = `<span class="skeleton">${z.loading.credit ? 'Credit regime loading (FRED)…' : 'Credit data unavailable: ' + esc(z.errors.credit || 'waiting')}</span>`;
-
-  if (B) {
-    $('#breadth').className = 'band ' + (B.state === 'BROADENING' ? 'calm' : B.state === 'NARROWING' ? 'fear' : 'watch');
-    $('#breadth').innerHTML = `<div class="head"><span class="title">◺ Breadth RSP/SPY</span><span class="tag ${tagCls(B.state)}">${B.state}</span><span>ratio ${f(B.ratio, 4)} ${B.aboveEma50 ? 'above' : 'below'} EMA50 · Δ10 ${sp(B.d10)} · Δ20 ${sp(B.d20)}</span></div>
-      <div class="sub">SPY 10d ${sp(B.spy10)} → ${B.spy10 < 0 && B.d10 > 0 ? 'mega-cap led fall, the average stock holding up better' : B.spy10 < 0 ? 'broad selling' : B.d10 > 0 ? 'rally led by the average stock' : 'mega-cap led rally'} · SPY ${B.spyAboveEma20 ? 'above' : '<b class="neg">below</b>'} EMA20 (5d ${sp(B.spy5)}) · ${B.spyAbove200 ? 'above' : '<b class="neg">below</b>'} the 200-day <span class="dim">· as of ${esc(B.asOf)}</span></div>`;
-  } else $('#breadth').innerHTML = `<span class="skeleton">${z.loading.breadth ? 'Breadth loading…' : 'Breadth unavailable: ' + esc(z.errors.breadth || 'waiting')}</span>`;
-
-  if (G) {
-    const s = G.spy, q = G.qqq;
-    $('#backdrop').className = 'band ' + (s.norm > 0 ? 'calm' : 'fear');
-    $('#backdrop').innerHTML = `<div class="head"><span class="title">⚡ Gamma backdrop</span><span class="tag ${s.norm > 0 ? 'green' : 'red'}">${s.norm > 0 ? 'POSITIVE GAMMA' : 'NEGATIVE GAMMA'}</span><span>SPY gex ${sp(s.norm, 3, '')} · net ${money(s.net)} per 1% move${s.flip ? ` · gamma flip ≈ ${f(s.flip)} (spot ${f(s.spot)}, ${s.spot > s.flip ? 'above' : 'below'} the flip)` : ' · no gamma flip within ±12%'}</span></div>
-      <div class="sub">${s.norm > 0 ? 'Dealers long gamma: moves tend to get dampened, dips bought, ranges hold.' : 'Dealers short gamma: moves tend to get amplified both ways; size down, expect wider swings.'}${q ? ` · QQQ gex ${sp(q.norm, 3, '')}${q.flip ? ' · flip ≈ ' + f(q.flip) : ''}` : ''} <span class="dim">· Cboe chains ${esc(s.quoteTime || '')} (≈15 min delayed)</span></div>`;
-    const bars = G.series.map(x => x[1]), maxb = Math.max(60, ...bars.filter(Number.isFinite));
-    $('#tide').innerHTML = `<h2>Gamma tide <span class="tag ${tagCls(G.tide)}">${G.tide}</span></h2>
-      <div class="big">${f(G.breadth, 1)}% <span class="dim" style="font-size:13px">of ${G.names} names with positive gamma</span></div>
-      <div class="note mono">Δ1d ${sp(G.d1, 1, 'pp')} · Δ7d ${sp(G.d7, 1, 'pp')} · ${G.pctile != null && G.historyDays > 5 ? G.pctile + 'th percentile of ' + G.historyDays + ' days' : 'history building: ' + G.historyDays + ' day' + (G.historyDays === 1 ? '' : 's') + ' so far'}</div>
-      <div class="bars" aria-label="+GEX breadth by day">${G.series.map((x, i) => `<i title="${esc(x[0])}: ${f(x[1], 1)}%" class="${i && x[1] < G.series[i - 1][1] ? 'down' : ''}" style="height:${Math.max(4, x[1] / maxb * 100)}%"></i>`).join('')}</div>
-      <p class="note">${G.tide === 'FALLING' ? 'Fewer names under positive gamma: support is draining; fade gap-ups, smaller size.' : G.tide === 'RISING' ? 'Positive gamma spreading: dips tend to get absorbed.' : G.tide === 'BUILDING' ? 'The tide needs a few trading days of snapshots to read direction.' : 'Tide flat.'} ${G.missing} perps have no listed US options and are skipped.</p>`;
-    $('#cohortNote').textContent = `${G.cohorts.length} groups · +GEX breadth = share of the group's names whose net gamma is positive · avg GEX from −1 (all put gamma) to +1 (all call gamma)`;
-    $('#cohorts').innerHTML = G.cohorts.map(r => `<tr><td><b>${esc(r.sector)}</b>${r.n < 6 ? ' <span class="dim">thin</span>' : ''}</td><td class="n">${r.n}</td><td class="n ${r.posBreadth >= 60 ? 'pos' : r.posBreadth < 35 ? 'neg' : ''}">${f(r.posBreadth, 1)}%</td><td class="n ${c(r.avgNorm)}">${sp(r.avgNorm, 2, '')}</td><td class="n ${c(r.medChg)}">${sp(r.medChg)}</td><td class="names">${r.names.length <= 5 ? r.names.map(x => esc(x[0])).join(', ') : r.names.slice(0, 3).map(x => esc(x[0])).join(', ') + ' … ' + r.names.slice(-2).map(x => esc(x[0])).join(', ')}</td></tr>`).join('');
-  } else { const msg = z.loading.gamma ? 'Reading Cboe option chains for ~120 names (about a minute after a restart)…' : 'Gamma unavailable: ' + esc(z.errors.gamma || 'waiting'); $('#backdrop').innerHTML = `<span class="skeleton">${msg}</span>`; $('#tide').innerHTML = `<h2>Gamma tide</h2><span class="skeleton">${msg}</span>`; }
-
-  $('#regime').innerHTML = `<h2>Regime <span class="tag ${tagCls(D.label)}">${D.label}</span></h2><div class="dial" aria-label="${D.score} of ${D.max}">${D.parts.map(p => `<span class="${p[1] ? 'on' : ''}"></span>`).join('')}<b class="mono" style="margin-left:6px">${D.score}/${D.max}</b></div>
-    <ul class="parts">${D.parts.map(p => `<li class="${p[1] ? 'ok' : ''}">${esc(p[0])}</li>`).join('')}</ul>
-    <p class="note">${D.label === 'BEAR' ? '→ Buying is fighting the tape: bounces tend to fail until breadth and gamma repair.' : D.label === 'BULL' ? '→ Tailwinds aligned: dips are more likely to be bought.' : '→ Mixed signals: be selective, normal-to-small size.'} Context only.</p>`;
+  S = z;
+  $('#sub').textContent = `${z.dataSource === 'alpaca' ? 'open interest: Alpaca' : 'open interest: Cboe (free, delayed)'} · store: ${z.store}`;
+  swing(z.swing); econ(z.econ); credit(z.credit, z.errors.credit); breadth(z.breadth, z.errors.breadth); tide(z.gamma, z.errors.gamma); regime(z.dial, z.gamma); cohorts(z.gamma);
+  const errs = Object.entries(z.errors || {}).filter(([k, v]) => v);
+  $('#errs').innerHTML = errs.length ? `<div class="card notice" style="border-color:#5a2a30">Some sources are unavailable right now: ${errs.map(([k, v]) => `<b>${k}</b> (${esc(v)})`).join(' · ')}${z.dataSource !== 'alpaca' ? ' — adding your Alpaca keys in Render fixes breadth and gamma.' : ''}</div>` : '';
+  $('#lvbar').innerHTML = `<div><div class="k">Trading day</div><div class="v">${esc(z.ny.day)}</div></div><div><div class="k">Daily baseline</div><div class="v">${esc(z.levels.baseDay || '—')}${z.levels.baseDay ? ' EOD' : ''}</div></div>
+    <div><div class="k">Intraday now</div><div class="v">${z.levels.at ? esc(z.levels.day) + ' @ ' + new Date(z.levels.at).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour12: false }) + ' ET' : '—'}</div></div>
+    <div><div class="k">Updated</div><div class="v">${new Date(z.updatedAt).toLocaleTimeString()}</div></div><div class="small">page auto-refreshes every 1 min · levels every ${z.dataSource === 'alpaca' ? '15' : '60'} min</div>`;
+  levels(z.levels);
+  $('#foot').innerHTML = `Sources: FRED (ICE BofA HY/IG option-adjusted spreads, HY effective yield, 10-year Treasury; daily) · ${z.dataSource === 'alpaca' ? 'Alpaca (IEX daily bars, option open interest + greeks, indicative feed)' : 'Cboe public delayed option chains / Yahoo / Stooq'} · GEX = gamma × open interest × 100 × spot² × 1%, calls positive, puts negative — a common convention, not dealer positioning data. Walls = strikes with the most call / put gamma within ±25% of spot. Credit "line" = 60-day average spread; week/month states and the swing-low thresholds (+GEX breadth ≥ 34%, SPY gamma > 0) follow your print; the rest is our implementation. Context only — not trading rules.`;
 }
-let busy = false;
 async function load() {
-  if (busy) return; busy = true;
   try { const r = await fetch('/api/zone', { headers: { accept: 'application/json' } }); if (r.status === 401) return location.assign('/'); render(await r.json()); }
-  catch (e) { $('#banner').textContent = 'Could not reach the server: ' + e.message; }
-  finally { busy = false; }
+  catch (e) { $('#errs').innerHTML = `<div class="card notice">Could not load: ${esc(e.message)}</div>`; }
 }
-$('#refresh').onclick = load;
+$('#refresh').onclick = load; $('#q').oninput = () => S && levels(S.levels);
 setInterval(() => { $('#clock').textContent = new Date().toLocaleTimeString(); }, 1000);
 load(); setInterval(() => { if (!document.hidden) load(); }, 60000);
 </script>
