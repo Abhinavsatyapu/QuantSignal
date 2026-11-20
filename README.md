@@ -37,3 +37,44 @@ This branch is the original ChatGPT-built QuantSignal Terminal, unchanged, behin
 Run locally: `OWNER_PASSWORD=yourpass SESSION_SECRET=anything node server.js` → http://localhost:3000
 
 The Grok version (auto-trader, futures pages) is on `main`.
+
+## OMS (paper by default)
+
+Order management on your own Alpaca account. Code: `oms/` (alpaca.js broker adapter, db.js schema, risk.js risk engine,
+engine.js lifecycle, routes.js HTTP API), page `site/oms.html` at `/oms`. Tests: `test/oms.test.js` with `test/mock-alpaca.js`.
+
+**Order lifecycle** (every change stored in `oms_events`):
+`proposed → approved → submitted → acknowledged → partially_filled → filled`, or `blocked` (risk), `declined`, `rejected`
+(broker), `canceled`, `expired`, `replaced` (modify creates a child order). An order is never marked filled because a
+request was sent; only the broker's order status and fill activities move it.
+
+**Safety**
+* PAPER unless `ALPACA_ENV=live` **and** `OMS_LIVE_APPROVED=yes` are both set (owner only).
+* Idempotency key per order = Alpaca `client_order_id`; repeats return the same order, the broker rejects duplicates.
+* Risk checks run on the server at proposal **and again right before** the broker call: kill switch, max order value,
+  max position per symbol, gross exposure, max open positions, stop-loss required + on the right side, risk to stop
+  (% of equity), daily loss, drawdown vs peak, shorting allowed, session rules (market orders regular hours only,
+  extended hours = DAY limit), duplicate open order protection. Closing orders skip the opening-only checks.
+* Reason required for every action; all actions in `oms_audit`. Mutating calls need `X-QS-OMS: 1`.
+* Restart recovery: approved-but-unconfirmed orders are looked up by client_order_id, never blindly resent.
+  Unknown submit outcomes stay open and are reconciled.
+* Keys only in Render environment variables; never sent to the page or logged. Withdrawals are not possible through
+  the trading API.
+
+**API** (`/api/oms`, owner session required): `GET /status`, `GET /key`, `GET /orders?status=&limit=`, `GET /orders/:id`
+(events + fills), `POST /orders` (propose), `POST /orders/:id/approve|decline|cancel|modify`, `GET /fills`, `GET /pnl`
+(realized FIFO), `GET /audit`, `POST /reconcile`, `POST /sync`, `POST /kill` {on, cancelAll, flatten}, `POST /limits`.
+
+**Tables**: `oms_orders`, `oms_events`, `oms_fills`, `oms_config` (limits, kill switch, peak equity, fill cursor),
+`oms_audit`, `oms_recon`.
+
+**Background services** (inside the web process): broker sync every 5 s while orders are working (30 s otherwise),
+fill import with de-duplication, peak-equity tracking, position reconciliation every 10 min.
+
+**Settings**: `DATABASE_URL` (required), `ALPACA_KEY_ID`, `ALPACA_SECRET_KEY` (paper keys), optional `ALPACA_ENV=live` +
+`OMS_LIVE_APPROVED=yes` for real money.
+
+**Tests**: `TEST_DATABASE_URL=postgres://… node --test test/oms.test.js` — 15 tests: lifecycle incl. partial fills,
+idempotency, concurrent approvals, duplicate protection, request-time and exchange rejections, risk re-check at approval,
+kill switch (+ cancel-all), cancel, modify/replace, restart recovery, broker outage during submit, fills, realized P&L,
+reconciliation, input validation.

@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OMS · QuantSignal</title><meta name="theme-color" content="#0f1218">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* OMS: portal design. Mode banner always visible; every action asks for a reason in an in-page dialog. */
+:root{--bg:#0f1218;--bg2:#12161d;--card:#191d26;--card2:#1e2330;--line:#272d3a;--line2:#343c4d;--ink:#eef1f6;--ink2:#a6aebd;--muted:#7b8496;--accent:#5b8cff;--green:#33c27f;--red:#f2626d;--amber:#e3a33d;
+  --f:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;--m:"IBM Plex Mono",ui-monospace,Menlo,monospace;color-scheme:dark}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--f);-webkit-font-smoothing:antialiased}
+a{color:#9bb8ff;text-decoration:none}
+header{position:sticky;top:0;z-index:5;background:rgba(15,18,24,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.bar{max-width:1320px;margin:0 auto;padding:12px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.bar h1{margin:0;font:700 17px var(--f)}.bar .sp{flex:1}
+.btn{font:600 13px var(--f);border-radius:9px;padding:8px 12px;border:1px solid var(--line2);background:transparent;color:var(--ink);cursor:pointer}
+.btn:hover{border-color:var(--muted)}.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}.btn.bad{border-color:rgba(242,98,109,.5);color:#ff9aa1}.btn.good{border-color:rgba(51,194,127,.5);color:#6fe0a8}
+.btn.sm{padding:4px 9px;font-size:12px}.btn:disabled{opacity:.45;cursor:not-allowed}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mode{font:700 12px var(--m);letter-spacing:.06em;padding:6px 10px;border-radius:8px}
+.mode.paper{background:rgba(91,140,255,.14);color:#a9c2ff;border:1px solid rgba(91,140,255,.4)}.mode.live{background:#e2454f;color:#fff}
+.banner{max-width:1320px;margin:12px auto 0;padding:0 20px}.banner div{border-radius:10px;padding:10px 14px;font-size:13.5px;border:1px solid}
+.banner .warn{background:rgba(227,163,61,.08);border-color:rgba(227,163,61,.35);color:#f2c47a}.banner .err{background:rgba(242,98,109,.08);border-color:rgba(242,98,109,.4);color:#ff9aa1}
+main{max-width:1320px;margin:0 auto;padding:14px 20px 60px;display:grid;gap:14px;grid-template-columns:380px 1fr}
+.col{display:grid;gap:14px;align-content:start;min-width:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0}
+.card h2{margin:0 0 12px;font:600 12px var(--f);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);display:flex;gap:8px;align-items:center}
+.card h2 .r{margin-left:auto;display:flex;gap:6px}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:8px}.kv div{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+.kv span{display:block;font-size:11.5px;color:var(--muted)}.kv b{font:600 16px var(--m);font-variant-numeric:tabular-nums}
+.pos{color:var(--green)}.neg{color:var(--red)}.dim{color:var(--muted)}
+form.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}form.grid .full{grid-column:1/-1}
+label{display:grid;gap:4px;font:500 12px var(--f);color:var(--ink2)}
+input,select,textarea{background:var(--bg);border:1px solid var(--line2);border-radius:8px;color:var(--ink);padding:8px 10px;font:14px var(--f);width:100%}
+input[type=number]{font-family:var(--m)}input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(91,140,255,.18)}
+.seg{display:flex;gap:6px}.seg button{flex:1}.seg .on.buy{background:rgba(51,194,127,.15);border-color:var(--green);color:#7ee3b0}.seg .on.sell{background:rgba(242,98,109,.15);border-color:var(--red);color:#ff9aa1}
+.check{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink2)}.check input{width:auto}
+.msg{font-size:13px;margin-top:8px}.msg ul{margin:6px 0 0;padding-left:18px}
+.tw{overflow:auto;border:1px solid var(--line);border-radius:10px;max-height:420px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}th{position:sticky;top:0;background:var(--card2);text-align:left;font:600 10.5px var(--f);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:8px 10px;white-space:nowrap}
+td{padding:8px 10px;border-top:1px solid var(--line);white-space:nowrap;font-variant-numeric:tabular-nums}td.n,th.n{text-align:right}td.m{font-family:var(--m)}
+tbody tr:hover{background:#1c2130}tr.click{cursor:pointer}
+.st{font:600 10.5px var(--m);padding:3px 7px;border-radius:999px;border:1px solid var(--line2);color:var(--ink2)}
+.st.filled{color:var(--green);border-color:rgba(51,194,127,.4)}.st.rejected,.st.blocked{color:var(--red);border-color:rgba(242,98,109,.45)}.st.proposed{color:#a9c2ff;border-color:rgba(91,140,255,.45)}
+.st.partially_filled,.st.acknowledged,.st.submitted,.st.approved{color:var(--amber);border-color:rgba(227,163,61,.4)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}.tabs button.on{background:var(--card2);border-color:var(--accent)}
+.empty{color:var(--muted);padding:14px;text-align:center}
+dialog{background:var(--card);color:var(--ink);border:1px solid var(--line2);border-radius:14px;padding:18px;max-width:440px;width:92vw}dialog::backdrop{background:rgba(0,0,0,.6)}
+dialog h3{margin:0 0 8px;font-size:16px}.tl{margin:0;padding:0;list-style:none;display:grid;gap:6px;font:12.5px var(--m)}
+.limits{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media (max-width:980px){main{grid-template-columns:1fr}}
+@media (max-width:520px){.kv,form.grid,.limits{grid-template-columns:1fr}.bar{padding:10px 14px}main{padding:12px 14px 40px}}
+</style>
+</head>
+<body>
+<header><div class="bar">
+  <a class="btn sm" href="/">← All dashboards</a><h1>OMS</h1><span id="mode" class="mode paper">…</span>
+  <span class="sp"></span><span id="sync" class="dim" style="font:12px var(--m)"></span>
+  <button class="btn sm" id="refresh" type="button">↻ Refresh</button><button class="btn sm bad" id="kill" type="button">Kill switch</button><a class="btn sm" href="/logout">Sign out</a>
+</div></header>
+<div class="banner" id="banners"></div>
+<main>
+  <div class="col">
+    <section class="card"><h2>Account</h2><div class="kv" id="acct"><div><span>Status</span><b>…</b></div></div></section>
+    <section class="card"><h2>New order</h2>
+      <form class="grid" id="ticket" autocomplete="off">
+        <div class="full seg"><button type="button" class="btn on buy" data-side="buy">Buy</button><button type="button" class="btn sell" data-side="sell">Sell</button></div>
+        <label>Symbol<input id="t_symbol" required placeholder="AAPL" style="text-transform:uppercase"></label>
+        <label>Quantity<input id="t_qty" type="number" min="0" step="any" required></label>
+        <label>Order type<select id="t_type"><option value="limit">Limit</option><option value="market">Market</option><option value="stop">Stop</option><option value="stop_limit">Stop-limit</option></select></label>
+        <label>Time in force<select id="t_tif"><option value="day">Day</option><option value="gtc">Good till cancelled</option><option value="ioc">Immediate or cancel</option><option value="fok">Fill or kill</option></select></label>
+        <label id="l_limit">Limit price<input id="t_limit" type="number" step="any"></label>
+        <label id="l_stop" hidden>Stop trigger<input id="t_stop" type="number" step="any"></label>
+        <label>Stop-loss<input id="t_sl" type="number" step="any" placeholder="required to open"></label>
+        <label>Take-profit<input id="t_tp" type="number" step="any" placeholder="optional"></label>
+        <label class="check full"><input type="checkbox" id="t_ext"> Extended hours (limit + day only, no stop/take-profit legs)</label>
+        <label class="full">Reason<input id="t_reason" required placeholder="Why this trade?"></label>
+        <button class="btn pri full" type="submit" id="t_submit">Check risk &amp; propose</button>
+      </form>
+      <div class="msg" id="t_msg"></div>
+      <p class="dim" style="font-size:12px;margin:10px 0 0">Proposing only runs the risk checks. Nothing reaches the broker until you approve it below.</p>
+    </section>
+    <section class="card"><h2>Risk limits <span class="r"><button class="btn sm" id="editLimits" type="button">Edit</button></span></h2><div class="limits" id="limits"></div></section>
+  </div>
+  <div class="col">
+    <section class="card"><h2>Awaiting approval <span class="r" id="propCount"></span></h2><div class="tw"><table><thead><tr><th>Created</th><th>Order</th><th class="n">Qty</th><th class="n">Price</th><th class="n">Stop</th><th class="n">Risk $</th><th>Reason</th><th></th></tr></thead><tbody id="proposed"></tbody></table></div></section>
+    <section class="card"><h2>Working orders</h2><div class="tw"><table><thead><tr><th>Status</th><th>Order</th><th class="n">Qty</th><th class="n">Filled</th><th class="n">Limit / stop</th><th>Submitted</th><th></th></tr></thead><tbody id="working"></tbody></table></div></section>
+    <section class="card"><h2>Positions <span class="r"><button class="btn sm" id="recon" type="button">Reconcile</button></span></h2><div class="msg" id="reconMsg"></div><div class="tw"><table><thead><tr><th>Symbol</th><th class="n">Qty</th><th class="n">Avg price</th><th class="n">Market value</th><th class="n">Unrealized</th><th class="n">Realized (OMS)</th><th></th></tr></thead><tbody id="positions"></tbody></table></div></section>
+    <section class="card"><h2>History</h2>
+      <div class="tabs" id="htabs"><button class="btn sm on" data-h="orders" type="button">Orders</button><button class="btn sm" data-h="fills" type="button">Fills</button><button class="btn sm" data-h="audit" type="button">Audit log</button></div>
+      <div class="tw" id="history"></div></section>
+  </div>
+</main>
+<dialog id="dlg"><form method="dialog" id="dlgForm"><h3 id="dlgTitle"></h3><div id="dlgBody" class="dim" style="font-size:13px;margin-bottom:10px"></div><div id="dlgExtra"></div>
+  <label>Reason<input id="dlgReason" required minlength="3" placeholder="Required for every action"></label>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn" value="cancel" type="submit" formnovalidate>Cancel</button><button class="btn pri" id="dlgOk" value="ok" type="submit">Confirm</button></div></form></dialog>
+<dialog id="detail"><h3 id="dTitle"></h3><ul class="tl" id="dBody"></ul><div style="text-align:right;margin-top:12px"><button class="btn" type="button" onclick="this.closest('dialog').close()">Close</button></div></dialog>
+<script>
+const $ = s => document.querySelector(s), esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const f = (v, d = 2) => v == null || v === '' || !Number.isFinite(+v) ? '—' : (+v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+const usd = v => v == null || v === '' ? '—' : (+v < 0 ? '−$' : '$') + f(Math.abs(+v));
+const cls = v => +v > 0 ? 'pos' : +v < 0 ? 'neg' : '';
+const t = d => d ? new Date(d).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
+async function api(path, body) {
+  const r = await fetch('/api/oms' + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-QS-OMS': '1' }, body: JSON.stringify(body) } : {});
+  if (r.status === 401) { location.assign('/'); throw new Error('signed out'); }
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status); return j;
+}
+function ask(title, body, extra = '') {
+  return new Promise(res => { $('#dlgTitle').textContent = title; $('#dlgBody').innerHTML = body; $('#dlgExtra').innerHTML = extra; $('#dlgReason').value = '';
+    const d = $('#dlg'); d.returnValue = ''; d.showModal(); $('#dlgReason').focus();
+    d.onclose = () => res(d.returnValue === 'ok' ? { reason: $('#dlgReason').value.trim(), form: d } : null); });
+}
+let side = 'buy', S = null, idemKey = null, hist = 'orders';
+document.querySelectorAll('.seg button').forEach(b => b.onclick = () => { side = b.dataset.side; document.querySelectorAll('.seg button').forEach(x => x.classList.toggle('on', x === b)); $('#t_submit').textContent = `Check risk & propose ${side}`; });
+$('#t_type').onchange = () => { const ty = $('#t_type').value; $('#l_limit').hidden = !['limit', 'stop_limit'].includes(ty); $('#l_stop').hidden = !['stop', 'stop_limit'].includes(ty); };
+const newKey = async () => { idemKey = (await api('/key')).idem_key; };
+$('#ticket').onsubmit = async e => {
+  e.preventDefault(); const btn = $('#t_submit'); btn.disabled = true; const msg = $('#t_msg');
+  try {
+    if (!idemKey) await newKey();
+    const r = await api('/orders', { idem_key: idemKey, side, symbol: $('#t_symbol').value, qty: $('#t_qty').value, type: $('#t_type').value, tif: $('#t_tif').value,
+      limit_price: $('#l_limit').hidden ? null : $('#t_limit').value || null, stop_price: $('#l_stop').hidden ? null : $('#t_stop').value || null,
+      stop_loss: $('#t_sl').value || null, take_profit: $('#t_tp').value || null, extended_hours: $('#t_ext').checked, reason: $('#t_reason').value });
+    const k = r.risk || r.order.risk || {};
+    msg.innerHTML = r.order.status === 'proposed' ? `<span class="pos">Passed risk checks — waiting for your approval.</span>${(k.warnings || []).length ? '<ul>' + k.warnings.map(w => `<li class="dim">${esc(w)}</li>`).join('') + '</ul>' : ''}`
+      : `<span class="neg">Blocked by risk checks:</span><ul>${(k.blocks || []).map(w => `<li>${esc(w)}</li>`).join('')}</ul>`;
+    if (r.duplicate) msg.innerHTML = '<span class="dim">Already submitted — this is the same order (no duplicate created).</span>';
+    idemKey = null; await load();
+  } catch (err) { msg.innerHTML = `<span class="neg">${esc(err.message)}</span>`; }
+  finally { btn.disabled = false; }
+};
+async function act(id, verb, label, o) {
+  let extra = '';
+  if (verb === 'modify') extra = `<div class="limits" style="margin-bottom:10px"><label>New quantity<input id="m_qty" type="number" step="any" value="${esc(o.qty)}"></label>${o.limit_price != null ? `<label>New limit<input id="m_lim" type="number" step="any" value="${esc(o.limit_price)}"></label>` : ''}${o.stop_price != null ? `<label>New stop<input id="m_stp" type="number" step="any" value="${esc(o.stop_price)}"></label>` : ''}</div>`;
+  const a = await ask(label, `${esc(o.side.toUpperCase())} ${esc(o.qty)} ${esc(o.symbol)} · ${esc(o.type)}${verb === 'approve' ? ` · <b>${esc(S && S.mode === 'live' ? 'LIVE account' : 'paper account')}</b>. Risk checks run again before it is sent.` : ''}`, extra);
+  if (!a || a.reason.length < 3) return;
+  try {
+    const body = { reason: a.reason };
+    if (verb === 'modify') { body.qty = $('#m_qty')?.value; body.limit_price = $('#m_lim')?.value; body.stop_price = $('#m_stp')?.value; }
+    const r = await api(`/orders/${id}/${verb}`, body);
+    if (r.risk && !r.risk.ok) alertBox(`Blocked: ${r.risk.blocks.join('; ')}`);
+  } catch (e) { alertBox(e.message); }
+  await load();
+}
+function alertBox(text) { $('#banners').insertAdjacentHTML('afterbegin', `<div class="err" style="margin-bottom:8px">${esc(text)}</div>`); setTimeout(() => { const x = $('#banners .err'); x && x.remove(); }, 9000); }
+
+async function showOrder(id) {
+  const d = await api('/orders/' + id), o = d.order;
+  $('#dTitle').textContent = `${o.side.toUpperCase()} ${o.qty} ${o.symbol} · ${o.type} · ${o.status}`;
+  $('#dBody').innerHTML = d.events.map(e => `<li>${t(e.at)} · ${esc(e.from_status || '—')} → <b>${esc(e.to_status)}</b> ${e.detail ? '<span class="dim">' + esc(JSON.stringify(e.detail)) + '</span>' : ''}</li>`).join('')
+    + (d.fills.length ? '<li><b>Fills</b></li>' + d.fills.map(x => `<li>${t(x.at)} · ${esc(x.qty)} @ ${f(x.price, 4)} · fees ≈ $${f(x.est_fees)}</li>`).join('') : '')
+    + `<li class="dim">idempotency key ${esc(o.idem_key)} · broker id ${esc(o.broker_order_id || '—')} · ${esc(o.env)}</li>${o.error ? `<li class="neg">${esc(o.error)}</li>` : ''}`;
+  $('#detail').showModal();
+}
+const LIM = [['maxOrderNotional', 'Max order value ($)'], ['maxPositionNotional', 'Max position per symbol ($)'], ['maxGrossExposureX', 'Max gross exposure (× equity)'], ['maxOpenPositions', 'Max open positions'],
+  ['maxRiskPerTradePct', 'Max risk per trade (% equity)'], ['maxDailyLossPct', 'Max daily loss (%)'], ['maxDrawdownPct', 'Max drawdown (%)'], ['requireStopOnOpen', 'Stop-loss required to open'], ['allowShort', 'Allow short selling'], ['allowExtendedHours', 'Allow extended hours']];
+$('#editLimits').onclick = async () => {
+  const L = S.limits, extra = `<div class="limits" style="margin-bottom:10px">${LIM.map(([k, l]) => typeof L[k] === 'boolean' ? `<label class="check"><input type="checkbox" data-k="${k}" ${L[k] ? 'checked' : ''}> ${l}</label>` : `<label>${l}<input type="number" step="any" min="0" data-k="${k}" value="${esc(L[k])}"></label>`).join('')}</div>`;
+  const a = await ask('Edit risk limits', 'Changes apply to the next order checked. Logged in the audit log.', extra); if (!a) return;
+  const body = { reason: a.reason }; a.form.querySelectorAll('[data-k]').forEach(i => body[i.dataset.k] = i.type === 'checkbox' ? i.checked : i.value);
+  try { await api('/limits', body); } catch (e) { alertBox(e.message); } load();
+};
+$('#kill').onclick = async () => {
+  const on = !(S && S.limits.killSwitch);
+  const a = await ask(on ? 'Turn ON the kill switch' : 'Turn OFF the kill switch', on ? 'Blocks every new order immediately.' : 'New orders will be allowed again (risk limits still apply).',
+    on ? '<label class="check"><input type="checkbox" id="k_cancel" checked> Also cancel all working orders at the broker</label><label class="check" style="margin:6px 0 10px"><input type="checkbox" id="k_flat"> Also close ALL positions at market</label>' : '');
+  if (!a) return;
+  try { await api('/kill', { on, reason: a.reason, cancelAll: !!$('#k_cancel')?.checked, flatten: !!$('#k_flat')?.checked }); } catch (e) { alertBox(e.message); } load();
+};
+$('#recon').onclick = async () => { try { const r = await api('/reconcile', {}); $('#reconMsg').innerHTML = r.ok ? '<span class="pos">Positions match the OMS records.</span>' : '<span class="neg">Differences found:</span><ul>' + r.diffs.map(d => `<li>${esc(d.symbol)}: broker ${esc(d.broker)} vs OMS ${esc(d.oms)} — ${esc(d.note)}</li>`).join('') + '</ul>'; } catch (e) { alertBox(e.message); } };
+$('#refresh').onclick = () => api('/sync', {}).catch(() => {}).then(load);
+document.querySelectorAll('#htabs button').forEach(b => b.onclick = () => { hist = b.dataset.h; document.querySelectorAll('#htabs button').forEach(x => x.classList.toggle('on', x === b)); loadHistory(); });
+
+async function loadHistory() {
+  const el = $('#history');
+  if (hist === 'orders') { const o = await api('/orders?limit=200'); el.innerHTML = `<table><thead><tr><th>Created</th><th>Status</th><th>Order</th><th class="n">Qty</th><th class="n">Filled @ avg</th><th class="n">Fees ≈</th><th>Reason</th></tr></thead><tbody>${o.map(x => `<tr class="click" data-id="${x.id}"><td>${t(x.created_at)}</td><td><span class="st ${x.status}">${esc(x.status)}</span></td><td class="m">${esc(x.side.toUpperCase())} ${esc(x.symbol)} · ${esc(x.type)}</td><td class="n">${f(x.qty, 0)}</td><td class="n">${f(x.filled_qty, 0)} @ ${f(x.filled_avg_price)}</td><td class="n">${usd(x.est_fees)}</td><td class="dim">${esc(x.reason)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No orders yet</td></tr>'}</tbody></table>`; el.querySelectorAll('tr.click').forEach(r => r.onclick = () => showOrder(r.dataset.id)); }
+  if (hist === 'fills') { const o = await api('/fills'); el.innerHTML = `<table><thead><tr><th>Time</th><th>Symbol</th><th>Side</th><th class="n">Qty</th><th class="n">Price</th><th class="n">Fees ≈</th><th>Via OMS</th></tr></thead><tbody>${o.map(x => `<tr><td>${t(x.at)}</td><td class="m">${esc(x.symbol)}</td><td>${esc(x.side)}</td><td class="n">${f(x.qty, 0)}</td><td class="n">${f(x.price, 4)}</td><td class="n">${usd(x.est_fees)}</td><td>${x.order_id ? 'yes' : '<span class="dim">outside</span>'}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No fills yet</td></tr>'}</tbody></table>`; }
+  if (hist === 'audit') { const o = await api('/audit'); el.innerHTML = `<table><thead><tr><th>Time</th><th>Action</th><th>Result</th><th>Reason</th><th>Detail</th></tr></thead><tbody>${o.map(x => `<tr><td>${t(x.at)}</td><td class="m">${esc(x.action)}</td><td class="${x.ok ? 'pos' : 'neg'}">${x.ok ? 'ok' : 'blocked'}</td><td>${esc(x.reason)}</td><td class="dim m">${esc(JSON.stringify(x.detail)).slice(0, 140)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nothing yet</td></tr>'}</tbody></table>`; }
+}
+
+async function load() {
+  try { S = await api('/status'); } catch (e) { $('#banners').innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  $('#mode').textContent = S.mode === 'live' ? 'LIVE · REAL MONEY' : 'PAPER'; $('#mode').className = 'mode ' + S.mode;
+  $('#kill').textContent = S.limits.killSwitch ? 'Kill switch: ON' : 'Kill switch'; $('#kill').className = 'btn sm ' + (S.limits.killSwitch ? 'pri' : 'bad');
+  $('#sync').textContent = S.lastSync ? 'synced ' + new Date(S.lastSync).toLocaleTimeString() : '';
+  const b = [];
+  if (!S.configured) b.push('<div class="warn">Broker not connected. Add <b>ALPACA_KEY_ID</b> and <b>ALPACA_SECRET_KEY</b> (paper keys) in Render → Environment. Keys stay on the server and never reach this page.</div>');
+  if (S.liveRequestedButNotApproved) b.push('<div class="warn">ALPACA_ENV=live is set, but live trading has not been approved (OMS_LIVE_APPROVED). Still running on PAPER.</div>');
+  if (S.limits.killSwitch) b.push('<div class="err">Kill switch is ON — every new order is blocked.</div>');
+  if (S.brokerError || S.lastError) b.push(`<div class="err">Broker: ${esc(S.brokerError || S.lastError)}</div>`);
+  $('#banners').innerHTML = b.join('');
+  const A = S.account || {}, day = A.equity && A.last_equity ? A.equity - A.last_equity : null;
+  $('#acct').innerHTML = [['Connection', S.configured ? (S.brokerError ? '<span class="neg">error</span>' : '<span class="pos">connected</span>') : '<span class="dim">not set</span>'], ['Market', S.clock ? (S.clock.is_open ? '<span class="pos">open</span>' : '<span class="dim">closed</span>') : '—'],
+    ['Equity', usd(A.equity)], ['Today', `<span class="${cls(day)}">${usd(day)}</span>`], ['Buying power', usd(A.buying_power)], ['Cash', usd(A.cash)],
+    ['Peak equity', usd(S.peakEquity)], ['Drawdown', S.peakEquity && A.equity ? f((1 - A.equity / Math.max(S.peakEquity, A.equity)) * 100) + '%' : '—']].map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('');
+  $('#limits').innerHTML = LIM.map(([k, l]) => `<div class="kv" style="display:block"><div><span>${l}</span><b style="font-size:14px">${typeof S.limits[k] === 'boolean' ? (S.limits[k] ? 'yes' : 'no') : esc(S.limits[k])}</b></div></div>`).join('');
+  const [prop, work, pnl] = await Promise.all([api('/orders?status=proposed&limit=100'), api('/orders?status=approved,submitted,acknowledged,partially_filled&limit=100'), api('/pnl')]);
+  $('#propCount').textContent = prop.length ? prop.length + ' waiting' : '';
+  $('#proposed').innerHTML = prop.map(o => `<tr><td>${t(o.created_at)}</td><td class="m ${o.side === 'buy' ? 'pos' : 'neg'}">${esc(o.side.toUpperCase())} ${esc(o.symbol)} · ${esc(o.type)}</td><td class="n">${f(o.qty, 0)}</td><td class="n">${f(o.limit_price ?? o.stop_price ?? o.risk?.metrics?.entry)}</td><td class="n">${f(o.stop_loss)}</td><td class="n">${usd(o.risk?.metrics?.riskToStop)}</td><td class="dim">${esc(o.reason)}</td>
+    <td><button class="btn sm good" data-a="approve" data-id="${o.id}">Approve</button> <button class="btn sm" data-a="decline" data-id="${o.id}">Decline</button></td></tr>`).join('') || '<tr><td colspan="8" class="empty">Nothing waiting</td></tr>';
+  $('#working').innerHTML = work.map(o => `<tr><td><span class="st ${o.status}">${esc(o.status)}</span></td><td class="m">${esc(o.side.toUpperCase())} ${esc(o.symbol)} · ${esc(o.type)}</td><td class="n">${f(o.qty, 0)}</td><td class="n">${f(o.filled_qty, 0)}${o.filled_avg_price ? ' @ ' + f(o.filled_avg_price) : ''}</td><td class="n">${f(o.limit_price)} / ${f(o.stop_price)}</td><td>${t(o.submitted_at)}</td>
+    <td>${['acknowledged', 'partially_filled'].includes(o.status) ? `<button class="btn sm" data-a="modify" data-id="${o.id}">Modify</button> <button class="btn sm bad" data-a="cancel" data-id="${o.id}">Cancel</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No working orders</td></tr>';
+  const byId = new Map([...prop, ...work].map(o => [o.id, o]));
+  document.querySelectorAll('[data-a]').forEach(b => b.onclick = () => { const o = byId.get(b.dataset.id); act(b.dataset.id, b.dataset.a, { approve: 'Approve and send to broker', decline: 'Decline order', cancel: 'Cancel working order', modify: 'Modify working order' }[b.dataset.a], o); });
+  const rp = new Map(pnl.map(x => [x.symbol, x.realized])), P = S.positions || [];
+  const syms = new Set([...P.map(p => p.symbol), ...rp.keys()]);
+  $('#positions').innerHTML = [...syms].map(s => { const p = P.find(x => x.symbol === s) || {}; return `<tr><td class="m">${esc(s)}</td><td class="n">${f(p.qty, 0)}</td><td class="n">${f(p.avg_entry_price)}</td><td class="n">${usd(p.market_value)}</td><td class="n ${cls(p.unrealized_pl)}">${usd(p.unrealized_pl)}</td><td class="n ${cls(rp.get(s))}">${usd(rp.get(s))}</td>
+    <td>${+p.qty ? `<button class="btn sm" data-close="${esc(s)}" data-q="${Math.abs(+p.qty)}" data-side="${+p.qty > 0 ? 'sell' : 'buy'}">Close</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="7" class="empty">No positions</td></tr>';
+  document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => { side = b.dataset.side; document.querySelectorAll('.seg button').forEach(x => x.classList.toggle('on', x.dataset.side === side)); $('#t_symbol').value = b.dataset.close; $('#t_qty').value = b.dataset.q; $('#t_type').value = 'market'; $('#t_type').onchange(); $('#t_sl').value = ''; $('#t_reason').focus(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  if (S.recon && !$('#reconMsg').innerHTML) $('#reconMsg').innerHTML = `<span class="dim">Last reconciliation ${t(S.recon.at)}: ${S.recon.ok ? 'matched' : S.recon.diffs.length + ' differences'}</span>`;
+  loadHistory();
+}
+load(); setInterval(() => { if (!document.hidden && !$('#dlg').open) load(); }, 10000);
+</script>
+</body>
+</html>
