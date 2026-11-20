@@ -175,14 +175,14 @@ function airpockets(d) {
 function danger(d) {
   const rows = d.rows || [];
   const n = (pred) => rows.filter(pred).length;
-  const mean = n(r => r.posture === "MEAN REVERT"), trend = n(r => r.posture === "TREND"), hold = n(r => r.posture === "NEUTRAL" || !r.posture);
+  const mean = n(r => r.basePosture === "MEAN REVERT"), trend = n(r => r.basePosture === "TREND"), hold = n(r => r.basePosture !== "MEAN REVERT" && r.basePosture !== "TREND");
   const fresh = n(r => r.phase === "FRESH"), decay = n(r => r.phase === "DECAYING"), exit = n(r => r.phase === "EXIT");
   const flips = n(r => r.basePosture && r.posture && r.basePosture !== r.posture);
   const walls = n(r => r.base && ((r.putWall != null && r.base.putWall != null && Math.abs(r.putWall - r.base.putWall) >= 0.01) || (r.callWall != null && r.base.callWall != null && Math.abs(r.callWall - r.base.callWall) >= 0.01)));
   const empty = !rows.length;
   return progress(d) + (empty ? `<div class="empty">Danger Zones has no names yet. Counts stay at zero until the chain pass that feeds Zone Monitor finishes. Campaigns, cockpit, flip-reclaim, 51–56, ignition, washout, and credit on the 8042 bar are not built.</div>` : "") +
     `<div class="boxes">
-      <section class="box"><h2>Deploy at open</h2><p class="note">${rows.length} tickers · daily baseline posture</p><div class="rowbar"><div><div class="k">Mean revert</div><b>${mean}</b></div><div><div class="k">Trend</div><b>${trend}</b></div><div><div class="k">Neutral / hold</div><b>${hold}</b></div></div></section>
+      <section class="box"><h2>Deploy at open</h2><p class="note">${rows.length} tickers · prior-session posture. No stored baseline counts as hold.</p><div class="rowbar"><div><div class="k">Mean revert</div><b>${mean}</b></div><div><div class="k">Trend</div><b>${trend}</b></div><div><div class="k">Neutral / hold</div><b>${hold}</b></div></div></section>
       <section class="box"><h2>Regime signals</h2><p class="note">+GEX phase on this pass</p><div class="rowbar"><div><div class="k">Fresh +GEX</div><b>${fresh}</b></div><div><div class="k">Decaying</div><b>${decay}</b></div><div><div class="k">Exit</div><b>${exit}</b></div></div></section>
       <section class="box"><h2>Needs adjustment</h2><p class="note">Live drift vs the stored baseline</p><div class="rowbar"><div><div class="k">Posture flips</div><b>${flips}</b></div><div><div class="k">Walls moved</div><b>${walls}</b></div></div></section>
     </div>` +
