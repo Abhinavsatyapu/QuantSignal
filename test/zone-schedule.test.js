@@ -24,6 +24,18 @@ test("a failed pass waits ten minutes even against the five-minute morning TTL",
   assert.equal(now - backdated > morning, true);
 });
 
+test("a failed 10:30 poll retries when the hold ends, not after the regular TTL", () => {
+  const failedAt = 1_000_000_000;
+  const lastSuccess = failedAt - 5 * 60e3;
+  const until = failedAt + HOLD_MS;
+  const atHoldEnd = failedAt + HOLD_MS;
+  // the last success is still inside the 15- or 60-minute TTL, so the TTL alone would not retry
+  assert.equal(atHoldEnd - lastSuccess > TTL.gamma, false);
+  assert.equal(refreshDue(atHoldEnd, lastSuccess, TTL.gamma, 0), false);
+  assert.equal(refreshDue(atHoldEnd - 1, lastSuccess, TTL.gamma, until), false);
+  assert.equal(refreshDue(atHoldEnd, lastSuccess, TTL.gamma, until), true);
+});
+
 test("Zone Monitor is not scheduled until start, so books can use their own chain", () => {
   const snap = zone.snapshot();
   assert.equal(snap.scheduled, false);

@@ -329,9 +329,10 @@ let booting = false, scheduled = false;
 function gammaTtl(now = nyNow()) {
   return now.mins >= 9 * 60 + 25 && now.mins <= 10 * 60 + 40 ? 5 * 60e3 : TTL.gamma;
 }
-// A failed pass waits HOLD_MS on its own clock. Backdating cache.at by the long TTL made that age already older than the 5-minute morning window, so the next minute tick ran the whole chain again.
+// A failed pass waits HOLD_MS on its own clock, then runs. The last success time stays put, so once that hold ends the retry is due even if the morning window has closed and the regular 15- or 60-minute TTL has not. Backdating cache.at by the long TTL made the age already older than the 5-minute window, so the next minute tick ran the whole chain again.
 function refreshDue(now, at, ttl, until) {
   if (until && now < until) return false;
+  if (until) return true;
   return at == null || now - at > ttl;
 }
 const running = {};
