@@ -210,4 +210,4 @@ http.createServer((req, res) => {
   if (!fs.existsSync(file)) file = path.join(SITE, "index.html");           // single-page-app routes like /paper
   res.writeHead(200, { ...sec, "Content-Type": TYPES[path.extname(file)] || "application/octet-stream" });
   fs.createReadStream(file).pipe(res);
-}).listen(PORT, () => { console.log("QuantSignal (ChatGPT version) on :" + PORT); if (process.env.ZONE !== "off") zone.start(m => console.log(new Date().toISOString(), m)); oms.start().catch(e => console.log("oms start failed: " + e.message)); });
+}).listen(PORT, () => { console.log("QuantSignal on :" + PORT); if (process.env.ZONE !== "off") zone.start(m => console.log(new Date().toISOString(), m)); oms.start().catch(e => console.log("oms start failed: " + e.message)); });
