@@ -141,7 +141,7 @@ async function chainCboe(t) {
   const j = await get(SRC.cboe + encodeURIComponent(t) + ".json?_=" + Date.now(), "json", 30000);
   const d = j && j.data; if (!d || !Array.isArray(d.options)) throw new Error("no chain");
   const S = Number(d.current_price || d.close || d.prev_day_close); if (!(S > 0)) throw new Error("no price");
-  const legs = d.options.map(o => { const p = parseOcc(o.option); return p && { cp: p.cp, K: p.K, exp: p.exp, oi: Number(o.open_interest || 0), g: Number(o.gamma), iv: Number(o.iv) }; }).filter(Boolean);
+  const legs = d.options.map(o => { const p = parseOcc(o.option); if (!p) return null; const bid = Number(o.bid), ask = Number(o.ask), last = Number(o.last_trade_price); const mid = bid > 0 && ask >= bid ? (bid + ask) / 2 : (last > 0 ? last : null); return { cp: p.cp, K: p.K, exp: p.exp, oi: Number(o.open_interest || 0), vol: Number(o.volume) || 0, mid, g: Number(o.gamma), iv: Number(o.iv) }; }).filter(Boolean);
   return { S, legs, quoteTime: j.timestamp || null, source: "cboe" };
 }
 async function chainAlpaca(t, spot) {
@@ -152,7 +152,7 @@ async function chainAlpaca(t, spot) {
   const legs = []; tok = "";
   do { const j = await alp(ALP.data, `/v1beta1/options/snapshots/${encodeURIComponent(t)}?feed=indicative&limit=1000&expiration_date_lte=${lte}${tok ? "&page_token=" + tok : ""}`);
     for (const [sym, x] of Object.entries(j.snapshots || {})) { const p = parseOcc(sym), n = oi.get(sym); if (!p || !n) continue;
-      legs.push({ cp: p.cp, K: p.K, exp: p.exp, oi: n, g: Number(x.greeks && x.greeks.gamma), iv: Number(x.impliedVolatility) }); }
+      const bid = Number(x.latestQuote && x.latestQuote.bp), ask = Number(x.latestQuote && x.latestQuote.ap), last = Number(x.latestTrade && x.latestTrade.p); const mid = bid > 0 && ask >= bid ? (bid + ask) / 2 : (last > 0 ? last : null); legs.push({ cp: p.cp, K: p.K, exp: p.exp, oi: n, vol: Number(x.dailyBar && x.dailyBar.v) || Number(x.latestTrade && x.latestTrade.s) || 0, mid, g: Number(x.greeks && x.greeks.gamma), iv: Number(x.impliedVolatility) }); }
     tok = j.next_page_token || ""; } while (tok);
   let S = spot; if (!(S > 0)) { const q = await alp(ALP.data, `/v2/stocks/${encodeURIComponent(t)}/trades/latest?feed=iex`); S = Number(q.trade && q.trade.p); }
   if (!(S > 0)) throw new Error("no price");
@@ -161,6 +161,7 @@ async function chainAlpaca(t, spot) {
 // net dealer gamma ($ per 1% move), common convention: dealers long calls / short puts. Walls = strikes with the most call / put gamma.
 async function gexFor(t, withFlip = true, spot) {
   const ch = hasAlpaca() ? await chainAlpaca(t, spot) : await chainCboe(t);
+  if (chainHook) { try { chainHook({ symbol: t, spot: ch.S, today: nyNow().day, source: ch.source, legs: ch.legs.map(o => ({ cp: o.cp, K: o.K, exp: o.exp, expIso: new Date(o.exp).toISOString().slice(0, 10), oi: o.oi, vol: o.vol || 0, mid: o.mid, iv: o.iv, gamma: o.g })) }, nyNow()); } catch {} }
   const S = ch.S, now = Date.now(); let call = 0, put = 0; const flipLegs = [], byK = new Map();
   for (const o of ch.legs) {
     if (o.exp < now || !(o.oi > 0)) continue;
@@ -222,6 +223,9 @@ async function spots(list) {      // last price + previous close for the whole l
   return out;
 }
 
+let chainHook = null, doneHook = null;
+function setChainHook(fn) { chainHook = fn; }
+function setDoneHook(fn) { doneHook = fn; }
 let history = {};   // day -> {breadth, spyNorm, n, cohorts:{group: +GEX breadth}}; from Neon (or /tmp) at start
 let levels = { today: null, base: null };   // per-ticker walls / flip / GEX: today's latest and the previous session's last (= daily baseline)
 
@@ -276,6 +280,7 @@ async function gamma(log) {
            spyPrev: back(1) != null ? series[series.length - 2][2] : null,
            tide: back(1) == null ? "BUILDING" : (d7 ?? (br - back(1))) <= -3 ? "FALLING" : (d7 ?? (br - back(1))) >= 3 ? "RISING" : "FLAT",
            levels: names.map(n => n.t) };
+  if (doneHook) { try { doneHook(); } catch {} }
 }
 
 // ---------- economic calendar (rule-based: weekly claims, first-Friday payrolls) ----------
@@ -319,7 +324,7 @@ const cache = { credit: null, breadth: null, gamma: null, at: {}, err: {} }, TTL
 const running = {};
 async function refresh(key, fn, log) {
   if (running[key]) return running[key];
-  running[key] = (async () => { try { cache[key] = await fn(log); cache.at[key] = Date.now(); cache.err[key] = null; store.saveCache(key, cache[key], cache.at[key]).catch(e => log && log("zone cache save failed: " + e.message)); } catch (e) { cache.err[key] = e.message; if (log) log(`zone ${key}: ${e.message}`); } finally { running[key] = null; } })();
+  running[key] = (async () => { try { cache[key] = await fn(log); cache.at[key] = Date.now(); cache.err[key] = null; store.saveCache(key, cache[key], cache.at[key]).catch(e => log && log("zone cache save failed: " + e.message)); } catch (e) { cache.err[key] = e.message; cache.at[key] = Date.now() - TTL[key] + 10 * 60e3; if (log) log(`zone ${key}: ${e.message}`); } finally { running[key] = null; } })();
   return running[key];
 }
 async function start(log) {
@@ -342,4 +347,4 @@ function snapshot() {
            store: store.mode(), ages: Object.fromEntries(Object.entries(cache.at).map(([k, v]) => [k, v ? Math.round((Date.now() - v) / 1000) : null])), errors: cache.err,
            loading: Object.fromEntries(["credit", "breadth", "gamma"].map(k => [k, !!running[k]])) };
 }
-module.exports = { start, snapshot, _test: { credit, breadth, gamma, gexFor, legs, swing, bsGamma, parseOcc, dial, econ } };
+module.exports = { start, snapshot, setChainHook, setDoneHook, _test: { credit, breadth, gamma, gexFor, legs, swing, bsGamma, parseOcc, dial, econ } };

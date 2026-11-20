@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>QuantSignal Portal</title>
+<title>Dashboard Portal</title>
 <meta name="theme-color" content="#0f1218">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -53,12 +53,12 @@ footer{max-width:1240px;margin:0 auto;padding:0 22px 40px;color:#5d6678;font-siz
 </head>
 <body>
 <header><div class="bar">
-  <div class="logo" aria-hidden="true">Q</div><div class="brand"><strong>QuantSignal Portal</strong><small>Private · all dashboards in one place</small></div>
+  <div class="logo" aria-hidden="true">Q</div><div class="brand"><strong>Dashboard Portal</strong><small>QuantSignal · private</small></div>
   <input id="q" class="search" type="search" placeholder="Search dashboards…" aria-label="Search dashboards">
   <a class="out" href="/logout">Sign out</a>
 </div></header>
 <main>
-  <div class="intro"><span class="pill live">LIVE</span> opens now · <span class="pill plan">PLANNED</span> being rebuilt · <span class="pill real">REAL ORDERS</span> touches a live account · <b id="count"></b></div>
+  <div class="intro"><span class="pill live">LIVE</span> opens in this app · <span class="pill plan">NOT BUILT YET</span> no page behind it · <b id="count"></b></div>
   <div id="sections"></div>
   <p class="empty" id="empty">No dashboard matches that search.</p>
 </main>
@@ -75,65 +75,60 @@ const I = {
 };
 // [section, [title, description, href | null (planned), icon, tag]]
 const S = [
-  ['Markets & regime', [
-    ['Trading Terminal', 'The QuantSignal terminal: US stock perps, market regime, stock vs perp, live scanner and every tool page.', '/terminal', 'terminal', 'live'],
-    ['Zone Monitor', 'Credit regime, RSP/SPY breadth, gamma backdrop and tide, regime dial and GEX cohorts by industry, on free data.', '/zone', 'zone', 'live'],
-    ['Ticker levels', 'Put wall, call wall, gamma flip, Δgex, flow state and the ignition tape for the zone book.', '/levels', 'table', 'live'],
+  ['Macro Review', [
+    ['Macro Fundamentals', 'OHLCV market-momentum dashboard. Not built yet.', null, 'macro', 'plan'],
+    ['Macro Quants', 'Industry and sub-industry fundamentals: cycle state, leaders and laggards. Not built yet.', null, 'chart', 'plan'],
+    ['Macros — Block by Block', 'Growth, inflation, Fed path, yields, credit, M2 and the dollar. Not built yet.', null, 'grid', 'plan'],
+    ['Cohort Review', 'Per-cohort wave lifecycle, from gestation through ignition to break. Not built yet.', null, 'flow', 'plan'],
+    ['Cohort Strategies', 'Rule-based high-probability strategies and a live scan. Not built yet.', null, 'pulse', 'plan'],
+  ]],
+  ['GEX', [
+    ['Gex (Source Corrected)', 'Zone Monitor: credit regime, RSP/SPY breadth, gamma tide, regime dial and GEX cohorts. Alpaca chains when keys are set, otherwise Cboe.', '/zone', 'zone', 'live'],
+    ['Ticker Levels', 'Put wall, call wall, gamma flip and Δgex. Same page and the same chain as Gex.', '/zone#levels', 'table', 'live'],
     ['Ignitions', 'IGN-A, IGN-B and IGN-THIN from Δgex, tracker fires, and the 09:30 to 11:00 confirmed-break window.', '/ignitions', 'bolt', 'live'],
     ['Reversals', 'Mean-revert names and trend exhaustions from the gamma phase, with the dial and tide gates.', '/reversals', 'swap', 'live'],
-    ['Airpockets', 'Names at least 2% of spot away from the nearest put or call wall, where the gamma shelf does not catch the price.', '/airpocket', 'target', 'live'],
-    ['Trading Signals', 'Closed-candle signals for every US stock perp: 8 checks, entry zone, stop and 2R/3R/4R targets.', '/signals', 'pulse', 'live'],
-    ['Global News', 'Market-moving headlines from public publisher feeds, filtered to markets and macro.', '/news', 'globe', 'live'],
+    ['Airpockets', 'Names at least 2% of spot away from the nearest put or call wall.', '/airpocket', 'target', 'live'],
+    ['Gamma — Swing Alerts', 'Alerts when names enter or leave danger zones. Not built yet.', null, 'gamma', 'plan'],
   ]],
-  ['Options & gamma', [
-    ['Options Studio', 'Option chains, strategy payoffs and Greeks for any optionable US stock.', '/options', 'layers', 'live'],
-    ['Gamma Book', 'Strike-by-strike gamma and open interest: where dealers are long or short gamma.', '/gamma', 'gamma', 'live'],
-    ['Live Hedge Compare', 'Compare hedges side by side against the live chain before you place one.', '/hedge', 'shield', 'live'],
-    ['1:2 Options + Futures', 'Ratio setups that pair an option spread with a perp position, sized and priced live.', '/ratio', 'ratio', 'live'],
-    ['Sheet Scenario Lab', 'Spreadsheet-style scenario grid for multi-leg positions across prices and dates.', '/sheet-lab', 'table', 'live'],
-    ['Manual Four-Leg Lab', 'Build any four-leg structure by hand and see its payoff, breakevens and P&L.', '/manual', 'swap', 'live'],
+  ['Engines', [
+    ['0DTE-Caps', 'Paper short of names capped by expiring calls: 10:30 read, 10:31 entry, stop at the lid strike, cover at 15:50. No live orders.', '/0dte', 'clock', 'live'],
+    ['OMS', 'Order entry on your Alpaca account. Paper until you approve live. Risk checks stay on the server.', '/oms', 'order', 'live'],
+    ['RVOL & Order Flow', 'Relative volume and per-ticker order-flow imbalance. Not built yet.', null, 'flow', 'plan'],
   ]],
-  ['Execution & risk', [
-    ['Paper Trading', '$100k paper account on the signal rules: 5×, 0.5% risk, 70% partial, stop / target / opposite-signal exits.', '/paper', 'wallet', 'live'],
-    ['Risk Calculator', 'Position size from account, risk %, entry and stop, with leverage and liquidation distance.', '/risk', 'target', 'live'],
-    ['Webhook Lab', 'Send and validate TradingView-style alert webhooks against the live signal format.', '/webhook', 'bolt', 'live'],
-    ['Backtest results', '2-year signal backtest by timeframe (5m–1d), exit-rule fixes and robustness checks.', 'https://claude.ai/artifact/VdrrSeZ9616RcRdHKT3mbP', 'chart', 'live'],
+  ['Cohort Navigation Strategy', [
+    ['Planning — Phase Navigation', 'Stage flow and today\'s mode per cohort. Not built yet.', null, 'map', 'plan'],
+    ['Fleet — Launch & Oversight', 'Roster of bot instances. Not built yet.', null, 'grid', 'plan'],
+    ['Execution — Grid (instance)', 'Positions and legs for one instance. Not built yet.', null, 'table', 'plan'],
+    ['Config (instance)', 'Inputs and rebalance confirm. Not built yet.', null, 'table', 'plan'],
+    ['PnL (instance)', 'Per-instance P&L. Not built yet.', null, 'chart', 'plan'],
   ]],
-  ['Your apps (live on Render)', [
-    ['Live Options Signals', 'Weekly ★ bullish, squeeze (SQ / SQ+VC3 ★), weekly bearish and reversal put plans with live chains, Early ★ Tier-S tab, intraday breakouts, My Positions and exit alerts. Own login.', 'https://live-options-dashboard.onrender.com', 'layers', 'live'],
-    ['Options Flow Board', 'View-only mirror of the options-flow paper board, all tickers, pushed from your engine box every ~3 s. Own login.', 'https://options-flow-board.onrender.com', 'flow', 'live'],
-    ['Multi-Trader Futures', 'Futures research dashboard: strategies, risk and win-rate studies. Own login.', 'https://multi-trader-futures.onrender.com', 'chart', 'live'],
-    ['TradingAgents', 'Multi-agent trading research app. Own login.', 'https://tradingagents-68rw.onrender.com', 'pulse', 'live'],
+  ['Grid Bots', [
+    ['4000 series bots', 'One- or two-leg put combos with a grid. Not built yet.', null, 'layers', 'plan'],
+    ['Structure Planner', 'Size a position off the live chain. Not built yet. Never trades.', null, 'ratio', 'plan'],
   ]],
-  ['Macro review', [
-    ['Macro Fundamentals', 'Market-momentum view built from daily OHLCV across the universe.', null, 'macro', 'plan'],
-    ['Macro Quants', 'Industry and sub-industry fundamentals: cycle state, leaders and laggards, cheap improvers.', null, 'chart', 'plan'],
-    ['Macros — Block by Block', 'Growth, inflation, Fed path, yields, credit, M2 and the dollar, each with level, direction and speed.', null, 'grid', 'plan'],
-    ['Cohort Review', 'Per-cohort wave lifecycle, from gestation through ignition to break, with a wave ledger.', null, 'flow', 'plan'],
-    ['Cohort Strategies', 'Rule-based high-probability strategies backtested on the universe, plus a live scan.', null, 'pulse', 'plan'],
-  ]],
-  ['Gamma alerts & engines', [
-    ['Gamma — Swing Alerts', 'Alerts when names enter or leave danger zones and ignition setups on the gamma map.', null, 'gamma', 'plan'],
-    ['RVOL & Order Flow', 'Relative-volume candidates with intraday confirmation and per-ticker order-flow imbalance. View only.', null, 'flow', 'plan'],
-    ['0DTE Caps', 'Paper short of names capped by expiring calls: 10:30 read, 10:31 entry, stop at the lid strike, cover at 15:50. No live orders.', '/0dte', 'clock', 'live'],
-    ['OMS', 'Order entry on your Alpaca account: risk checks on the server, approval on every order, a reason on every action, full order timeline. Paper until you approve live.', '/oms', 'order', 'live'],
-  ]],
-  ['Cohort navigation & grid bots', [
-    ['Planning — Phase Navigation', 'The phase rulebook live: stage flow, per-edge adjustments and today\'s mode per cohort.', null, 'map', 'plan'],
-    ['Fleet — Launch & Oversight', 'Roster of bot instances with hedge and P&L per tree; launch new ones without trading here.', null, 'grid', 'plan'],
-    ['Execution / Config / PnL', 'Per-instance positions and legs, inputs and rebalance confirm, and per-instance P&L.', null, 'table', 'plan'],
-    ['Put-combo grid bots', 'One- or two-leg put combos with a grid: launch and oversight of the bot fleet.', null, 'layers', 'plan'],
-    ['Structure Planner', 'Size a position off the live chain: tranches, strikes, delta, carry, worst case and payoff at expiry. Never trades.', null, 'ratio', 'plan'],
+  ['Quant Signals', [
+    ['Trading Terminal', 'US stock perps, market regime, stock vs perp, and the live scanner.', '/terminal', 'terminal', 'live'],
+    ['Trading Signals', 'Closed-candle signals: 8 checks, entry zone, stop and 2R/3R/4R targets.', '/signals', 'pulse', 'live'],
+    ['Global News', 'Market-moving headlines from public publisher feeds.', '/news', 'globe', 'live'],
+    ['Options Studio', 'Option chains, strategy payoffs and Greeks.', '/options', 'layers', 'live'],
+    ['Gamma Book', 'Strike-by-strike gamma and open interest.', '/gamma', 'gamma', 'live'],
+    ['Live Hedge Compare', 'Compare hedges against the live chain.', '/hedge', 'shield', 'live'],
+    ['1:2 Options + Futures', 'Ratio setups that pair an option spread with a perp.', '/ratio', 'ratio', 'live'],
+    ['Sheet Scenario Lab', 'Scenario grid for multi-leg positions.', '/sheet-lab', 'table', 'live'],
+    ['Manual Four-Leg Lab', 'Any four-leg structure, with payoff and breakevens.', '/manual', 'swap', 'live'],
+    ['Paper Trading', 'Paper account on the signal rules. No live orders.', '/paper', 'wallet', 'live'],
+    ['Risk Calculator', 'Position size from account, risk, entry and stop.', '/risk', 'target', 'live'],
+    ['Webhook Lab', 'Validate TradingView-style alert payloads.', '/webhook', 'bolt', 'live'],
   ]],
 ];
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const tag = t => t === 'live' ? '<span class="pill live">LIVE</span>' : t === 'real' ? '<span class="pill real">REAL ORDERS · PLANNED</span>' : '<span class="pill plan">PLANNED</span>';
+const tag = t => t === 'live' ? '<span class="pill live">LIVE</span>' : '<span class="pill plan">NOT BUILT YET</span>';
 document.getElementById('sections').innerHTML = S.map(([name, cards]) => `<section data-sec><h2>${esc(name)} <span>${cards.filter(c => c[2]).length}/${cards.length} live</span></h2><div class="grid">${cards.map(([t, d, href, ic, st]) => {
   const inner = `<div class="top"><div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true">${I[ic] || I.grid}</svg></div><h3>${esc(t)}</h3></div><p>${esc(d)}</p><div class="meta">${tag(st)}${href ? '<span class="arrow">Open →</span>' : ''}</div>`;
   const ext = href && href.startsWith('http');
   return href ? `<a class="card" href="${esc(href)}"${ext ? ' target="_blank" rel="noopener"' : ''} data-q="${esc((t + ' ' + d).toLowerCase())}">${inner}</a>` : `<div class="card planned" data-q="${esc((t + ' ' + d).toLowerCase())}">${inner}</div>`;
 }).join('')}</div></section>`).join('');
-const all = S.flatMap(s => s[1]); document.getElementById('count').textContent = `${all.filter(c => c[2]).length} live · ${all.filter(c => !c[2]).length} planned`;
+const all = S.flatMap(s => s[1]); document.getElementById('count').textContent = `${all.filter(c => c[2]).length} live · ${all.filter(c => !c[2]).length} not built yet`;
 document.getElementById('q').addEventListener('input', e => {
   const q = e.target.value.trim().toLowerCase(); let shown = 0;
   document.querySelectorAll('[data-sec]').forEach(sec => { let n = 0; sec.querySelectorAll('.card').forEach(c => { const ok = !q || c.dataset.q.includes(q); c.style.display = ok ? '' : 'none'; n += ok; }); sec.style.display = n ? '' : 'none'; shown += n; });

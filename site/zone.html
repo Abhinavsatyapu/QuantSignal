@@ -67,9 +67,11 @@ footer{padding:0 14px 30px;color:var(--muted);font-size:12px;line-height:1.7}
   <h1>🎯 ZONE MONITOR</h1><span class="sub" id="sub"></span>
   <nav class="tabs" aria-label="Zone Monitor views">
     <a class="on" href="#levels">TICKER LEVELS</a>
-    <a href="https://live-options-dashboard.onrender.com" target="_blank" rel="noopener">🔄 REVERSALS</a>
-    <a href="https://live-options-dashboard.onrender.com" target="_blank" rel="noopener">📅 WEEKLY</a>
-    <span title="Not built yet: needs your engine's Airpocket logic">AIRPOCKET</span>
+    <a href="/ignitions">IGNITIONS</a>
+    <a href="/reversals">REVERSALS</a>
+    <a href="/weekly">WEEKLY</a>
+    <a href="/airpocket">AIRPOCKET</a>
+    <a href="/0dte">0DTE</a>
   </nav>
   <div class="right"><span id="count"></span><a href="/">← All dashboards</a><a href="/terminal">Terminal</a><span id="clock"></span><button id="refresh" type="button">↻ Refresh</button><a href="/logout">Sign out</a></div>
 </div>
@@ -88,7 +90,7 @@ footer{padding:0 14px 30px;color:var(--muted);font-size:12px;line-height:1.7}
       <tr><th></th><th class="grp g1" colspan="4">◆ DAILY BASELINE — previous session's last levels</th><th class="grp g2" colspan="6">◆ INTRADAY NOW — latest levels</th></tr>
       <tr><th>Symbol</th><th class="n">Put wall</th><th class="n">Flip</th><th class="n">Call wall</th><th class="n">GEX</th><th class="n">Spot</th><th class="n">Put wall</th><th class="n">Flip</th><th class="n">Call wall</th><th class="n">GEX</th><th class="n">ΔGEX 1D</th></tr>
     </thead><tbody id="lv"><tr><td colspan="11" class="dim">Loading…</td></tr></tbody></table></div></section>
-  <section class="card notice"><b>Not on this page yet</b> (shown on your pertsoft print, but their logic isn't available to rebuild): Credit reaction by industry, O-GAP backdrop, Ignition context, Market OFI tide, Signal tape, Ignition / Confirmed break / Broke D−1 scans, Bot phase, GEX phase and Options-flow velocity (these use the Unusual Whales feed and your engine). Push your engine code and they can be rebuilt exactly.</section>
+  <section class="card notice">Ignitions, reversals, airpockets and the paper 0DTE short use this page's chain (Alpaca when keys are set, otherwise Cboe). Open them from the tabs above. Credit-reaction studies, the O-GAP book and order-flow imbalance stay off this page: the print did not include a feed for them, and those figures are not estimated.</section>
 </main>
 <footer id="foot"></footer>
 <script>

@@ -172,7 +172,7 @@ function airpockets(d) {
     assumptions(d);
 }
 function stub(title, copy) {
-  return `<section class="card"><h2>${esc(title)}</h2><p>${esc(copy)}</p><p class="note"><a href="/levels">Ticker levels</a> · <a href="/ignitions">Ignitions</a> · <a href="/reversals">Reversals</a></p></section>`;
+  return `<section class="card"><h2>${esc(title)}</h2><p>${esc(copy)}</p><p class="note"><a href="/zone#levels">Ticker levels</a> · <a href="/ignitions">Ignitions</a> · <a href="/reversals">Reversals</a> · <a href="/airpocket">Airpockets</a></p></section>`;
 }
 
 function render(d) {

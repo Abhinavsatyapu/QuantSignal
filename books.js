@@ -227,9 +227,68 @@ async function loadOne(src, symbol, clock) {
   return { chain: await nasdaqChain(symbol, clock), uwHistory: null, uwPrem: null };
 }
 
+async function finishBook(rows, errors, clock, log) {
+  const prior = priorSession(clock.day);
+  const session = {};
+  for (const r of rows) if (r.norm != null) session[r.symbol] = { norm: r.norm, spot: r.spot, putWall: r.putWall, callWall: r.callWall, flip: r.flip, ivAtm: r.ivAtm };
+  // The cash close is the baseline. A later pass, after today's options have expired, must not replace it.
+  if (clock.mins < 16 * 60 && Object.keys(session).length) {
+    state.memory.sessions[clock.day] = session;
+    for (const d of Object.keys(state.memory.sessions).sort().slice(0, -30)) delete state.memory.sessions[d];
+  }
+  const br = math.breadthsOf(rows);
+  if (br.gexbr != null) state.memory.gexbr = [...state.memory.gexbr.filter(x => x.day !== clock.day), { day: clock.day, v: br.gexbr, plus: br.plus }].slice(-400);
+  const prevPoll = [...state.memory.polls].reverse().find(p => p.day === clock.day);
+  const events = math.tapeFromPolls(prevPoll && prevPoll.book, rows, clock);
+  state.memory.tape = [...(state.memory.tape || []).filter(e => e.day === clock.day), ...events].slice(-80);
+  state.memory.polls = math.trimPolls(state.memory.polls, { day: clock.day, mins: clock.mins, at: Date.now(), book: math.compactBook(rows) });
+  const confirmed = math.confirmedBreaks(state.memory.polls, clock);
+  if (confirmed.status === "frozen") state.memory.confirmedFreeze = { day: clock.day, confirmed };
+  state.confirmed = state.memory.confirmedFreeze && state.memory.confirmedFreeze.day === clock.day ? state.memory.confirmedFreeze.confirmed : confirmed;
+  state.rows = rows.slice().sort((a, b) => a.symbol.localeCompare(b.symbol));
+  await dte.finish(nyNow(), log);
+  state.errors = errors;
+  state.updatedAt = new Date().toISOString();
+  state.at = Date.now();
+  state.baselineDay = prior ? prior.day : null;
+  try { await store.saveCache("books", { memory: state.memory, rows: state.rows, source: state.source, sourceDetail: state.sourceDetail, updatedAt: state.updatedAt, baselineDay: state.baselineDay }, state.at); }
+  catch (e) { if (log) log("books save failed: " + e.message); }
+  if (log) log(`books: ${rows.length} names via ${state.source}, ${Object.keys(errors).length} skipped`);
+}
+function rowsFromZone(z, creditState, spyRet) {
+  return (z.levels.rows || []).map(r => {
+    const n = r.now; if (!n || !(n.spot > 0) || n.norm == null) return null;
+    const b = r.base;
+    return math.evaluateSymbol({
+      symbol: r.t,
+      structure: { symbol: r.t, spot: n.spot, source: z.dataSource === "alpaca" ? "Alpaca" : "Cboe", norm: n.norm, putWall: n.putWall, callWall: n.callWall, flip: n.flip, oi: null, volume: null, pct0: null, pct17: null, atmPrem: null, ivAtm: null, gex0: null, abs0: null, prem0: null, oi0: null, pinStrike: null },
+      history: b && b.norm != null ? [{ norm: b.norm }] : [],
+      baseline: b ? { norm: b.norm, spot: b.spot, putWall: b.putWall, callWall: b.callWall, flip: b.flip, ivAtm: null } : null,
+      broke: false, sessionRet: b && b.spot > 0 ? (n.spot / b.spot - 1) * 100 : null, ret5: null, creditState, spyRet,
+    });
+  }).filter(Boolean);
+}
 async function refresh(log) {
   if (running) return running;
   running = (async () => {
+    const zFirst = zone.snapshot();
+    const ownScan = process.env.BOOKS_SOURCE === "nasdaq" || process.env.BOOKS_SOURCE === "chain";
+    if (!ownScan && zFirst.levels && zFirst.levels.rows && zFirst.levels.rows.length) {
+      const creditState = zFirst.credit ? zFirst.credit.week || zFirst.credit.state : null;
+      const spyRow = zFirst.levels.rows.find(r => r.t === "SPY");
+      const spyRet = spyRow && spyRow.base && spyRow.base.spot > 0 && spyRow.now ? (spyRow.now.spot / spyRow.base.spot - 1) * 100 : (zFirst.breadth ? zFirst.breadth.spy5 : null);
+      const built = rowsFromZone(zFirst, creditState, spyRet);
+      state.source = zFirst.dataSource === "alpaca" ? "alpaca" : "cboe";
+      state.sourceDetail = "Same chain as Zone Monitor (" + (zFirst.dataSource === "alpaca" ? "Alpaca" : "Cboe") + "). Ignitions, reversals and airpockets are computed from those levels.";
+      state.progress = { done: built.length, total: built.length, running: false };
+      await finishBook(built, {}, nyNow(), log);
+      return;
+    }
+    if (!ownScan && zFirst.loading && zFirst.loading.gamma) {
+      state.source = "zone"; state.sourceDetail = "Waiting for the Zone Monitor chain pass.";
+      state.progress = { done: 0, total: 0, running: true };
+      return;
+    }
     state.progress = { done: 0, total: math.BOOK.length, running: true };
     const src = await chooseSource(log);
     state.source = src.name; state.sourceDetail = src.detail;
@@ -276,34 +335,7 @@ async function refresh(log) {
     const spy = rows.find(r => r.symbol === "SPY");
     const spyRet = spy ? (spy.sessionRet ?? spy.vsBase) : (z.breadth ? z.breadth.spy5 : null);
     if (spyRet != null) for (const r of rows) r.credit = math.creditTag(r.group, creditState, r.vsBase ?? r.sessionRet, spyRet);
-    const session = {};
-    for (const r of rows) if (r.norm != null) session[r.symbol] = { norm: r.norm, spot: r.spot, putWall: r.putWall, callWall: r.callWall, flip: r.flip, ivAtm: r.ivAtm };
-    // The close (16:00 ET) is the baseline. A later pass, with today's options already expired, must not replace it.
-    if (clock.mins < 16 * 60 && Object.keys(session).length) {
-      state.memory.sessions[clock.day] = session;
-      for (const d of Object.keys(state.memory.sessions).sort().slice(0, -30)) delete state.memory.sessions[d];
-    }
-    const br = math.breadthsOf(rows);
-    if (br.gexbr != null) {
-      state.memory.gexbr = [...state.memory.gexbr.filter(x => x.day !== clock.day), { day: clock.day, v: br.gexbr, plus: br.plus }].slice(-400);
-    }
-    const prevPoll = [...state.memory.polls].reverse().find(p => p.day === clock.day);
-    const events = math.tapeFromPolls(prevPoll && prevPoll.book, rows, clock);
-    state.memory.tape = [...(state.memory.tape || []).filter(e => e.day === clock.day), ...events].slice(-80);
-    state.memory.polls = math.trimPolls(state.memory.polls, { day: clock.day, mins: clock.mins, at: Date.now(), book: math.compactBook(rows) });
-    const confirmed = math.confirmedBreaks(state.memory.polls, clock);
-    if (confirmed.status === "frozen") state.memory.confirmedFreeze = { day: clock.day, confirmed };
-    state.confirmed = state.memory.confirmedFreeze && state.memory.confirmedFreeze.day === clock.day ? state.memory.confirmedFreeze.confirmed : confirmed;
-    state.rows = rows.sort((a, b) => a.symbol.localeCompare(b.symbol));
-    await dte.finish(nyNow(), log);
-    state.errors = errors;
-    state.updatedAt = new Date().toISOString();
-    state.at = Date.now();
-    state.baselineDay = prior ? prior.day : null;
-    try {
-      await store.saveCache("books", { memory: state.memory, rows: state.rows, source: state.source, sourceDetail: state.sourceDetail, updatedAt: state.updatedAt, baselineDay: state.baselineDay }, state.at);
-    } catch (e) { if (log) log("books save failed: " + e.message); }
-    if (log) log(`books: ${rows.length} names via ${state.source}, ${Object.keys(errors).length} skipped`);
+    await finishBook(rows, errors, clock, log);
   })().finally(() => { running = null; state.progress.running = false; });
   return running;
 }
@@ -368,6 +400,8 @@ function snapshot() {
 }
 
 async function start(log) {
+  zone.setChainHook((chain, clock) => dte.observe(chain, clock));
+  zone.setDoneHook(() => refresh(log));
   try {
     const saved = await store.loadCache();
     const d = saved.books && saved.books.data;
@@ -380,6 +414,7 @@ async function start(log) {
       state.baselineDay = d.baselineDay || null;
       if (saved.books.at) state.at = Number(saved.books.at) || 0;
       if (!state.rows.length || !("airpocket" in (state.rows[0] || {}))) state.at = 0;
+      if (state.source === "nasdaq" && process.env.BOOKS_SOURCE !== "nasdaq") state.at = 0;
       if (log) log(`books store: restored ${state.rows.length} rows`);
     }
   } catch (e) { if (log) log("books store unavailable: " + e.message); }
