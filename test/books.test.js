@@ -169,6 +169,35 @@ test("gates: dial, tide, swing, o-gap", () => {
   assert.ok(swing.need.length >= 3);
 });
 
+test("the 09:30 and fingerprint polls stay after an afternoon of passes", () => {
+  const day = "2026-11-20";
+  const open = { day, mins: 9 * 60 + 31, book: { KDP: { book: "B", spot: 35, dgex: 0.42 } } };
+  const finger = { day, mins: 10 * 60 + 30, book: { KDP: { book: "B", spot: 36, dgex: 0.4 } } };
+  let polls = [open, finger];
+  for (let mins = 11 * 60 + 5; mins < 16 * 60; mins += 5) polls = m.trimPolls(polls, { day, mins, book: {} });
+  assert.ok(polls.some(p => p.mins === open.mins));
+  assert.ok(polls.some(p => p.mins === finger.mins));
+  const frozen = m.confirmedBreaks(polls, { day, mins: 16 * 60 });
+  assert.equal(frozen.status, "frozen");
+  assert.deepEqual(frozen.names, ["KDP"]);
+});
+
+test("an expired contract does not set the gamma baseline", () => {
+  const now = Date.parse("2026-11-20T22:00:00Z");
+  const exp = m.parseExpiry("Nov 20", day);
+  const later = m.parseExpiry("Nov 27", day);
+  const s = m.structure({
+    symbol: "T", spot: 100, today: day, source: "fixture",
+    legs: [
+      { cp: "C", K: 100, exp: exp.ms, expIso: exp.iso, oi: 100000, vol: 1, mid: 1, iv: 0.3, gamma: 5 },
+      { cp: "C", K: 100, exp: later.ms, expIso: later.iso, oi: 10, vol: 1, mid: 2, iv: 0.3, gamma: 0.02 },
+      { cp: "P", K: 100, exp: later.ms, expIso: later.iso, oi: 10, vol: 1, mid: 2, iv: 0.3, gamma: 0.02 },
+    ],
+  }, now);
+  assert.equal(s.pct0, 0);
+  assert.ok(Math.abs(s.norm) < 0.2);
+});
+
 test("broke D-1 and expiry parsing", () => {
   assert.equal(m.brokeD1([{ d: "2026-11-18", l: 10, c: 11 }, { d: "2026-11-19", l: 9, c: 9.5 }], day), true);
   assert.equal(m.brokeD1([{ d: "2026-11-18", l: 10, c: 11 }, { d: "2026-11-19", l: 10.5, c: 11 }], day), false);

@@ -49,7 +49,7 @@ async function cboeChain(symbol, clock) {
   const legs = [];
   for (const o of d.options) {
     const p = parseOcc(o.option || o.symbol);
-    if (!p || !(p.K > 0)) continue;
+    if (!p || !(p.K > 0) || !(p.exp > Date.now())) continue;
     const oi = Number(o.open_interest) || 0, vol = Number(o.volume) || 0;
     if (!(oi > 0) && !(vol > 0)) continue;
     if (Math.abs(p.K - spot) / spot > 0.35 && oi < 500) continue;
@@ -245,7 +245,7 @@ async function refresh(log) {
         const symbol = math.BOOK[cursor++];
         try {
           const loaded = await loadOne(src, symbol, clock);
-          try { dte.observe(loaded.chain, clock); } catch (e) { errors[symbol] = (errors[symbol] ? errors[symbol] + " · " : "") + e.message; }
+          try { dte.observe(loaded.chain, nyNow()); } catch (e) { errors[symbol] = (errors[symbol] ? errors[symbol] + " · " : "") + e.message; }
           const daily = loaded.bars ? { bars: loaded.bars, price: loaded.chain.spot } : await yahooDaily(symbol).catch(() => null);
           if (daily && daily.price > 0 && !(loaded.chain.spot > 0)) loaded.chain.spot = daily.price;
           const bars = daily && daily.bars;
@@ -278,7 +278,8 @@ async function refresh(log) {
     if (spyRet != null) for (const r of rows) r.credit = math.creditTag(r.group, creditState, r.vsBase ?? r.sessionRet, spyRet);
     const session = {};
     for (const r of rows) if (r.norm != null) session[r.symbol] = { norm: r.norm, spot: r.spot, putWall: r.putWall, callWall: r.callWall, flip: r.flip, ivAtm: r.ivAtm };
-    if (Object.keys(session).length) {
+    // The close (16:00 ET) is the baseline. A later pass, with today's options already expired, must not replace it.
+    if (clock.mins < 16 * 60 && Object.keys(session).length) {
       state.memory.sessions[clock.day] = session;
       for (const d of Object.keys(state.memory.sessions).sort().slice(0, -30)) delete state.memory.sessions[d];
     }
@@ -289,8 +290,10 @@ async function refresh(log) {
     const prevPoll = [...state.memory.polls].reverse().find(p => p.day === clock.day);
     const events = math.tapeFromPolls(prevPoll && prevPoll.book, rows, clock);
     state.memory.tape = [...(state.memory.tape || []).filter(e => e.day === clock.day), ...events].slice(-80);
-    state.memory.polls = [...state.memory.polls.filter(p => p.day === clock.day && p.mins !== clock.mins), { day: clock.day, mins: clock.mins, at: Date.now(), book: math.compactBook(rows) }].slice(-40);
-    state.confirmed = math.confirmedBreaks(state.memory.polls, clock);
+    state.memory.polls = math.trimPolls(state.memory.polls, { day: clock.day, mins: clock.mins, at: Date.now(), book: math.compactBook(rows) });
+    const confirmed = math.confirmedBreaks(state.memory.polls, clock);
+    if (confirmed.status === "frozen") state.memory.confirmedFreeze = { day: clock.day, confirmed };
+    state.confirmed = state.memory.confirmedFreeze && state.memory.confirmedFreeze.day === clock.day ? state.memory.confirmedFreeze.confirmed : confirmed;
     state.rows = rows.sort((a, b) => a.symbol.localeCompare(b.symbol));
     await dte.finish(nyNow(), log);
     state.errors = errors;
@@ -344,7 +347,7 @@ function snapshot() {
     ignition: math.ignitionContext(spyNorm, spyPrev),
     ogap: math.ogapGate(spyNorm, plus),
     swing: math.swingCheck(z.breadth && z.breadth.qqq, plus, spyNorm),
-    confirmed: math.confirmedBreaks(state.memory.polls, clock),
+    confirmed: state.memory.confirmedFreeze && state.memory.confirmedFreeze.day === clock.day ? state.memory.confirmedFreeze.confirmed : math.confirmedBreaks(state.memory.polls, clock),
     tape: state.memory.tape || [],
     cohorts: math.cohortsOf(rows),
     ofi: { available: false, reason: "No order-flow imbalance feed is configured. Set UW_API_KEY for Unusual Whales. This panel does not invent a percent-of-names-bid figure." },

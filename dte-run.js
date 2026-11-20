@@ -104,11 +104,17 @@ async function minuteBars(symbol) {
   return r.timestamp.map((t, i) => ({ mins: etMins(t * 1000), open: q.open[i], high: q.high[i], low: q.low[i], close: q.close[i], volume: q.volume[i] })).filter(b => b.close > 0 && b.mins >= 9 * 60 + 30);
 }
 
-async function barsFor(day, symbol) {
+function barsFresh(bars, nowMins) {
+  if (!Array.isArray(bars) || !bars.length) return false;
+  const need = Math.min(nowMins, 15 * 60 + 50);
+  return bars.at(-1).mins >= need - 2;
+}
+async function barsFor(day, symbol, nowMins) {
   mem.bars[day] = mem.bars[day] || {};
-  if (mem.bars[day][symbol]) return mem.bars[day][symbol];
+  const cached = mem.bars[day][symbol];
+  if (barsFresh(cached, nowMins)) return cached;
   try { const bars = await minuteBars(symbol); mem.bars[day][symbol] = bars; return bars; }
-  catch (e) { mem.bars[day][symbol] = { error: e.message }; return mem.bars[day][symbol]; }
+  catch (e) { return { error: e.message }; }
 }
 
 async function manage(dayKey, day, clock) {
@@ -118,7 +124,7 @@ async function manage(dayKey, day, clock) {
   for (const n of capped) {
     const held = existing.get(n.symbol);
     if (held && held.resolved) { drafts.push(held); continue; }
-    const bars = await barsFor(dayKey, n.symbol);
+    const bars = await barsFor(dayKey, n.symbol, clock.mins);
     if (!Array.isArray(bars)) {
       drafts.push({ symbol: n.symbol, status: "WAITING", volume: n.volume, lidStrike: n.lidStrike, note: "1-minute bars unavailable (" + (bars && bars.error || "missing") + "). No fill was invented.", rank: null, entry: null, shares: null, pnl: 0, pay: null, r: null, resolved: false });
       continue;
@@ -134,14 +140,14 @@ async function manage(dayKey, day, clock) {
   if (clock.mins >= 15 * 60 + 50 && !day.rodFilled) {
     for (const n of day.read.names) {
       if (n.rod != null || n.state === "NO SIDE") continue;
-      const bars = await barsFor(dayKey, n.symbol);
+      const bars = await barsFor(dayKey, n.symbol, clock.mins);
       if (!Array.isArray(bars)) continue;
       const closeBar = bars.filter(b => b.mins <= 15 * 60 + 50).at(-1);
       if (!closeBar || !(n.spot1030 > 0)) continue;
       n.rod = (closeBar.close / n.spot1030 - 1) * 100;
       n.result = n.state === "CAPPED" ? (day.trades.find(t => t.symbol === n.symbol) || {}).status || "CAPPED" : "control " + (n.rod >= 0 ? "+" : "") + n.rod.toFixed(2) + "%";
     }
-    day.rodFilled = day.read.names.every(n => n.state === "NO SIDE" || n.rod != null || n.state === "CAPPED");
+    day.rodFilled = cap.rodComplete(day.read.names);
   }
 }
 
@@ -153,8 +159,10 @@ async function finish(clock, log) {
     if (!mem.engineSince) mem.engineSince = mem.lastCycle;
     if (clock.mins >= 10 * 60 + 30) {
       const day = mem.days[clock.day] || (mem.days[clock.day] = { read: null, trades: [], rodFilled: false });
-      if (!day.read) day.read = buildRead(clock.day);
-      if (clock.mins >= 10 * 60 + 31) await manage(clock.day, day, clock);
+      // A pass that started before 10:30 must not freeze a NO SIDE read. Wait until a snapshot is stamped at or after 10:30, or until noon if the window was missed.
+      const ready = cap.windowReady(mem.snaps[clock.day]);
+      if (!day.read && (ready || clock.mins >= 12 * 60)) day.read = buildRead(clock.day);
+      if (day.read && clock.mins >= 10 * 60 + 31) await manage(clock.day, day, clock);
     }
     const keep = new Set(Object.keys(mem.days).concat([clock.day]));
     for (const d of Object.keys(mem.snaps)) if (!keep.has(d) && d < clock.day) delete mem.snaps[d];

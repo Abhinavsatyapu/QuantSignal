@@ -170,6 +170,7 @@ function addDays(iso, n) {
   return d.toISOString().slice(0, 10);
 }
 function yearFrac(expMs, nowMs) {
+  if (!(expMs > nowMs)) return 0;
   return Math.max((expMs - nowMs) / (365.25 * 864e5), 20 / (365.25 * 24 * 60));
 }
 
@@ -293,7 +294,7 @@ function structure(chain, nowMs) {
   const ivs = [];
   for (const leg of chain.legs) {
     const K = Number(leg.K), exp = Number(leg.exp);
-    if (!(K > 0) || !(exp > 0)) continue;
+    if (!(K > 0) || !(exp > nowMs)) continue;
     const open = Number(leg.oi) || 0, vol = Number(leg.vol) || 0;
     oi += open; volume += vol;
     const T = yearFrac(exp, nowMs);
@@ -448,6 +449,16 @@ function tapeFromPolls(prev, rows, clock) {
   return events;
 }
 
+function isAnchorPoll(mins) {
+  return (mins >= RULES.CONFIRM_OPEN && mins < RULES.CONFIRM_OPEN_END) || (mins >= RULES.CONFIRM_FP_START && mins <= RULES.CONFIRM_FREEZE);
+}
+// Keep the 09:30 open and the 10:20–11:00 fingerprint even after dozens of later passes.
+function trimPolls(existing, next) {
+  const today = (existing || []).filter(p => p.day === next.day && p.mins !== next.mins);
+  const anchors = today.filter(p => isAnchorPoll(p.mins));
+  const rest = today.filter(p => !isAnchorPoll(p.mins)).slice(-24);
+  return [...anchors, ...rest, next];
+}
 function confirmedBreaks(polls, clock) {
   const detail = "CONFIRMED BREAK live day only — reads from the 09:30 poll, fingerprint 10:20–11:00, freezes 11:00";
   const today = (polls || []).filter(p => p.day === clock.day && p.mins <= clock.mins).sort((a, b) => a.mins - b.mins);
@@ -557,7 +568,7 @@ function compactBook(rows) {
 
 module.exports = {
   RULES, BOOK, ASSUMPTIONS, TIER_A, industryOf, bookTier, gexSign, postureOf, phaseOf, flowOf, ignitionOf, reversalOf,
-  creditTag, brokeD1, retFrom, structure, evaluateSymbol, tapeFromPolls, confirmedBreaks, bullDial, tideState, tideAdvice,
+  creditTag, brokeD1, retFrom, structure, evaluateSymbol, tapeFromPolls, confirmedBreaks, trimPolls, isAnchorPoll, bullDial, tideState, tideAdvice,
   ignitionContext, ogapGate, swingCheck, cohortsOf, breadthsOf, compactBook, airpocketOf, dteSignal, parseNum, parseExpiry, closeMs, impliedVol, bsPrice, bsGamma,
   fmtGex, fmtAtm, clockLabel, addDays,
 };

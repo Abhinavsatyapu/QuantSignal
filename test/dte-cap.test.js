@@ -81,6 +81,16 @@ test("scorecard retires only at 100 resolved shorts when a gated line fails", ()
   assert.ok(late.failed.includes("trades closing below entry"));
 });
 
+test("the 10:30 read waits for a snapshot taken at or after 10:30", () => {
+  assert.equal(cap.windowReady({ AAA: { first: { mins: 9 * 60 + 35 }, last: { mins: 10 * 60 + 29 } } }), false);
+  assert.equal(cap.windowReady({ AAA: { first: { mins: 9 * 60 + 35 }, last: { mins: 10 * 60 + 31 } } }), true);
+});
+
+test("rest-of-day is unfinished while a CAPPED name has no close", () => {
+  assert.equal(cap.rodComplete([{ state: "CAPPED", rod: null }, { state: "NEITHER", rod: 0.1 }]), false);
+  assert.equal(cap.rodComplete([{ state: "CAPPED", rod: -0.4 }, { state: "NO SIDE" }]), true);
+});
+
 test("phase deepening, airpocket gap, and the 09:00 scanning line", () => {
   assert.equal(math.phaseOf(-0.5, [{ norm: -0.3 }]).phase, "DEEPENING");
   assert.equal(math.phaseOf(-0.4, [{ norm: -0.35 }]).phase, "SHORT_GAMMA");

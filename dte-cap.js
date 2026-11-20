@@ -194,6 +194,12 @@ function row(line, needs, raw, pass, now) { return { line, needs, pass, now, raw
 function pct(v) { return v == null ? "—" : v.toFixed(0) + "%"; }
 function signedPct(v) { return v == null ? "—" : (v > 0 ? "+" : "") + v.toFixed(2) + "%"; }
 
+function windowReady(snaps) {
+  return Object.values(snaps || {}).some(s => s && s.last && s.first && s.last.mins >= 10 * 60 + 30 && s.first.mins >= 9 * 60 + 30 && s.last.mins > s.first.mins);
+}
+function rodComplete(names) {
+  return (names || []).every(n => n.state === "NO SIDE" || n.rod != null);
+}
 function rankTrades(trades) {
   const ordered = trades.slice().sort((a, b) => (b.volume || 0) - (a.volume || 0));
   ordered.forEach((t, i) => { t.rank = i + 1; });
@@ -201,5 +207,5 @@ function rankTrades(trades) {
 }
 
 module.exports = {
-  RISK, NOTIONAL, BAND, RETIRE_AT, RULES_TEXT, classifyName, sizeShort, vwapAt, settle, scorecard, rankTrades, weekKey, lineStats,
+  RISK, NOTIONAL, BAND, RETIRE_AT, RULES_TEXT, classifyName, sizeShort, vwapAt, settle, scorecard, rankTrades, weekKey, lineStats, windowReady, rodComplete,
 };
