@@ -78,6 +78,10 @@ const S = [
   ['Markets & regime', [
     ['Trading Terminal', 'The QuantSignal terminal: US stock perps, market regime, stock vs perp, live scanner and every tool page.', '/terminal', 'terminal', 'live'],
     ['Zone Monitor', 'Credit regime, RSP/SPY breadth, gamma backdrop and tide, regime dial and GEX cohorts by industry, on free data.', '/zone', 'zone', 'live'],
+    ['Ticker levels', 'Put wall, call wall, gamma flip, Δgex, flow state and the ignition tape for the zone book.', '/levels', 'table', 'live'],
+    ['Ignitions', 'IGN-A, IGN-B and IGN-THIN from Δgex, tracker fires, and the 09:30 to 11:00 confirmed-break window.', '/ignitions', 'bolt', 'live'],
+    ['Reversals', 'Mean-revert names and trend exhaustions from the gamma phase, with the dial and tide gates.', '/reversals', 'swap', 'live'],
+    ['Airpockets', 'Names at least 2% of spot away from the nearest put or call wall, where the gamma shelf does not catch the price.', '/airpocket', 'target', 'live'],
     ['Trading Signals', 'Closed-candle signals for every US stock perp: 8 checks, entry zone, stop and 2R/3R/4R targets.', '/signals', 'pulse', 'live'],
     ['Global News', 'Market-moving headlines from public publisher feeds, filtered to markets and macro.', '/news', 'globe', 'live'],
   ]],
@@ -111,7 +115,7 @@ const S = [
   ['Gamma alerts & engines', [
     ['Gamma — Swing Alerts', 'Alerts when names enter or leave danger zones and ignition setups on the gamma map.', null, 'gamma', 'plan'],
     ['RVOL & Order Flow', 'Relative-volume candidates with intraday confirmation and per-ticker order-flow imbalance. View only.', null, 'flow', 'plan'],
-    ['0DTE Caps', 'Names capped by expiring options: the morning read and a paper short scorecard. View only.', null, 'clock', 'plan'],
+    ['0DTE Caps', 'Paper short of names capped by expiring calls: 10:30 read, 10:31 entry, stop at the lid strike, cover at 15:50. No live orders.', '/0dte', 'clock', 'live'],
     ['OMS', 'Order entry on your Alpaca account: risk checks on the server, approval on every order, a reason on every action, full order timeline. Paper until you approve live.', '/oms', 'order', 'live'],
   ]],
   ['Cohort navigation & grid bots', [

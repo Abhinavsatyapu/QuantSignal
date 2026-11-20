@@ -4,7 +4,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 COPY package.json ./
 RUN npm install --omit=dev --no-audit --no-fund
-COPY server.js zone.js store.js ./
+COPY server.js zone.js store.js books.js books-math.js dte-cap.js dte-run.js ./
 COPY oms ./oms
 COPY site ./site
 EXPOSE 10000
