@@ -18,6 +18,8 @@ This branch is the original ChatGPT-built QuantSignal Terminal, unchanged, behin
   **Market regime** from Hyperliquid daily candles (S&P 500 and Nasdaq-100 perp trend vs 50/200-day, Nasdaq-100 realised
   volatility percentile, TLT bonds, breadth of the stock perps → Risk-on / Neutral / Risk-off) and **Stock vs perp**
   (Hyperliquid oracle = real stock price during US hours vs perp mark, gap, 24h change, volume, funding).
+* `dte-cap.js` + `dte-run.js` + `site/0dte.html` — **0DTE Capped** paper short (`/0dte`). 10:30 read, 10:31 entry, stop at the lid strike, cover at 15:50. Persists paper trades. No broker calls. The reference study column is not copied.
+* `books.js` + `books-math.js` + `site/levels.html`, `site/ignitions.html`, `site/reversals.html`, `site/airpocket.html` — **Zone book** inside the same portal (Ticker levels, Ignitions, Reversals, Airpockets). Rules live in `books-math.js` and are listed on each page. Chains: Unusual Whales when `UW_API_KEY` is set, else Cboe delayed quotes (the same host Zone Monitor uses), else Nasdaq's public chain with Black–Scholes gamma on the mid. `BOOKS=off` disables the refresh. `BOOKS_REFRESH_SEC` defaults to 300. `UW_BASE` overrides the Unusual Whales host. Weekly was not in the capture, so that tab does not invent a book.
 * `zone.js` + `site/zone.html` — **Zone Monitor** (free data, no keys): credit regime from FRED (HY/IG spreads, HY yield,
   10-year), RSP/SPY breadth (Yahoo, Stooq backup), gamma from Cboe delayed option chains (SPY/QQQ net GEX and gamma flip,
   +GEX breadth across the stock-perp universe, daily tide history, industry cohorts), swing-low check, regime dial and a
@@ -32,6 +34,10 @@ This branch is the original ChatGPT-built QuantSignal Terminal, unchanged, behin
 | `UPSTREAM` | optional; backend for `/api/*` (default: the ChatGPT site) |
 | `DATABASE_URL` | Neon (or any Postgres) connection string; keeps Zone Monitor history and last readings across restarts |
 | `ALPHAVANTAGE_API_KEY` | premium Alpha Vantage key for Market regime + Stock vs perp |
+| `UW_API_KEY` | optional Unusual Whales bearer token for the zone book's strike gamma and flow. Without it the book uses Cboe, then Nasdaq |
+| `BOOKS` | set to `off` to disable the zone-book refresh |
+| `BOOKS_REFRESH_SEC` | optional; seconds between chain passes (default 300) |
+| `BOOKS_SOURCE` | optional; `nasdaq` skips the Cboe probe, `chain` skips Unusual Whales even if a key is set |
 | `AV_ENTITLEMENT` | optional; `realtime` (default, falls back to `delayed`) |
 
 Run locally: `OWNER_PASSWORD=yourpass SESSION_SECRET=anything node server.js` → http://localhost:3000

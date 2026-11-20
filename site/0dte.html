@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>0DTE Capped · QuantSignal</title>
+<meta name="theme-color" content="#0b0f14">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/zone-book.css">
+<style>
+body{background:#0c1016}
+.engine{font:13px/1.45 "IBM Plex Mono",ui-monospace,Menlo,monospace}
+.rules{color:#c5d0dc;font:12.5px/1.55 "IBM Plex Sans",sans-serif;max-width:1100px}
+.tools{display:flex;flex-wrap:wrap;gap:14px;align-items:center;color:#9aa6b5;font-size:12px}
+.tools input[type=date]{background:#10161e;border:1px solid #314056;border-radius:8px;padding:6px 8px;color:#e7edf5}
+.score{width:100%;border-collapse:collapse;font-size:12px;min-width:720px}
+.score th,.score td{padding:6px 8px;border-bottom:1px solid #243041;text-align:left;vertical-align:top}
+.score th{color:#8b97a8;font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+.pass{color:#3dce86}.fail{color:#ff8d96}.wait{color:#e6b15c}
+.pnlpos{color:#3dce86}.pnlneg{color:#ff8d96}
+.daylink{cursor:pointer;color:#9ec0ff;background:none;border:0;padding:0;font:inherit}
+h2.sec{margin:18px 0 8px;font:600 12px "IBM Plex Mono",monospace;letter-spacing:.06em;text-transform:uppercase;color:#9aa6b5}
+.banner.retired{border-color:#e2454f;color:#ffb4b8}
+</style>
+</head>
+<body data-page="dte" class="engine">
+<header class="top">
+  <a class="back" href="/">← All dashboards</a>
+  <a class="back" href="/zone">Regime</a>
+  <div class="brand"><h1>0DTE Capped</h1><small>Paper · rest-of-day short · no orders</small></div>
+  <nav class="tabs" aria-label="Zone sections">
+    <a href="/levels" data-tab="levels">Ticker levels</a>
+    <a href="/ignitions" data-tab="ignitions">Ignitions</a>
+    <a href="/reversals" data-tab="reversals">Reversals</a>
+    <a href="/airpocket" data-tab="airpocket">Airpockets</a>
+    <a href="/0dte" data-tab="dte">0DTE</a>
+    <a href="/weekly" data-tab="weekly">Weekly</a>
+  </nav>
+  <div class="meta"><a class="back" href="/logout">Sign out</a></div>
+</header>
+<main id="app"><p class="skeleton">Loading the paper book…</p></main>
+<script src="/0dte.js"></script>
+</body>
+</html>

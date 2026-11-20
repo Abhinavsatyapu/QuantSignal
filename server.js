@@ -1,7 +1,7 @@
 // QuantSignal Terminal (ChatGPT version) behind a password.
 // ./site holds the ChatGPT site's own files, unchanged. Every /api/* request is passed through, unchanged, to the
 // ChatGPT backend (UPSTREAM), so pages behave exactly as on ChatGPT. Password: OWNER_PASSWORD (Render env var).
-const http = require("http"), { Readable } = require("stream"), zone = require("./zone"), omsMod = require("./oms/routes"), fs = require("fs"), path = require("path"), crypto = require("crypto");
+const http = require("http"), { Readable } = require("stream"), zone = require("./zone"), books = require("./books"), dte = require("./dte-run"), omsMod = require("./oms/routes"), fs = require("fs"), path = require("path"), crypto = require("crypto");
 const oms = omsMod.create({ log: m => console.log(new Date().toISOString(), m) });
 const PORT = process.env.PORT || 3000, SITE = path.join(__dirname, "site");
 const PASSWORD = process.env.OWNER_PASSWORD || process.env.APP_PASSWORD || "";
@@ -197,6 +197,15 @@ http.createServer((req, res) => {
     if (url.pathname.startsWith("/api/")) { res.writeHead(401, { ...sec, "Content-Type": "application/json" }); return res.end(JSON.stringify({ error: "Sign in required" })); } res.writeHead(200, { ...sec, "Content-Type": "text/html; charset=utf-8" }); return res.end(login()); }
   if (url.pathname.startsWith("/api/oms/")) return oms.handle(req, res, url);
   if (url.pathname === "/api/zone") { res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }); return res.end(JSON.stringify(zone.snapshot())); }
+  if (url.pathname === "/api/zone/dte") {
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    return res.end(JSON.stringify(dte.snapshot(url.searchParams.get("day"))));
+  }
+  if (url.pathname === "/api/zone/books") {
+    if (url.searchParams.get("refresh") === "1") books.kick();
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    return res.end(JSON.stringify(books.snapshot()));
+  }
   if (url.pathname === "/api/hl/assets") return hlAssets(req, res);
   if (url.pathname === "/api/av/quotes") return avQuotes(req, res, url);
   if (url.pathname === "/api/av/regime") return avRegime(req, res, url);
@@ -210,4 +219,4 @@ http.createServer((req, res) => {
   if (!fs.existsSync(file)) file = path.join(SITE, "index.html");           // single-page-app routes like /paper
   res.writeHead(200, { ...sec, "Content-Type": TYPES[path.extname(file)] || "application/octet-stream" });
   fs.createReadStream(file).pipe(res);
-}).listen(PORT, () => { console.log("QuantSignal on :" + PORT); if (process.env.ZONE !== "off") zone.start(m => console.log(new Date().toISOString(), m)); oms.start().catch(e => console.log("oms start failed: " + e.message)); });
+}).listen(PORT, "0.0.0.0", () => { console.log("QuantSignal on :" + PORT); if (process.env.ZONE !== "off") zone.start(m => console.log(new Date().toISOString(), m)); if (process.env.BOOKS !== "off") { dte.start(m => console.log(new Date().toISOString(), m)).catch(e => console.log("dte start failed: " + e.message)); books.start(m => console.log(new Date().toISOString(), m)); } oms.start().catch(e => console.log("oms start failed: " + e.message)); });

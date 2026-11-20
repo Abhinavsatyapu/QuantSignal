@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weekly · Zone Monitor</title>
+<meta name="theme-color" content="#0b0f14">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/zone-book.css">
+</head>
+<body data-page="weekly">
+<header class="top">
+  <a class="back" href="/">← All dashboards</a>
+  <a class="back" href="/zone">Regime</a>
+  <div class="brand"><h1>Zone Monitor</h1><small id="src">Weekly</small></div>
+  <nav class="tabs" aria-label="Zone sections">
+    <a href="/levels" data-tab="levels">Ticker levels</a>
+    <a href="/ignitions" data-tab="ignitions">Ignitions</a>
+    <a href="/reversals" data-tab="reversals">Reversals</a>
+    <a href="/weekly" data-tab="weekly">Weekly</a>
+    <a href="/airpocket" data-tab="airpocket">Airpockets</a>
+    <a href="/0dte" data-tab="dte">0DTE</a>
+  </nav>
+  <div class="meta"><span id="clock"></span><button id="refresh" type="button">Refresh</button><a class="back" href="/logout">Sign out</a></div>
+</header>
+<main id="app"><p class="skeleton">Loading…</p></main>
+<script src="/zone-book.js"></script>
+</body>
+</html>
