@@ -156,27 +156,53 @@ function ignitions(d) {
 }
 function reversals(d) {
   const rows = d.rows || [];
+  const lead = `<section class="banner">The reference Reversals tab is a short-stall playbook: pre-market plan, grade A/B/C, price to watch, and a forward score. That study is not in this app, so those grades and prices are not shown. Below is the gamma posture book from the same chain as Ticker Levels. An empty group means no name met that rule.</section>`;
   const groups = ["REVERT", "REVERT-PENDING", "TREND-EXHAUST", "REVERT-FAILED"];
   const blocks = groups.map(kind => {
     const list = rows.filter(r => r.reversal && r.reversal.kind === kind);
     const blurb = { REVERT: "Live posture is mean revert and gamma is positive.", "REVERT-PENDING": "Prior session was neutral and the live posture has shifted to mean revert.", "TREND-EXHAUST": "Prior session was trend, live posture is neutral, and gamma is not still falling.", "REVERT-FAILED": "A mean-revert posture has slipped back to neutral or trend." }[kind];
     return `<section class="card"><h2>${esc(kind)} · ${list.length}</h2><p class="note">${esc(blurb)}</p>${table(list)}</section>`;
   }).join("");
-  return progress(d) + metaLine(d) + `<section class="band ${d.dial && d.dial.buyGated ? "fear" : "calm"}"><div class="head"><span class="title">Reversal gate</span></div><div class="sub">${esc((d.dial && d.dial.text) || "")} ${esc((d.tideAdvice && d.tideAdvice.text) || "")} ${esc((d.stall && d.stall.text) || "")} Short-gamma names are left out of the long fade.</div></section>` +
+  return lead + progress(d) + metaLine(d) + `<section class="band ${d.dial && d.dial.buyGated ? "fear" : "calm"}"><div class="head"><span class="title">Reversal gate</span></div><div class="sub">${esc((d.dial && d.dial.text) || "")} ${esc((d.tideAdvice && d.tideAdvice.text) || "")} ${esc((d.stall && d.stall.text) || "")} Short-gamma names are left out of the long fade.</div></section>` +
     `<div class="grid2">${tideCard(d)}${dialCard(d)}</div>` + blocks + assumptions(d);
 }
 function airpockets(d) {
   const list = (d.rows || []).filter(r => r.airpocket).sort((a, b) => b.airpocket.gap - a.airpocket.gap);
-  return progress(d) + metaLine(d) + `<section class="band"><div class="head"><span class="title">Airpockets</span><span class="tag">${list.length}</span></div><div class="sub">A name is here when the nearest put or call wall is at least 2% of spot away. UNDER means that wall is above the price. OVER means the wall is below. The Airpocket tab was not opened in the capture, so 2% is the documented default.</div></section>` +
-    (list.length ? `<div class="tablewrap"><table><thead><tr><th>Symbol</th><th>Side</th><th>Gap</th><th>Nearest wall</th><th>Spot</th><th>Put</th><th>Call</th><th>GEX</th><th>Phase</th></tr></thead><tbody>${list.map(r => `<tr><td class="sym">${esc(r.symbol)}<small>${esc(r.group)}</small></td><td>${esc(r.airpocket.side)}</td><td>${r.airpocket.gap.toFixed(1)}%</td><td>${num(r.airpocket.wall)}</td><td>${num(r.spot)}</td><td>${num(r.putWall)}</td><td>${num(r.callWall)}</td><td class="${cls(r.norm)}">${sgn(r.norm, 2, "")}</td><td class="phase ${phaseCls(r.phase)}">${phaseName(r.phase)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty">No name is 2% or more from its nearest wall.</div>`) +
+  return progress(d) + metaLine(d) + `<section class="band"><div class="head"><span class="title">Airpockets</span><span class="tag">${list.length} of ${(d.rows || []).length}</span></div><div class="sub">A name is listed when the nearest put or call wall is at least 2% of spot away. UNDER: that wall is above the price. OVER: the wall is below. The reference long-eligible book (fired, still waiting, zone in window) is a different engine and is not computed here. Tag stays STILL WATCHING because this app does not fire an airpocket entry.</div></section>` +
+    (list.length ? `<div class="tablewrap"><table><thead><tr><th>Symbol</th><th>Level</th><th>Dist</th><th>Zone</th><th>Spot</th><th>Phase</th><th>Tag</th></tr></thead><tbody>${list.map(r => `<tr><td class="sym">${esc(r.symbol)}<small>${esc(r.group)}</small></td><td>${num(r.airpocket.wall)}</td><td>${r.airpocket.gap.toFixed(1)}%</td><td>${esc(r.airpocket.side)}</td><td>${num(r.spot)}</td><td class="phase ${phaseCls(r.phase)}">${phaseName(r.phase)}</td><td><span class="tag amber">STILL WATCHING</span></td></tr>`).join("")}</tbody></table></div>` : `<div class="empty">No name is 2% or more from its nearest wall. The list stays empty until a chain pass produces walls.</div>`) +
     assumptions(d);
 }
+function danger(d) {
+  const rows = d.rows || [];
+  const n = (pred) => rows.filter(pred).length;
+  const mean = n(r => r.basePosture === "MEAN REVERT"), trend = n(r => r.basePosture === "TREND"), hold = n(r => r.basePosture !== "MEAN REVERT" && r.basePosture !== "TREND");
+  const fresh = n(r => r.phase === "FRESH"), decay = n(r => r.phase === "DECAYING"), exit = n(r => r.phase === "EXIT");
+  const flips = n(r => r.basePosture && r.posture && r.basePosture !== r.posture);
+  const walls = n(r => r.base && ((r.putWall != null && r.base.putWall != null && Math.abs(r.putWall - r.base.putWall) >= 0.01) || (r.callWall != null && r.base.callWall != null && Math.abs(r.callWall - r.base.callWall) >= 0.01)));
+  const empty = !rows.length;
+  return progress(d) + (empty ? `<div class="empty">Danger Zones has no names yet. Counts stay at zero until the chain pass that feeds Zone Monitor finishes. Campaigns, cockpit, flip-reclaim, 51–56, ignition, washout, and credit on the 8042 bar are not built.</div>` : "") +
+    `<div class="boxes">
+      <section class="box"><h2>Deploy at open</h2><p class="note">${rows.length} tickers · prior-session posture. No stored baseline counts as hold.</p><div class="rowbar"><div><div class="k">Mean revert</div><b>${mean}</b></div><div><div class="k">Trend</div><b>${trend}</b></div><div><div class="k">Neutral / hold</div><b>${hold}</b></div></div></section>
+      <section class="box"><h2>Regime signals</h2><p class="note">+GEX phase on this pass</p><div class="rowbar"><div><div class="k">Fresh +GEX</div><b>${fresh}</b></div><div><div class="k">Decaying</div><b>${decay}</b></div><div><div class="k">Exit</div><b>${exit}</b></div></div></section>
+      <section class="box"><h2>Needs adjustment</h2><p class="note">Live drift vs the stored baseline</p><div class="rowbar"><div><div class="k">Posture flips</div><b>${flips}</b></div><div><div class="k">Walls moved</div><b>${walls}</b></div></div></section>
+    </div>` +
+    (rows.length ? table(rows) : "") +
+    `<p class="note">These counts use the Zone Monitor chain (Alpaca when ALPACA_KEY_ID and ALPACA_SECRET_KEY are set, otherwise Cboe). They are not the reference 8042 bot ledger, and this page does not place orders.</p>` + assumptions(d);
+}
 function stub(title, copy) {
-  return `<section class="card"><h2>${esc(title)}</h2><p>${esc(copy)}</p><p class="note"><a href="/levels">Ticker levels</a> · <a href="/ignitions">Ignitions</a> · <a href="/reversals">Reversals</a></p></section>`;
+  return `<section class="card"><h2>${esc(title)}</h2><p>${esc(copy)}</p><p class="note"><a href="/zone#levels">Ticker levels</a> · <a href="/ignitions">Ignitions</a> · <a href="/reversals">Reversals</a> · <a href="/airpocket">Airpockets</a></p></section>`;
 }
 
+function weekly() {
+  return `<section class="card"><h2>Weekly</h2>
+    <p>The reference Weekly tab is an options-positioning board: bullish or bearish read, regime, lean, call and put days, wall up or down, and forward scorecards. That ledger is not in this app.</p>
+    <div class="empty">No weekly rows. The read, regime, lean, call/put days, wall, and scorecard columns stay blank. Nothing is filled from the reference screenshot.</div>
+    <p class="note"><a href="/zone#levels">Ticker levels</a> · <a href="/reversals">Reversals</a> · <a href="/airpocket">Airpocket</a></p>
+  </section>`;
+}
 function render(d) {
-  if (page === "weekly") return stub("Weekly", "The reference monitor has a Weekly tab. The 2026-11-20 capture was the ticker-levels page, so no weekly rules were visible. This page does not invent a weekly book.");
+  if (page === "weekly") return weekly();
+  if (page === "swing") return danger(d);
   if (page === "airpocket") return airpockets(d);
   if (page === "ignitions") return ignitions(d);
   if (page === "reversals") return reversals(d);

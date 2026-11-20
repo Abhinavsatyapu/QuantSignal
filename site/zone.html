@@ -22,11 +22,12 @@ button{cursor:pointer}button:hover{border-color:var(--muted)}:focus-visible{outl
 .tag.sm{font-size:10.5px;padding:0 6px;border-radius:5px}
 .swing{margin:10px 14px 0;border:1px solid var(--line2);border-radius:10px;padding:9px 14px;color:var(--ink2);background:var(--bg2)}
 .swing.ok{border-color:#1f6b45;background:#0f1d16;color:#a7e7c4}
-.hdr{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 14px;padding:12px 14px 0;margin-top:10px;background:#121823;border-bottom:1px solid var(--line)}
-.hdr h1{margin:0 0 10px;font:700 21px var(--m);letter-spacing:.08em}.hdr .sub{margin-bottom:12px;color:var(--muted);font-size:12px}
-.tabs{display:flex;gap:4px;flex-wrap:wrap}.tabs a,.tabs span{display:block;padding:9px 16px;border-radius:9px 9px 0 0;font:700 13.5px var(--m);letter-spacing:.06em;color:var(--muted);background:#182030;border:1px solid var(--line);border-bottom:0}
-.tabs .on{background:var(--bg);color:var(--ink)}.tabs span{opacity:.55}
-.hdr .right{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-bottom:8px;color:var(--muted);font-size:12px}
+.hdr{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 14px;background:#10151c;border-bottom:1px solid var(--line)}
+.dot{width:9px;height:9px;border-radius:50%;background:#e0434f;box-shadow:0 0 0 3px rgba(224,67,79,.18);flex:none}
+.hdr h1{margin:0;font:700 15px var(--m);letter-spacing:.08em}.hdr .sub{color:var(--muted);font-size:11.5px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}.tabs a{display:block;padding:7px 12px;border-radius:8px;font:700 12px var(--m);letter-spacing:.05em;color:#9aa6b8;background:#1a2230;border:1px solid #2a3548}
+.tabs a:hover{color:var(--ink);border-color:#3d4c64}.tabs .on{background:#243044;color:#fff;border-color:#41556f}
+.hdr .right{margin-left:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap;color:var(--muted);font-size:12px}
 .band{padding:9px 14px;border-bottom:1px solid var(--line)}.band .row{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
 .band .t{font-weight:700;letter-spacing:.04em}
 .econ{background:#121823}.econ .t{color:var(--amber)}.chip{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line2);border-radius:999px;padding:1px 11px;white-space:nowrap}
@@ -64,18 +65,23 @@ footer{padding:0 14px 30px;color:var(--muted);font-size:12px;line-height:1.7}
 <body>
 <div class="swing" id="swing">Loading…</div>
 <div class="hdr">
-  <h1>🎯 ZONE MONITOR</h1><span class="sub" id="sub"></span>
+  <span class="dot" aria-hidden="true"></span>
+  <h1>ZONE MONITOR</h1><span class="sub" id="sub">loading…</span>
   <nav class="tabs" aria-label="Zone Monitor views">
-    <a class="on" href="#levels">TICKER LEVELS</a>
-    <a href="https://live-options-dashboard.onrender.com" target="_blank" rel="noopener">🔄 REVERSALS</a>
-    <a href="https://live-options-dashboard.onrender.com" target="_blank" rel="noopener">📅 WEEKLY</a>
-    <span title="Not built yet: needs your engine's Airpocket logic">AIRPOCKET</span>
+    <a class="on" href="/zone#levels">TICKER LEVELS</a>
+    <a href="/reversals">REVERSALS</a>
+    <a href="/weekly">WEEKLY</a>
+    <a href="/airpocket">AIRPOCKET</a>
   </nav>
-  <div class="right"><span id="count"></span><a href="/">← All dashboards</a><a href="/terminal">Terminal</a><span id="clock"></span><button id="refresh" type="button">↻ Refresh</button><a href="/logout">Sign out</a></div>
+  <div class="right"><span id="count"></span><a href="/">Portal</a><a href="/logout">Sign out</a></div>
 </div>
 <div class="band econ"><div class="row" id="econ"></div></div>
 <div class="band credit" id="credit"><span class="dim">Credit regime loading…</span></div>
 <div class="band breadth" id="breadth"><span class="dim">Breadth loading…</span></div>
+<div class="band" id="creditRx"><span class="dim">Credit reaction loads with the book.</span></div>
+<div class="band" id="ogap"><span class="dim">O-gap backdrop loads with the book.</span></div>
+<div class="band" id="ign"><span class="dim">Ignition context loads with the book.</span></div>
+<div class="band" id="ofi"><span class="dim">Market OFI is not on this feed.</span></div>
 <main>
   <div id="errs"></div>
   <section class="card tide" id="tide"><h2>GAMMA TIDE</h2><p class="dim">Loading…</p></section>
@@ -83,12 +89,14 @@ footer{padding:0 14px 30px;color:var(--muted);font-size:12px;line-height:1.7}
   <section class="card"><h2>GEXBR COHORTS</h2><div class="small" id="cohMeta"></div>
     <div class="tw" style="margin-top:8px"><table><thead><tr><th>Industry group</th><th class="n">N</th><th class="n">Res</th><th class="n">+GEX breadth</th><th class="n">Pct</th><th class="n">5D</th><th>30 sessions</th><th>Most / least positive gamma</th></tr></thead><tbody id="coh"><tr><td colspan="8" class="dim">Loading…</td></tr></tbody></table></div></section>
   <section class="card toolbar" id="lvbar"></section>
-  <section class="card" id="levels"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><h2 style="margin:0">Ticker levels</h2><input id="q" placeholder="Filter symbol or group" aria-label="Filter tickers" style="min-width:220px"><span class="small" id="lvNote"></span></div>
+  <section class="card" id="cross"></section>
+  <section class="card" id="tape"></section>
+  <section class="card" id="levels"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><h2 style="margin:0">Ticker levels</h2><input id="q" placeholder="Filter symbol or group" aria-label="Filter tickers" style="min-width:220px"><span class="small" id="lvNote"></span><button id="refresh" type="button">Refresh</button><span class="small" id="clock"></span></div>
     <div class="tw" style="max-height:900px"><table><thead>
-      <tr><th></th><th class="grp g1" colspan="4">◆ DAILY BASELINE — previous session's last levels</th><th class="grp g2" colspan="6">◆ INTRADAY NOW — latest levels</th></tr>
-      <tr><th>Symbol</th><th class="n">Put wall</th><th class="n">Flip</th><th class="n">Call wall</th><th class="n">GEX</th><th class="n">Spot</th><th class="n">Put wall</th><th class="n">Flip</th><th class="n">Call wall</th><th class="n">GEX</th><th class="n">ΔGEX 1D</th></tr>
-    </thead><tbody id="lv"><tr><td colspan="11" class="dim">Loading…</td></tr></tbody></table></div></section>
-  <section class="card notice"><b>Not on this page yet</b> (shown on your pertsoft print, but their logic isn't available to rebuild): Credit reaction by industry, O-GAP backdrop, Ignition context, Market OFI tide, Signal tape, Ignition / Confirmed break / Broke D−1 scans, Bot phase, GEX phase and Options-flow velocity (these use the Unusual Whales feed and your engine). Push your engine code and they can be rebuilt exactly.</section>
+      <tr><th></th><th></th><th></th><th class="grp g1" colspan="4">◆ DAILY BASELINE — prior session</th><th></th><th class="grp g2" colspan="4">◆ INTRADAY NOW</th><th class="grp" colspan="5">◆ FLOW — chain in hand, not a signed print</th></tr>
+      <tr><th>Symbol</th><th>Bot</th><th>GEX phase</th><th class="n">Put wall</th><th class="n">Flip</th><th class="n">Call wall</th><th class="n">GEX</th><th class="n">Spot</th><th class="n">Put wall</th><th class="n">Flip</th><th class="n">Call wall</th><th class="n">GEX</th><th class="n">ATM $</th><th class="n">ΔGEX 1D</th><th class="n">0DTE%</th><th class="n">1–7%</th><th>Flow state</th></tr>
+    </thead><tbody id="lv"><tr><td colspan="17" class="dim">Loading…</td></tr></tbody></table></div></section>
+  <section class="card notice">Flow velocity is not on this feed, so that reference column is omitted rather than filled with a guess. Order-flow imbalance stays blank until UW_API_KEY is set. The paper 0DTE short is the <a href="/0dte">0DTE-Caps</a> engine. Danger Zones is <a href="/swing">Gamma — Swing Alerts</a>. Ignition names are also listed on <a href="/ignitions">Ignitions</a>.</section>
 </main>
 <footer id="foot"></footer>
 <script>
@@ -98,7 +106,10 @@ const bp = v => v == null ? '—' : (v > 0 ? '+' : '') + v + 'bp', cls = v => v 
 const tagFor = s => ({ FEAR: 'red', WATCH: 'amber', CALM: 'grey', EASING: 'green' }[s] || 'grey');
 const gexTag = v => v == null ? '' : `<span class="tag sm ${v > 0.3 ? 'green' : v < -0.3 ? 'red' : 'grey'}">${v > 0.3 ? 'POS' : v < -0.3 ? 'NEG' : 'NEU'}</span>`;
 const md = d => d ? new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : '—';
-let S = null;
+let S = null, B = null;
+const phaseName = p => ({ FRESH: "FRESH +GEX", HELD: "+GEX held", DECAYING: "DECAYING", DEEPENING: "DEEPENING", EXIT: "EXIT", SHORT_GAMMA: "SHORT γ" }[p] || "—");
+const botTag = p => { const k = p === "MEAN REVERT" ? "green" : p === "TREND" ? "red" : "grey"; return p ? `<span class="tag sm ${k}">${esc(p)}</span>` : "—"; };
+const atm$ = v => { if (v == null || !Number.isFinite(+v)) return "—"; const a = Math.abs(v), sign = v < 0 ? "−" : "+"; return sign + "$" + (a >= 1e6 ? (a / 1e6).toFixed(1) + "M" : a >= 1e3 ? (a / 1e3).toFixed(0) + "k" : a.toFixed(0)); };
 
 function swing(s) {
   const el = $('#swing'); if (!s) { el.textContent = 'Swing-low check needs daily prices (QQQ).'; return; }
@@ -163,17 +174,68 @@ function mv(now, base) {
   if (now == null) return '—'; if (base == null) return `<b>${f(now)}</b>`;
   const d = now - base; return `<b>${f(now)}</b><div class="mv ${d > 0 ? 'pos' : d < 0 ? 'amb' : 'dim'}">${Math.abs(d) < 1e-9 ? 'held' : (d > 0 ? '↑ +' : '↓ ') + f(d)}</div>`;
 }
+function bookStrips(b) {
+  if (!b || !(b.rows || []).length) {
+    const wait = b && b.progress && b.progress.running ? "The book pass is still reading chains." : "No book rows yet. These strips stay empty until a chain pass finishes. Nothing is filled in.";
+    $('#creditRx').innerHTML = `<span class="t">CREDIT REACTION</span> <span class="dim">${esc(wait)}</span>`;
+    $('#ogap').innerHTML = `<span class="t">O-GAP BACKDROP</span> <span class="dim">${esc((b && b.ogap && b.ogap.text) || wait)}</span>`;
+    $('#ign').innerHTML = `<span class="t">IGNITION CONTEXT</span> <span class="dim">${esc((b && b.ignition && b.ignition.text) || wait)}</span>`;
+    $('#ofi').innerHTML = `<span class="t">MARKET OFI TIDE</span> <span class="dim">${esc((b && b.ofi && b.ofi.reason) || "No order-flow imbalance feed. Set UW_API_KEY. This line does not invent a percent-of-names-bid figure.")}</span>`;
+    $('#cross').style.display = "none";
+    $('#tape').style.display = "none";
+    return;
+  }
+  $('#cross').style.display = "";
+  $('#tape').style.display = "";
+  const rows = b.rows;
+  const reacting = rows.filter(r => r.credit && r.credit.align === "reacting").slice(0, 8);
+  $('#creditRx').innerHTML = `<div class="row"><span class="t">CREDIT REACTION</span> <span class="dim">name vs SPY session, from the book. Sector index percents from the reference are not on this feed.</span></div>
+    <div class="row" style="margin-top:4px">${reacting.length ? reacting.map(r => `<span class="chip">${esc(r.symbol)} <b>${esc(r.credit.align)}</b> ${esc(r.credit.size)}${r.credit.wait ? " · WAIT" : ""}</span>`).join("") : '<span class="dim">No name is more than 1.5 points away from the SPY session.</span>'}</div>`;
+  const og = b.ogap || {}, ig = b.ignition || {};
+  $('#ogap').innerHTML = `<div class="row"><span class="t">O-GAP BACKDROP</span> <span class="tag sm ${og.code === "SHUT" ? "red" : og.code === "OPEN" ? "green" : "amber"}">${esc(og.code || "—")}</span> <span>${esc(og.text || "")}</span></div>`;
+  $('#ign').innerHTML = `<div class="row"><span class="t">IGNITION CONTEXT</span> <span class="tag sm ${ig.code === "AVOID" ? "red" : ig.code === "OPEN" ? "green" : "amber"}">${esc(ig.code || "—")}</span> <span>${esc(ig.text || "")}</span></div>`;
+  $('#ofi').innerHTML = `<div class="row"><span class="t">MARKET OFI TIDE</span> <span class="dim">${esc((b.ofi && b.ofi.reason) || "Unavailable.")}</span></div>`;
+  const crossed = rows.filter(r => r.phase === "FRESH");
+  const ign = rows.filter(r => r.book);
+  const broke = rows.filter(r => r.broke);
+  const conf = b.confirmed || {};
+  const chip = (r, extra) => `<span class="chip">${esc(r.symbol)} <b>${esc(extra || r.sign || "")}</b></span>`;
+  $('#cross').innerHTML = `<div class="row"><span class="t pos">CROSSED INTO +GEX</span> ${crossed.length ? crossed.map(r => chip(r, "FRESH")).join("") : '<span class="dim">none this pass</span>'}
+    <span class="dim">│</span> <span class="t">CONFIRMED BREAK</span> <span class="dim">${esc(conf.status || "—")}${conf.names && conf.names.length ? " · " + conf.names.map(esc).join(" · ") : " · none"}</span>
+    <span class="dim">│</span> <span class="t">BROKE D−1</span> ${broke.length ? broke.slice(0, 18).map(r => chip(r, "BROKE")).join("") : '<span class="dim">none</span>'}
+    <span class="dim">│</span> <span class="t amb">IGNITION</span> ${ign.length ? ign.map(r => chip(r, "IGN-" + (r.book === "THIN" ? "THIN" : r.book))).join("") : '<span class="dim">none — Δgex needs a prior session and +0.30</span>'}</div>`;
+  const tape = (b.tape || []).slice(-8).reverse();
+  $('#tape').innerHTML = tape.length ? `<div class="small" style="margin-bottom:6px">SIGNAL TAPE · <a href="/ignitions">full ignitions page</a></div>` + tape.map(e => `<div class="row"><span class="dim">${esc(e.mins)}</span> <b>${esc(e.symbol)}</b> <span class="amb">${esc(e.kind)}</span> <span>${esc(e.text)}</span></div>`).join("") : `<span class="dim">No tape lines yet. An IGN BOOK line prints when Δgex versus the prior stored session reaches +0.30.</span>`;
+}
 function levels(L) {
   const q = ($('#q').value || '').trim().toUpperCase();
+  const book = B && B.rows && B.rows.length ? B.rows : null;
+  const n = book ? book.length : L.rows.length;
+  $('#count').textContent = n + ' tickers';
+  $('#lvNote').textContent = book ? ((B.baselineDay ? `baseline ${B.baselineDay} · ` : 'no prior session · ') + (B.source || '')) : (L.baseDay ? `baseline ${L.baseDay} · now ${L.day} · book pass has not filled phase and flow yet` : 'baseline appears after the first full session is stored');
+  if (book) {
+    const rows = book.filter(r => !q || r.symbol.includes(q) || (r.group || '').toUpperCase().includes(q));
+    $('#lv').innerHTML = rows.map(r => { const b = r.base, chg = r.vsBase;
+      return `<tr><td><b>${esc(r.symbol)}</b><div class="small">${esc(r.group || '')}</div></td>
+        <td>${botTag(r.posture)}${r.credit ? `<div class="small">${esc(r.credit.align)}${r.credit.wait ? ' · WAIT' : ''}</div>` : ''}</td>
+        <td><b>${esc(phaseName(r.phase))}</b>${r.phaseProvisional ? '<div class="small">provisional</div>' : ''}</td>
+        <td class="n">${f(b && b.putWall)}</td><td class="n">${f(b && b.flip)}</td><td class="n">${f(b && b.callWall)}</td><td class="n">${b ? sg(b.norm, 2) + '<div>' + gexTag(b.norm) + '</div>' : '—'}</td>
+        <td class="n"><b>${f(r.spot)}</b>${chg != null ? `<div class="mv ${cls(chg)}">${sg(chg, 2)}% vs base</div>` : ''}</td>
+        <td class="n">${mv(r.putWall, b && b.putWall)}</td><td class="n">${mv(r.flip, b && b.flip)}</td><td class="n">${mv(r.callWall, b && b.callWall)}</td>
+        <td class="n">${sg(r.norm, 2)}<div>${gexTag(r.norm)}</div></td>
+        <td class="n">${atm$(r.atmPrem)}</td><td class="n ${cls(r.dgex)}">${sg(r.dgex, 2)}</td>
+        <td class="n">${r.pct0 == null ? '—' : f(r.pct0, 0) + '%'}</td><td class="n">${r.pct17 == null ? '—' : f(r.pct17, 0) + '%'}</td>
+        <td>${esc(r.flow || '—')}${r.flowTags && r.flowTags.length ? `<div class="small">${esc(r.flowTags.join(' '))}</div>` : ''}</td></tr>`; }).join('') || `<tr><td colspan="17" class="dim">No match</td></tr>`;
+    return;
+  }
   const rows = L.rows.filter(r => !q || r.t.includes(q) || r.sector.toUpperCase().includes(q));
-  $('#count').textContent = L.rows.length + ' tickers';
-  $('#lvNote').textContent = L.baseDay ? `baseline ${L.baseDay} · now ${L.day}` : 'baseline appears after the first full session is stored';
   $('#lv').innerHTML = rows.map(r => { const n = r.now, b = r.base, chg = b && b.spot ? (n.spot / b.spot - 1) * 100 : null, dg = b ? n.norm - b.norm : null;
-    return `<tr><td><b>${esc(r.t)}</b><div class="small">${esc(r.sector)}</div></td>
+    return `<tr><td><b>${esc(r.t)}</b><div class="small">${esc(r.sector)}</div></td><td class="dim">—</td><td class="dim">—</td>
       <td class="n">${f(b && b.putWall)}</td><td class="n">${f(b && b.flip)}</td><td class="n">${f(b && b.callWall)}</td><td class="n">${b ? sg(b.norm, 2) + '<div>' + gexTag(b.norm) + '</div>' : '—'}</td>
       <td class="n"><b>${f(n.spot)}</b>${chg != null ? `<div class="mv ${cls(chg)}">${sg(chg, 2)}% vs base</div>` : ''}</td>
       <td class="n">${mv(n.putWall, b && b.putWall)}</td><td class="n">${mv(n.flip, b && b.flip)}</td><td class="n">${mv(n.callWall, b && b.callWall)}</td>
-      <td class="n">${sg(n.norm, 2)}<div>${gexTag(n.norm)}</div></td><td class="n ${cls(dg)}">${sg(dg, 2)}</td></tr>`; }).join('') || `<tr><td colspan="11" class="dim">${L.rows.length ? 'No match' : 'Levels appear after the first gamma run.'}</td></tr>`;
+      <td class="n">${sg(n.norm, 2)}<div>${gexTag(n.norm)}</div></td>
+      <td class="n dim">—</td><td class="n ${cls(dg)}">${sg(dg, 2)}</td><td class="n dim">—</td><td class="n dim">—</td><td class="dim">—</td></tr>`; }).join('') || `<tr><td colspan="17" class="dim">${L.rows.length ? 'No match' : 'Levels appear after the first gamma run. Bot, phase, ATM, and flow stay blank until the book pass finishes.'}</td></tr>`;
 }
 function render(z) {
   S = z;
@@ -188,8 +250,16 @@ function render(z) {
   $('#foot').innerHTML = `Sources: FRED (ICE BofA HY/IG option-adjusted spreads, HY effective yield, 10-year Treasury; daily) · ${z.dataSource === 'alpaca' ? 'Alpaca (IEX daily bars, option open interest + greeks, indicative feed)' : 'Cboe public delayed option chains / Yahoo / Stooq'} · GEX = gamma × open interest × 100 × spot² × 1%, calls positive, puts negative — a common convention, not dealer positioning data. Walls = strikes with the most call / put gamma within ±25% of spot. Credit "line" = 60-day average spread; week/month states and the swing-low thresholds (+GEX breadth ≥ 34%, SPY gamma > 0) follow your print; the rest is our implementation. Context only — not trading rules.`;
 }
 async function load() {
-  try { const r = await fetch('/api/zone', { headers: { accept: 'application/json' } }); if (r.status === 401) return location.assign('/'); render(await r.json()); }
-  catch (e) { $('#errs').innerHTML = `<div class="card notice">Could not load: ${esc(e.message)}</div>`; }
+  try {
+    const [r, rb] = await Promise.all([
+      fetch('/api/zone', { headers: { accept: 'application/json' } }),
+      fetch('/api/zone/books', { headers: { accept: 'application/json' } }),
+    ]);
+    if (r.status === 401 || rb.status === 401) return location.assign('/');
+    B = await rb.json();
+    render(await r.json());
+    bookStrips(B);
+  } catch (e) { $('#errs').innerHTML = `<div class="card notice">Could not load: ${esc(e.message)}</div>`; }
 }
 $('#refresh').onclick = load; $('#q').oninput = () => S && levels(S.levels);
 setInterval(() => { $('#clock').textContent = new Date().toLocaleTimeString(); }, 1000);
