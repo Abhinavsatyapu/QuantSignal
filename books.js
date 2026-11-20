@@ -284,10 +284,13 @@ async function refresh(log) {
       await finishBook(built, {}, nyNow(), log);
       return;
     }
-    if (!ownScan && zFirst.loading && zFirst.loading.gamma) {
-      state.source = "zone"; state.sourceDetail = "Waiting for the Zone Monitor chain pass.";
-      state.progress = { done: 0, total: 0, running: true };
-      return;
+    if (!ownScan && !(zFirst.levels && zFirst.levels.rows && zFirst.levels.rows.length)) {
+      const gammaFailed = zFirst.errors && zFirst.errors.gamma;
+      if (!gammaFailed || (zFirst.loading && zFirst.loading.gamma)) {
+        state.source = "zone"; state.sourceDetail = "Waiting for the Zone Monitor chain pass.";
+        state.progress = { done: 0, total: 0, running: true };
+        return;
+      }
     }
     state.progress = { done: 0, total: math.BOOK.length, running: true };
     const src = await chooseSource(log);

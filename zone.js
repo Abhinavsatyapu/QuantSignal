@@ -274,13 +274,14 @@ async function gamma(log) {
   const cvals = cohorts.filter(c => !c.thin).map(c => c.posBreadth), dispersion = cvals.length > 1 ? Math.sqrt(mean(cvals.map(x => (x - mean(cvals)) ** 2))) : null;
   if (log) log(`zone gamma (${hasAlpaca() ? "alpaca" : "cboe"}): ${names.length} names ok, ${fails.length} skipped ${JSON.stringify(reasons)}`);
   const d7 = back(7) != null ? br - back(7) : null;
-  return { day, source: hasAlpaca() ? "alpaca" : "cboe", spy, qqq, breadth: br, names: stocks.length, missing: fails.length, skipped: fails,
+  const out = { day, source: hasAlpaca() ? "alpaca" : "cboe", spy, qqq, breadth: br, names: stocks.length, missing: fails.length, skipped: fails,
            d1: back(1) != null ? br - back(1) : null, d3: back(3) != null ? br - back(3) : null, d7, d10: back(10) != null ? br - back(10) : null,
            pctile: pctRank(bvals, br), historyDays: series.length, series: series.slice(-60), leg: legs(series), cohorts, dispersion,
            spyPrev: back(1) != null ? series[series.length - 2][2] : null,
            tide: back(1) == null ? "BUILDING" : (d7 ?? (br - back(1))) <= -3 ? "FALLING" : (d7 ?? (br - back(1))) >= 3 ? "RISING" : "FLAT",
            levels: names.map(n => n.t) };
   if (doneHook) { try { doneHook(); } catch {} }
+  return out;
 }
 
 // ---------- economic calendar (rule-based: weekly claims, first-Friday payrolls) ----------
@@ -321,6 +322,11 @@ function swing(b, g) {
 
 // ---------- cache + scheduling ----------
 const cache = { credit: null, breadth: null, gamma: null, at: {}, err: {} }, TTL = { credit: 6 * 3600e3, breadth: 15 * 60e3, gamma: (hasAlpaca() ? 15 : 60) * 60e3 };
+let booting = false;
+// 09:25–10:40 ET the paper 0DTE book needs a poll near 09:30 and another at 10:30. The regular gamma TTL is too slow for that.
+function gammaTtl(now = nyNow()) {
+  return now.mins >= 9 * 60 + 25 && now.mins <= 10 * 60 + 40 ? 5 * 60e3 : TTL.gamma;
+}
 const running = {};
 async function refresh(key, fn, log) {
   if (running[key]) return running[key];
@@ -328,6 +334,7 @@ async function refresh(key, fn, log) {
   return running[key];
 }
 async function start(log) {
+  booting = true;
   // restore the last saved readings and day history first, so a restarted server shows data immediately
   try {
     history = await store.loadHistory();
@@ -336,7 +343,8 @@ async function start(log) {
     if (saved.levels && saved.levels.data) levels = saved.levels.data;
     if (log) log(`zone store: ${store.mode()} · ${Object.keys(history).length} days of history · restored ${Object.keys(saved).join(", ") || "nothing"}`);
   } catch (e) { if (log) log("zone store unavailable, using memory only: " + e.message); }
-  const tick = () => { for (const [k, fn] of [["credit", credit], ["breadth", breadth], ["gamma", gamma]]) if (!cache.at[k] || Date.now() - cache.at[k] > TTL[k]) refresh(k, fn, log); };
+  booting = false;
+  const tick = () => { for (const [k, fn] of [["credit", credit], ["breadth", breadth], ["gamma", gamma]]) if (!cache.at[k] || Date.now() - cache.at[k] > (k === "gamma" ? gammaTtl() : TTL[k])) refresh(k, fn, log); };
   tick(); setInterval(tick, 60e3).unref();
 }
 function snapshot() {
@@ -345,6 +353,6 @@ function snapshot() {
   return { updatedAt: new Date().toISOString(), ny: nyNow(), credit: c, breadth: b, gamma: g, econ: econ(), dial: dial(c, b, g), swing: swing(b, g),
            levels: { day: levels.today && levels.today.day, at: levels.today && levels.today.at, baseDay: levels.base && levels.base.day, rows: L }, dataSource: hasAlpaca() ? "alpaca" : "free",
            store: store.mode(), ages: Object.fromEntries(Object.entries(cache.at).map(([k, v]) => [k, v ? Math.round((Date.now() - v) / 1000) : null])), errors: cache.err,
-           loading: Object.fromEntries(["credit", "breadth", "gamma"].map(k => [k, !!running[k]])) };
+           loading: { credit: !!running.credit, breadth: !!running.breadth, gamma: booting || !!running.gamma } };
 }
 module.exports = { start, snapshot, setChainHook, setDoneHook, _test: { credit, breadth, gamma, gexFor, legs, swing, bsGamma, parseOcc, dial, econ } };
