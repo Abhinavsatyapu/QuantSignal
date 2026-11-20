@@ -199,6 +199,7 @@ http.createServer((req, res) => {
   if (url.pathname === "/api/av/quotes") return avQuotes(req, res, url);
   if (url.pathname === "/api/av/regime") return avRegime(req, res, url);
   if (url.pathname.startsWith("/api/")) return proxy(req, res, url);
+  if (url.pathname === "/" || url.pathname === "/portal") url.pathname = "/portal.html";   // portal home; the terminal lives at /terminal
   let p = path.normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[\/\\])+/, "");
   let file = path.join(SITE, p);
   if (!file.startsWith(SITE)) { res.writeHead(403); return res.end(); }
