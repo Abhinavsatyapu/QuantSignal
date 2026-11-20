@@ -21,11 +21,13 @@ const ord = (o = {}) => ({ symbol: "AAPL", side: "buy", qty: 5, type: "limit", l
 const statusOf = async (db, id) => (await db.order(id)).status;
 async function syncUntil(engine, db, id, want, n = 8) { for (let i = 0; i < n; i++) { await engine.sync(); if (want.includes(await statusOf(db, id))) return; } }
 
-test("paper mode is the default; live needs both switches", () => {
+test("paper mode is the default; live orders are refused", async () => {
   assert.equal(Alpaca.config({}).mode, "paper");
   assert.equal(Alpaca.config({ ALPACA_ENV: "live" }).mode, "paper");
   assert.equal(Alpaca.config({ ALPACA_ENV: "live" }).liveRequestedButNotApproved, true);
-  assert.equal(Alpaca.config({ ALPACA_ENV: "live", OMS_LIVE_APPROVED: "yes" }).mode, "live");
+  assert.equal(Alpaca.config({ ALPACA_ENV: "live", OMS_LIVE_APPROVED: "yes" }).mode, "paper");
+  const live = Alpaca.create({ ALPACA_KEY_ID: "K", ALPACA_SECRET_KEY: "S", ALPACA_TRADING_URL: "https://api.alpaca.markets" }, async () => { throw new Error("should not fetch"); });
+  assert.throws(() => live.submitOrder({}), /Live orders are disabled/);
 });
 
 test("risk engine: blocks and passes", () => {

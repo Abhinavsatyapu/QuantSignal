@@ -6,7 +6,7 @@
 //                   +GEX breadth across the stock-perp universe, history kept per trading day
 //   Regime dial   : combines trend, credit, breadth and gamma. Context only — never a trading rule.
 "use strict";
-const fs = require("fs"), store = require("./store");
+const fs = require("fs"), store = require("./store"), keyless = require("./keyless");
 
 const SRC = {
   fred: process.env.FRED_BASE || "https://fred.stlouisfed.org/graph/fredgraph.csv?id=",
@@ -159,8 +159,18 @@ async function chainAlpaca(t, spot) {
   return { S, legs, quoteTime: new Date().toISOString(), source: "alpaca" };
 }
 // net dealer gamma ($ per 1% move), common convention: dealers long calls / short puts. Walls = strikes with the most call / put gamma.
+async function chainYahoo(t) {
+  const o = await keyless.options(t);
+  const legs = [];
+  for (const row of o.calls || []) legs.push({ cp: "C", K: row.strike, exp: o.expiry, oi: row.oi, vol: row.vol, mid: row.bid > 0 && row.ask >= row.bid ? (row.bid + row.ask) / 2 : row.last, g: null, iv: row.iv });
+  for (const row of o.puts || []) legs.push({ cp: "P", K: row.strike, exp: o.expiry, oi: row.oi, vol: row.vol, mid: row.bid > 0 && row.ask >= row.bid ? (row.bid + row.ask) / 2 : row.last, g: null, iv: row.iv });
+  if (legs.filter(l => l.oi > 0).length < 4) throw new Error("Yahoo chain too thin");
+  return { S: o.spot, legs, quoteTime: new Date().toISOString(), source: "yahoo" };
+}
 async function gexFor(t, withFlip = true, spot) {
-  const ch = hasAlpaca() ? await chainAlpaca(t, spot) : await chainCboe(t);
+  let ch;
+  if (hasAlpaca()) ch = await chainAlpaca(t, spot);
+  else { try { ch = await chainYahoo(t); } catch (e) { try { ch = await chainCboe(t); } catch (e2) { throw new Error(e.message + "; Cboe " + e2.message); } } }
   if (chainHook) { try { chainHook({ symbol: t, spot: ch.S, today: nyNow().day, source: ch.source, legs: ch.legs.map(o => ({ cp: o.cp, K: o.K, exp: o.exp, expIso: new Date(o.exp).toISOString().slice(0, 10), oi: o.oi, vol: o.vol || 0, mid: o.mid, iv: o.iv, gamma: o.g })) }, nyNow()); } catch {} }
   const S = ch.S, now = Date.now(); let call = 0, put = 0; const flipLegs = [], byK = new Map();
   for (const o of ch.legs) {
@@ -272,9 +282,9 @@ async function gamma(log) {
              names: a.sort((x, y) => y.norm - x.norm).map(x => [x.t, +x.norm.toFixed(3)]) };
   }).sort((a, b) => b.n - a.n || a.sector.localeCompare(b.sector));
   const cvals = cohorts.filter(c => !c.thin).map(c => c.posBreadth), dispersion = cvals.length > 1 ? Math.sqrt(mean(cvals.map(x => (x - mean(cvals)) ** 2))) : null;
-  if (log) log(`zone gamma (${hasAlpaca() ? "alpaca" : "cboe"}): ${names.length} names ok, ${fails.length} skipped ${JSON.stringify(reasons)}`);
+  if (log) log(`zone gamma (${hasAlpaca() ? "alpaca" : "yahoo"}): ${names.length} names ok, ${fails.length} skipped ${JSON.stringify(reasons)}`);
   const d7 = back(7) != null ? br - back(7) : null;
-  const out = { day, source: hasAlpaca() ? "alpaca" : "cboe", spy, qqq, breadth: br, names: stocks.length, missing: fails.length, skipped: fails,
+  const out = { day, source: hasAlpaca() ? "alpaca" : "yahoo", spy, qqq, breadth: br, names: stocks.length, missing: fails.length, skipped: fails,
            d1: back(1) != null ? br - back(1) : null, d3: back(3) != null ? br - back(3) : null, d7, d10: back(10) != null ? br - back(10) : null,
            pctile: pctRank(bvals, br), historyDays: series.length, series: series.slice(-60), leg: legs(series), cohorts, dispersion,
            spyPrev: back(1) != null ? series[series.length - 2][2] : null,

@@ -1,0 +1,24 @@
+:root{--bg:#0b0f14;--panel:#141a22;--line:#2a3544;--ink:#e7edf5;--muted:#8b97a8;--green:#3dce86;--red:#ff8d96;--amber:#e6b15c;--f:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;--m:"IBM Plex Mono",ui-monospace,Menlo,monospace;color-scheme:dark}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--f)}
+a{color:#9ec0ff;text-decoration:none}
+.top{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(11,15,20,.94)}
+.top h1{margin:0;font:700 15px var(--m);letter-spacing:.04em}
+.src{color:var(--muted);font:12px var(--m)}
+.top .spacer{margin-left:auto}
+main{padding:14px 16px 48px;display:grid;gap:12px}
+.note{color:var(--muted);font-size:12.5px}
+.tag{display:inline-block;font:700 11px var(--m);padding:2px 7px;border-radius:6px;background:#243044;color:#d5deea}
+.tag.green{background:#1f9d5c;color:#04140b}.tag.red{background:#e0434f;color:#fff}.tag.amber{background:#d7a441;color:#1a1204}
+.pos{color:var(--green)}.neg{color:var(--red)}
+table{width:100%;border-collapse:collapse;font:12px var(--m)}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{color:var(--muted);font:600 10px var(--f);letter-spacing:.06em;text-transform:uppercase;text-align:right}
+th:first-child,td:first-child{text-align:left}
+.wrap{overflow:auto;border:1px solid var(--line);border-radius:10px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tabs button{font:700 11px var(--m);letter-spacing:.04em;background:#1a2230;color:#9aa6b8;border:1px solid #2a3548;border-radius:8px;padding:7px 10px;cursor:pointer}
+.tabs button.on{background:#243044;color:#fff}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.k{color:var(--muted);font:11px var(--m);letter-spacing:.05em;text-transform:uppercase}
+.v{font:700 22px var(--m)}

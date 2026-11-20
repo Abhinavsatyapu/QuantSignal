@@ -1,15 +1,15 @@
 // Alpaca broker adapter (REST). Keys come only from server environment variables and never leave this process.
-// PAPER by default. LIVE requires BOTH ALPACA_ENV=live AND OMS_LIVE_APPROVED=yes — set by the account owner only.
+// Paper only. Live host orders are refused. ALPACA_ENV and OMS_LIVE_APPROVED no longer open the live API.
 "use strict";
 
 function config(env = process.env) {
-  const live = env.ALPACA_ENV === "live" && env.OMS_LIVE_APPROVED === "yes";
+  const trading = env.ALPACA_TRADING_URL || "https://paper-api.alpaca.markets";
   return {
     keyId: env.ALPACA_KEY_ID || "", secret: env.ALPACA_SECRET_KEY || "",
-    mode: live ? "live" : "paper",
-    trading: env.ALPACA_TRADING_URL || (live ? "https://api.alpaca.markets" : "https://paper-api.alpaca.markets"),
+    mode: "paper",
+    trading,
     data: env.ALPACA_DATA_URL || "https://data.alpaca.markets",
-    liveRequestedButNotApproved: env.ALPACA_ENV === "live" && env.OMS_LIVE_APPROVED !== "yes",
+    liveRequestedButNotApproved: env.ALPACA_ENV === "live" || /\/\/api\.alpaca\.markets\b/.test(trading),
   };
 }
 
@@ -39,7 +39,7 @@ function create(env = process.env, fetchImpl = fetch) {
     clock: () => T("GET", "/v2/clock"),
     positions: () => T("GET", "/v2/positions"),
     asset: sym => T("GET", "/v2/assets/" + encodeURIComponent(sym), null, { allow404: true }),
-    submitOrder: o => T("POST", "/v2/orders", o),
+    submitOrder: o => { if (/\/\/api\.alpaca\.markets\b/.test(c.trading)) throw new BrokerError(403, "Live orders are disabled. This portal stays on the paper host."); return T("POST", "/v2/orders", o); },
     getOrderByClientId: cid => T("GET", "/v2/orders:by_client_order_id?client_order_id=" + encodeURIComponent(cid), null, { allow404: true }),
     getOrder: id => T("GET", "/v2/orders/" + encodeURIComponent(id) + "?nested=true", null, { allow404: true }),
     replaceOrder: (id, o) => T("PATCH", "/v2/orders/" + encodeURIComponent(id), o),

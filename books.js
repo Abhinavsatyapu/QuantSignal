@@ -1,6 +1,6 @@
 // Live book for Ticker Levels, Ignitions and Reversals.
-// Chain order: Unusual Whales when UW_API_KEY is set, otherwise Cboe delayed quotes
-// (same host the Zone Monitor already uses), otherwise Nasdaq's public chain.
+// Chain order: Unusual Whales only when UW_API_KEY is set. Otherwise Nasdaq's public chain.
+// Cboe is skipped unless BOOKS_SOURCE=cboe, because that host blocks Render.
 // Gamma on Nasdaq is Black–Scholes on the bid/ask mid — never a stand-in number.
 "use strict";
 const math = require("./books-math");
@@ -166,7 +166,7 @@ async function chooseSource(log) {
     return sourceChoice;
   }
   if (sourceChoice && Date.now() - sourceAt < 30 * 60e3) return sourceChoice;
-  if (process.env.BOOKS_SOURCE !== "nasdaq") {
+  if (process.env.BOOKS_SOURCE === "cboe") {
     try {
       const probe = await cboeChain("AAPL", nyNow());
       if (probe.legs.length > 20) {
@@ -176,7 +176,7 @@ async function chooseSource(log) {
       }
     } catch (e) { if (log) log("books Cboe probe: " + e.message); }
   }
-  sourceChoice = { name: "nasdaq", detail: "Nasdaq public option chain. Cboe did not return a chain from this host, so gamma is Black–Scholes on the bid/ask mid. Set UW_API_KEY for Unusual Whales." };
+  sourceChoice = { name: "nasdaq", detail: "Nasdaq public option chain. Gamma is Black–Scholes on the bid/ask mid. Alpaca and Unusual Whales are optional and unused unless their keys are set." };
   sourceAt = Date.now();
   return sourceChoice;
 }
