@@ -286,7 +286,9 @@ async function refresh(log) {
     }
     if (!ownScan && !(zFirst.levels && zFirst.levels.rows && zFirst.levels.rows.length)) {
       const gammaFailed = zFirst.errors && zFirst.errors.gamma;
-      if (!gammaFailed || (zFirst.loading && zFirst.loading.gamma)) {
+      const gammaBusy = zFirst.loading && zFirst.loading.gamma;
+      // Zone Monitor left off (ZONE=off) never sets a gamma error. That is not "still starting" — use the book's own chain.
+      if (zFirst.scheduled && (!gammaFailed || gammaBusy)) {
         state.source = "zone"; state.sourceDetail = "Waiting for the Zone Monitor chain pass.";
         state.progress = { done: 0, total: 0, running: true };
         return;

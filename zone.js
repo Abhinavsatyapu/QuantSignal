@@ -322,18 +322,34 @@ function swing(b, g) {
 
 // ---------- cache + scheduling ----------
 const cache = { credit: null, breadth: null, gamma: null, at: {}, err: {} }, TTL = { credit: 6 * 3600e3, breadth: 15 * 60e3, gamma: (hasAlpaca() ? 15 : 60) * 60e3 };
-let booting = false;
+const HOLD_MS = 10 * 60e3;
+const holdUntil = {};
+let booting = false, scheduled = false;
 // 09:25–10:40 ET the paper 0DTE book needs a poll near 09:30 and another at 10:30. The regular gamma TTL is too slow for that.
 function gammaTtl(now = nyNow()) {
   return now.mins >= 9 * 60 + 25 && now.mins <= 10 * 60 + 40 ? 5 * 60e3 : TTL.gamma;
 }
+// A failed pass waits HOLD_MS on its own clock. Backdating cache.at by the long TTL made that age already older than the 5-minute morning window, so the next minute tick ran the whole chain again.
+function refreshDue(now, at, ttl, until) {
+  if (until && now < until) return false;
+  return at == null || now - at > ttl;
+}
 const running = {};
 async function refresh(key, fn, log) {
   if (running[key]) return running[key];
-  running[key] = (async () => { try { cache[key] = await fn(log); cache.at[key] = Date.now(); cache.err[key] = null; store.saveCache(key, cache[key], cache.at[key]).catch(e => log && log("zone cache save failed: " + e.message)); } catch (e) { cache.err[key] = e.message; cache.at[key] = Date.now() - TTL[key] + 10 * 60e3; if (log) log(`zone ${key}: ${e.message}`); } finally { running[key] = null; } })();
+  running[key] = (async () => {
+    try {
+      cache[key] = await fn(log); cache.at[key] = Date.now(); cache.err[key] = null; holdUntil[key] = 0;
+      store.saveCache(key, cache[key], cache.at[key]).catch(e => log && log("zone cache save failed: " + e.message));
+    } catch (e) {
+      cache.err[key] = e.message; holdUntil[key] = Date.now() + HOLD_MS;
+      if (log) log(`zone ${key}: ${e.message}`);
+    } finally { running[key] = null; }
+  })();
   return running[key];
 }
 async function start(log) {
+  scheduled = true;
   booting = true;
   // restore the last saved readings and day history first, so a restarted server shows data immediately
   try {
@@ -344,7 +360,7 @@ async function start(log) {
     if (log) log(`zone store: ${store.mode()} · ${Object.keys(history).length} days of history · restored ${Object.keys(saved).join(", ") || "nothing"}`);
   } catch (e) { if (log) log("zone store unavailable, using memory only: " + e.message); }
   booting = false;
-  const tick = () => { for (const [k, fn] of [["credit", credit], ["breadth", breadth], ["gamma", gamma]]) if (!cache.at[k] || Date.now() - cache.at[k] > (k === "gamma" ? gammaTtl() : TTL[k])) refresh(k, fn, log); };
+  const tick = () => { for (const [k, fn] of [["credit", credit], ["breadth", breadth], ["gamma", gamma]]) if (refreshDue(Date.now(), cache.at[k], k === "gamma" ? gammaTtl() : TTL[k], holdUntil[k])) refresh(k, fn, log); };
   tick(); setInterval(tick, 60e3).unref();
 }
 function snapshot() {
@@ -353,6 +369,6 @@ function snapshot() {
   return { updatedAt: new Date().toISOString(), ny: nyNow(), credit: c, breadth: b, gamma: g, econ: econ(), dial: dial(c, b, g), swing: swing(b, g),
            levels: { day: levels.today && levels.today.day, at: levels.today && levels.today.at, baseDay: levels.base && levels.base.day, rows: L }, dataSource: hasAlpaca() ? "alpaca" : "free",
            store: store.mode(), ages: Object.fromEntries(Object.entries(cache.at).map(([k, v]) => [k, v ? Math.round((Date.now() - v) / 1000) : null])), errors: cache.err,
-           loading: { credit: !!running.credit, breadth: !!running.breadth, gamma: booting || !!running.gamma } };
+           scheduled, loading: { credit: !!running.credit, breadth: !!running.breadth, gamma: booting || !!running.gamma } };
 }
-module.exports = { start, snapshot, setChainHook, setDoneHook, _test: { credit, breadth, gamma, gexFor, legs, swing, bsGamma, parseOcc, dial, econ } };
+module.exports = { start, snapshot, setChainHook, setDoneHook, _test: { credit, breadth, gamma, gexFor, legs, swing, bsGamma, parseOcc, dial, econ, gammaTtl, refreshDue, HOLD_MS, TTL } };
