@@ -4,131 +4,99 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dashboard Portal</title>
-<meta name="theme-color" content="#0f1218">
+<meta name="theme-color" content="#0b0d11">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-/* Portal: the card-grid layout of the team portal, restyled. Section labels, tall readable cards, a status pill per card,
-   an accent rail on hover, search across all cards, 1–3 columns by width. Single dark theme by choice. */
-:root{--bg:#0f1218;--bg2:#12161d;--card:#191d26;--card2:#1e2330;--line:#272d3a;--line2:#343c4d;--ink:#eef1f6;--ink2:#a6aebd;--muted:#7b8496;
-  --accent:#5b8cff;--green:#33c27f;--amber:#e3a33d;--f:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;--m:"IBM Plex Mono",ui-monospace,Menlo,monospace;color-scheme:dark}
-*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--f);-webkit-font-smoothing:antialiased}
+:root{--bg:#0b0d11;--card:#171a21;--card2:#1c2028;--line:#2a303b;--ink:#e8eaee;--muted:#8b93a1;--faint:#6d7583;--amber:#d7a441;--f:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:dark}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--f);-webkit-font-smoothing:antialiased}
 a{color:inherit;text-decoration:none}
-header{position:sticky;top:0;z-index:5;background:rgba(15,18,24,.9);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
-.bar{max-width:1240px;margin:0 auto;padding:14px 22px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.logo{width:34px;height:34px;border-radius:9px;background:var(--accent);display:grid;place-items:center;font:700 16px var(--f);color:#fff}
-.brand strong{display:block;font-size:16px;letter-spacing:-.01em}.brand small{color:var(--muted);font-size:12px}
-.search{margin-left:auto;flex:1 1 220px;max-width:340px;background:var(--bg2);border:1px solid var(--line2);border-radius:10px;padding:9px 12px;color:var(--ink);font:14px var(--f)}
-.search:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(91,140,255,.18)}
-.out{font:500 13px var(--f);color:var(--ink2);border:1px solid var(--line2);border-radius:9px;padding:8px 12px}.out:hover{color:var(--ink);border-color:var(--muted)}
-main{max-width:1240px;margin:0 auto;padding:10px 22px 60px}
-.intro{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:18px 0 6px;color:var(--ink2);font-size:13.5px}
-.intro b{color:var(--ink)}
-.pill{font:600 11px/1 var(--m);letter-spacing:.04em;padding:5px 8px;border-radius:999px;border:1px solid var(--line2);color:var(--ink2);white-space:nowrap}
-.pill.live{color:var(--green);border-color:rgba(51,194,127,.4);background:rgba(51,194,127,.08)}
-.pill.plan{color:var(--amber);border-color:rgba(227,163,61,.35);background:rgba(227,163,61,.07)}
-.pill.real{color:#ff8b93;border-color:rgba(242,98,109,.45);background:rgba(242,98,109,.08)}
-section{margin-top:34px}
-h2{margin:0 0 14px;font:600 13px/1 var(--f);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:10px}
-h2 span{font:500 12px var(--m);letter-spacing:0;text-transform:none;color:#5d6678}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
-.card{position:relative;display:flex;flex-direction:column;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 22px 18px;overflow:hidden;transition:border-color .15s,background .15s,transform .15s}
-.card::before{content:"";position:absolute;left:0;top:18px;bottom:18px;width:3px;border-radius:0 3px 3px 0;background:var(--accent);opacity:0;transition:opacity .15s}
-a.card:hover{border-color:var(--line2);background:var(--card2);transform:translateY(-1px)}a.card:hover::before{opacity:1}
-a.card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.card.planned{background:var(--bg2);border-style:dashed}
-.top{display:flex;align-items:flex-start;gap:12px}
-.ico{flex:none;width:36px;height:36px;border-radius:10px;background:var(--bg2);border:1px solid var(--line);display:grid;place-items:center}
-.ico svg{width:18px;height:18px;fill:none;stroke:var(--accent);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.planned .ico svg{stroke:var(--muted)}
-.card h3{margin:2px 0 0;font:600 18px/1.3 var(--f);letter-spacing:-.01em;text-wrap:balance;flex:1}
-.card p{margin:0;color:var(--ink2);font-size:14.5px;line-height:1.6}
-.meta{margin-top:auto;padding-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font:12px var(--m);color:var(--muted)}
-.arrow{margin-left:auto;color:var(--accent);font:600 13px var(--f)}.planned .arrow{display:none}
-.empty{display:none;color:var(--muted);margin-top:40px;text-align:center}
-footer{max-width:1240px;margin:0 auto;padding:0 22px 40px;color:#5d6678;font-size:12.5px}
-@media (max-width:600px){.bar{padding:12px 16px}.search{order:3;max-width:none;flex-basis:100%}main{padding:4px 16px 40px}.grid{grid-template-columns:1fr}.card h3{font-size:17px}}
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+header{position:sticky;top:0;z-index:4;background:rgba(11,13,17,.92);backdrop-filter:blur(10px)}
+.bar{max-width:1180px;margin:0 auto;padding:18px 28px 8px;display:flex;align-items:center;gap:16px}
+.brand{font-weight:600;font-size:15px;letter-spacing:-.01em}
+.spacer{margin-left:auto}
+.out{color:#9ec0ff;font-size:14px}.out:hover{text-decoration:underline}
+main{max-width:1180px;margin:0 auto;padding:8px 28px 72px}
+h2{margin:34px 0 14px;font:600 11px/1 var(--f);letter-spacing:.16em;text-transform:uppercase;color:#6a7280}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.card{display:flex;flex-direction:column;gap:8px;min-height:148px;background:var(--card);border:1px solid transparent;border-radius:14px;padding:18px 18px 16px}
+a.card:hover{background:var(--card2);border-color:var(--line)}
+a.card:focus-visible{outline:2px solid #6ea2ff;outline-offset:2px}
+.card h3{margin:0;font:600 15px/1.3 var(--f);letter-spacing:-.01em}
+.card p{margin:0;color:var(--muted);font-size:13px;line-height:1.45}
+.card .nb{margin-top:auto;color:var(--amber);font:600 11px/1 var(--f);letter-spacing:.04em}
+.card.planned{cursor:default}
+.searchrow{display:flex;gap:10px;align-items:center;margin-top:6px}
+.search{flex:1;max-width:280px;background:#12151b;border:1px solid var(--line);border-radius:8px;padding:7px 10px;color:var(--ink);font:13px var(--f)}
+.search:focus{outline:none;border-color:#4d607a}
+.empty{display:none;color:var(--faint);margin-top:28px}
+footer{max-width:1180px;margin:0 auto;padding:0 28px 36px;color:#5c6572;font-size:12px}
+@media(max-width:980px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.bar,.main,footer{padding-left:16px;padding-right:16px}.grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <header><div class="bar">
-  <div class="logo" aria-hidden="true">Q</div><div class="brand"><strong>Dashboard Portal</strong><small>QuantSignal · private</small></div>
-  <input id="q" class="search" type="search" placeholder="Search dashboards…" aria-label="Search dashboards">
+  <div class="brand">Dashboard Portal</div>
+  <div class="spacer"></div>
   <a class="out" href="/logout">Sign out</a>
 </div></header>
 <main>
-  <div class="intro"><span class="pill live">LIVE</span> opens in this app · <span class="pill plan">NOT BUILT YET</span> no page behind it · <b id="count"></b></div>
+  <div class="searchrow"><input id="q" class="search" type="search" placeholder="Filter cards" aria-label="Filter cards"></div>
   <div id="sections"></div>
-  <p class="empty" id="empty">No dashboard matches that search.</p>
+  <p class="empty" id="empty">No card matches that filter.</p>
 </main>
-<footer>Read-only unless marked. Market data: Hyperliquid, FRED, Cboe and the QuantSignal data service. Signals and readings are context, not advice.</footer>
+<footer>Cards marked NOT BUILT YET have no page. Live cards open inside this app. Nothing here places an order except OMS, and that stays on your Alpaca account.</footer>
 <script>
-const I = {
-  terminal: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/>', zone: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>',
-  pulse: '<path d="M3 12h4l3-8 4 16 3-8h4"/>', globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>', bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
-  layers: '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>', gamma: '<path d="M6 4h12M8 4v16"/><path d="M14 10c2 0 4 2 4 5"/>', shield: '<path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z"/>',
-  ratio: '<circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/><path d="M19 5 5 19"/>', table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/>', swap: '<path d="M7 7h13l-4-4M17 17H4l4 4"/>',
-  wallet: '<rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M16 15h2"/>', target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/>',
-  chart: '<path d="M4 19V5M4 19h16"/><path d="m7 15 4-4 3 3 5-6"/>', macro: '<path d="M3 21h18M5 21V10l7-5 7 5v11"/><path d="M9 21v-6h6v6"/>', grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
-  flow: '<path d="M4 6h10M4 12h16M4 18h7"/>', order: '<path d="M6 3h12v18l-6-4-6 4z"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', map: '<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/>',
-};
-// [section, [title, description, href | null (planned), icon, tag]]
 const S = [
   ['Macro Review', [
-    ['Macro Fundamentals', 'OHLCV market-momentum dashboard. Not built yet.', null, 'macro', 'plan'],
-    ['Macro Quants', 'Industry and sub-industry fundamentals: cycle state, leaders and laggards. Not built yet.', null, 'chart', 'plan'],
-    ['Macros — Block by Block', 'Growth, inflation, Fed path, yields, credit, M2 and the dollar. Not built yet.', null, 'grid', 'plan'],
-    ['Cohort Review', 'Per-cohort wave lifecycle, from gestation through ignition to break. Not built yet.', null, 'flow', 'plan'],
-    ['Cohort Strategies', 'Rule-based high-probability strategies and a live scan. Not built yet.', null, 'pulse', 'plan'],
+    ['Macro Fundamentals', 'OHLCV market-momentum dashboard. Not in this app.', null],
+    ['Macro Quants', 'Industry and sub-industry fundamental quant: cycle states, leaders and laggards, cheap improvers. Not in this app.', null],
+    ['Macros — Block by Block', 'Seven-block macro backdrop — growth, inflation, Fed path, yields, credit, M2, dollar. Read only. Not in this app.', null],
+    ['Cohort Review', 'Per-cohort wave lifecycle: gestation, ignition, mature, break. Read only. Not in this app.', null],
+    ['Cohort Strategies', 'High-probability strategies and a live scan of what is firing. Not in this app.', null],
   ]],
-  ['GEX', [
-    ['Gex (Source Corrected)', 'Zone Monitor: credit regime, RSP/SPY breadth, gamma tide, regime dial and GEX cohorts. Alpaca chains when keys are set, otherwise Cboe.', '/zone', 'zone', 'live'],
-    ['Ticker Levels', 'Put wall, call wall, gamma flip and Δgex. Same page and the same chain as Gex.', '/zone#levels', 'table', 'live'],
-    ['Ignitions', 'IGN-A, IGN-B and IGN-THIN from Δgex, tracker fires, and the 09:30 to 11:00 confirmed-break window.', '/ignitions', 'bolt', 'live'],
-    ['Reversals', 'Mean-revert names and trend exhaustions from the gamma phase, with the dial and tide gates.', '/reversals', 'swap', 'live'],
-    ['Airpockets', 'Names at least 2% of spot away from the nearest put or call wall.', '/airpocket', 'target', 'live'],
-    ['Gamma — Swing Alerts', 'Alerts when names enter or leave danger zones. Not built yet.', null, 'gamma', 'plan'],
+  ['GEX (SIMPLIFIED_US_TS)', [
+    ['Gamma — Swing Alerts', 'Danger Zones from the same chain as Zone Monitor: mean-revert, trend, and neutral counts, plus phase and wall moves. Other 8042 tabs are not built.', '/swing'],
+    ['Gex (Source Corrected)', 'Zone Monitor. Credit, breadth, gamma tide, regime, and the ticker-level book. Read only. Alpaca open interest when keys are set, otherwise Cboe delayed chains.', '/zone'],
   ]],
-  ['Engines', [
-    ['0DTE-Caps', 'Paper short of names capped by expiring calls: 10:30 read, 10:31 entry, stop at the lid strike, cover at 15:50. No live orders.', '/0dte', 'clock', 'live'],
-    ['OMS', 'Order entry on your Alpaca account. Paper until you approve live. Risk checks stay on the server.', '/oms', 'order', 'live'],
-    ['RVOL & Order Flow', 'Relative volume and per-ticker order-flow imbalance. Not built yet.', null, 'flow', 'plan'],
+  ['Engines (SIMPLIFIED_US_TS)', [
+    ['RVOL & Order Flow — read only', 'Live relative volume and per-ticker order-flow imbalance. Not in this app. No order-flow feed is configured.', null],
+    ['OMS', 'Operator order entry on the Alpaca account configured for this app. Paper until live is approved. Risk checks stay on the server.', '/oms'],
+    ['0DTE-Caps', '0DTE CAPPED → rest-of-day short, PAPER. The 10:30 read, lid stop, 15:50 cover, same-day control, and the 100-trade scorecard. View only, no orders.', '/0dte'],
   ]],
   ['Cohort Navigation Strategy', [
-    ['Planning — Phase Navigation', 'Stage flow and today\'s mode per cohort. Not built yet.', null, 'map', 'plan'],
-    ['Fleet — Launch & Oversight', 'Roster of bot instances. Not built yet.', null, 'grid', 'plan'],
-    ['Execution — Grid (instance)', 'Positions and legs for one instance. Not built yet.', null, 'table', 'plan'],
-    ['Config (instance)', 'Inputs and rebalance confirm. Not built yet.', null, 'table', 'plan'],
-    ['PnL (instance)', 'Per-instance P&L. Not built yet.', null, 'chart', 'plan'],
+    ['Planning — Phase Navigation', 'Phase rulebook per cohort. Not in this app. Read only where the reference has it.', null],
+    ['Fleet — Launch & Oversight', 'Instance roster. Not in this app. Nothing here launches a bot.', null],
+    ['Execution — Grid (instance)', 'Positions and legs for one instance. Not in this app.', null],
+    ['Config (instance)', 'Inputs and rebalance confirm. Not in this app. No rebalance is sent.', null],
+    ['PnL (instance)', 'Per-instance P&L. Not in this app.', null],
   ]],
   ['Grid Bots', [
-    ['4000 series bots', 'One- or two-leg put combos with a grid. Not built yet.', null, 'layers', 'plan'],
-    ['Structure Planner', 'Size a position off the live chain. Not built yet. Never trades.', null, 'ratio', 'plan'],
+    ['4000 series bots — 1 or 2 leg put combo with grid', 'Collar-style put-combo grid. Not in this app. No bot is launched from this portal.', null],
+    ['Structure Planner — size a position, see the payoff at expiry', 'Tranche sizing off a live chain. Not in this app. Never trades.', null],
   ]],
   ['Quant Signals', [
-    ['Trading Terminal', 'US stock perps, market regime, stock vs perp, and the live scanner.', '/terminal', 'terminal', 'live'],
-    ['Trading Signals', 'Closed-candle signals: 8 checks, entry zone, stop and 2R/3R/4R targets.', '/signals', 'pulse', 'live'],
-    ['Global News', 'Market-moving headlines from public publisher feeds.', '/news', 'globe', 'live'],
-    ['Options Studio', 'Option chains, strategy payoffs and Greeks.', '/options', 'layers', 'live'],
-    ['Gamma Book', 'Strike-by-strike gamma and open interest.', '/gamma', 'gamma', 'live'],
-    ['Live Hedge Compare', 'Compare hedges against the live chain.', '/hedge', 'shield', 'live'],
-    ['1:2 Options + Futures', 'Ratio setups that pair an option spread with a perp.', '/ratio', 'ratio', 'live'],
-    ['Sheet Scenario Lab', 'Scenario grid for multi-leg positions.', '/sheet-lab', 'table', 'live'],
-    ['Manual Four-Leg Lab', 'Any four-leg structure, with payoff and breakevens.', '/manual', 'swap', 'live'],
-    ['Paper Trading', 'Paper account on the signal rules. No live orders.', '/paper', 'wallet', 'live'],
-    ['Risk Calculator', 'Position size from account, risk, entry and stop.', '/risk', 'target', 'live'],
-    ['Webhook Lab', 'Validate TradingView-style alert payloads.', '/webhook', 'bolt', 'live'],
+    ['Trading Terminal', 'US stock perps, market regime, stock vs perp, and the live scanner.', '/terminal'],
+    ['Trading Signals', 'Closed-candle signals: entry zone, stop, and targets.', '/signals'],
+    ['Global News', 'Market-moving headlines from public publisher feeds.', '/news'],
+    ['Options Studio', 'Option chains, strategy payoffs, and Greeks.', '/options'],
+    ['Gamma Book', 'Strike-by-strike gamma and open interest.', '/gamma'],
+    ['Live Hedge Compare', 'Compare hedges against the live chain.', '/hedge'],
+    ['1:2 Options + Futures', 'Ratio setups that pair an option spread with a perp.', '/ratio'],
+    ['Sheet Scenario Lab', 'Scenario grid for multi-leg positions.', '/sheet-lab'],
+    ['Manual Four-Leg Lab', 'Any four-leg structure, with payoff and breakevens.', '/manual'],
+    ['Paper Trading', 'Paper account on the signal rules. No live orders.', '/paper'],
+    ['Risk Calculator', 'Position size from account, risk, entry, and stop.', '/risk'],
+    ['Webhook Lab', 'Validate TradingView-style alert payloads.', '/webhook'],
   ]],
 ];
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const tag = t => t === 'live' ? '<span class="pill live">LIVE</span>' : '<span class="pill plan">NOT BUILT YET</span>';
-document.getElementById('sections').innerHTML = S.map(([name, cards]) => `<section data-sec><h2>${esc(name)} <span>${cards.filter(c => c[2]).length}/${cards.length} live</span></h2><div class="grid">${cards.map(([t, d, href, ic, st]) => {
-  const inner = `<div class="top"><div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true">${I[ic] || I.grid}</svg></div><h3>${esc(t)}</h3></div><p>${esc(d)}</p><div class="meta">${tag(st)}${href ? '<span class="arrow">Open →</span>' : ''}</div>`;
-  const ext = href && href.startsWith('http');
-  return href ? `<a class="card" href="${esc(href)}"${ext ? ' target="_blank" rel="noopener"' : ''} data-q="${esc((t + ' ' + d).toLowerCase())}">${inner}</a>` : `<div class="card planned" data-q="${esc((t + ' ' + d).toLowerCase())}">${inner}</div>`;
+document.getElementById('sections').innerHTML = S.map(([name, cards]) => `<section data-sec><h2>${esc(name)}</h2><div class="grid">${cards.map(([t, d, href]) => {
+  const inner = `<h3>${esc(t)}</h3><p>${esc(d)}</p>${href ? '' : '<span class="nb">NOT BUILT YET</span>'}`;
+  const q = esc((t + ' ' + d + ' ' + name).toLowerCase());
+  return href ? `<a class="card" href="${esc(href)}" data-q="${q}">${inner}</a>` : `<div class="card planned" data-q="${q}">${inner}</div>`;
 }).join('')}</div></section>`).join('');
-const all = S.flatMap(s => s[1]); document.getElementById('count').textContent = `${all.filter(c => c[2]).length} live · ${all.filter(c => !c[2]).length} not built yet`;
 document.getElementById('q').addEventListener('input', e => {
   const q = e.target.value.trim().toLowerCase(); let shown = 0;
   document.querySelectorAll('[data-sec]').forEach(sec => { let n = 0; sec.querySelectorAll('.card').forEach(c => { const ok = !q || c.dataset.q.includes(q); c.style.display = ok ? '' : 'none'; n += ok; }); sec.style.display = n ? '' : 'none'; shown += n; });

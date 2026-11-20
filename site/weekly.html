@@ -11,18 +11,15 @@
 </head>
 <body data-page="weekly">
 <header class="top">
-  <a class="back" href="/">← All dashboards</a>
-  <a class="back" href="/zone">Regime</a>
+  <span class="dot" aria-hidden="true"></span>
   <div class="brand"><h1>Zone Monitor</h1><small id="src">Weekly</small></div>
-  <nav class="tabs" aria-label="Zone sections">
+  <nav class="tabs" aria-label="Zone Monitor views">
     <a href="/zone#levels" data-tab="levels">Ticker levels</a>
-    <a href="/ignitions" data-tab="ignitions">Ignitions</a>
     <a href="/reversals" data-tab="reversals">Reversals</a>
     <a href="/weekly" data-tab="weekly">Weekly</a>
-    <a href="/airpocket" data-tab="airpocket">Airpockets</a>
-    <a href="/0dte" data-tab="dte">0DTE</a>
+    <a href="/airpocket" data-tab="airpocket">Airpocket</a>
   </nav>
-  <div class="meta"><span id="clock"></span><button id="refresh" type="button">Refresh</button><a class="back" href="/logout">Sign out</a></div>
+  <div class="meta"><span id="clock"></span><button id="refresh" type="button">Refresh</button><a class="back" href="/">Portal</a><a class="back" href="/logout">Sign out</a></div>
 </header>
 <main id="app"><p class="skeleton">Loading…</p></main>
 <script src="/zone-book.js"></script>
