@@ -1,7 +1,7 @@
 // QuantSignal Terminal (ChatGPT version) behind a password.
 // ./site holds the ChatGPT site's own files, unchanged. Every /api/* request is passed through, unchanged, to the
 // ChatGPT backend (UPSTREAM), so pages behave exactly as on ChatGPT. Password: OWNER_PASSWORD (Render env var).
-const http = require("http"), { Readable } = require("stream"), zone = require("./zone"), books = require("./books"), dte = require("./dte-run"), portal = require("./portal-live"), omsMod = require("./oms/routes"), fs = require("fs"), path = require("path"), crypto = require("crypto");
+const http = require("http"), { Readable } = require("stream"), zone = require("./zone"), books = require("./books"), dte = require("./dte-run"), portal = require("./portal-live"), keyless = require("./keyless"), omsMod = require("./oms/routes"), fs = require("fs"), path = require("path"), crypto = require("crypto");
 const oms = omsMod.create({ log: m => console.log(new Date().toISOString(), m) });
 const PORT = process.env.PORT || 3000, SITE = path.join(__dirname, "site");
 const PASSWORD = process.env.OWNER_PASSWORD || process.env.APP_PASSWORD || "";
@@ -17,6 +17,30 @@ const valid = c => { if (!c) return false; const i = c.lastIndexOf("."); const v
 const cookie = req => Object.fromEntries((req.headers.cookie || "").split(";").map(s => s.trim().split("=")).filter(a => a[0]).map(([k, ...v]) => [k, decodeURIComponent(v.join("="))]));
 const eq = (a, b) => { const x = crypto.createHash("sha256").update(a).digest(), y = crypto.createHash("sha256").update(b).digest(); return crypto.timingSafeEqual(x, y); };
 const sec = { "X-Frame-Options": "DENY", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "Cache-Control": "no-store" };
+function sourcePage(report) {
+  const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const rows = (report.feeds || []).map(f => `<tr><td>${esc(f.name)}</td><td>${f.ok ? "up" : "down"}</td><td>${esc(f.detail)}</td><td>${f.ms == null ? "" : f.ms + " ms"}</td><td>${esc(f.error || "")}</td></tr>`).join("") || `<tr><td colspan="5">No feed has been checked yet.</td></tr>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Source health</title>
+<style>body{margin:0;background:#0b0f14;color:#e7edf5;font:14px/1.45 ui-sans-serif,system-ui,sans-serif}main{max-width:980px;margin:0 auto;padding:24px}table{width:100%;border-collapse:collapse}td,th{padding:8px;border-bottom:1px solid #243041;text-align:left}th{color:#8b97a8;font-size:12px;letter-spacing:.06em;text-transform:uppercase}.up{color:#3dce86}.down{color:#ff8d96}</style></head>
+<body><main><h1>Source health</h1><p>Checked ${esc(report.at)}. Nasdaq is the primary quote, chart, and option source. Yahoo is the fallback. This page does not require a sign-in.</p>
+<table><thead><tr><th>Feed</th><th>Status</th><th>Detail</th><th>Time</th><th>Error</th></tr></thead><tbody>${rows.replace(/<td>up<\/td>/g, '<td class="up">up</td>').replace(/<td>down<\/td>/g, '<td class="down">down</td>')}</tbody></table>
+<p><a href="/health/sources?format=json" style="color:#9ec0ff">JSON</a></p></main></body></html>`;
+}
+async function sourceHealth(req, res) {
+  try {
+    const url = new URL(req.url, "http://x");
+    const report = await keyless.probe();
+    if (url.searchParams.get("format") === "json" || (req.headers.accept || "").includes("application/json")) {
+      res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      return res.end(JSON.stringify(report));
+    }
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    res.end(sourcePage(report));
+  } catch (e) {
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(JSON.stringify({ error: e.message, feeds: [] }));
+  }
+}
 const login = (msg = "") => `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>QuantSignal Terminal · Sign in</title>
 <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b1118;color:#e6edf3;font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
 form{width:min(340px,90vw);background:#121a24;border:1px solid #233041;border-radius:12px;padding:28px;display:grid;gap:14px}
@@ -179,6 +203,7 @@ async function hlAssets(req, res) {
 http.createServer((req, res) => {
   const url = new URL(req.url, "http://x"), ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0];
   if (url.pathname === "/health") { res.writeHead(200); return res.end("ok"); }
+  if (url.pathname === "/health/sources") return sourceHealth(req, res);
   if (url.pathname === "/logout") { res.writeHead(302, { ...sec, "Set-Cookie": "qs=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax", Location: "/" }); return res.end(); }
   if (url.pathname === "/login" && req.method === "POST") {
     let body = ""; req.on("data", c => { body += c; if (body.length > 4096) req.destroy(); });

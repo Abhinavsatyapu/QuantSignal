@@ -74,11 +74,10 @@ async function credit() {
            unresolved: state === "FEAR" && last > line, trend: d5 > 2 ? "widening" : d5 < -2 ? "tightening" : "flat" };
 }
 
-// ---------- daily prices (Yahoo, Stooq backup) ----------
+// ---------- daily prices (Nasdaq via keyless, Yahoo only if Nasdaq fails) ----------
 const why = e => (e && (e.cause && (e.cause.code || e.cause.message)) || e.message || String(e));
 async function daily(sym, log) {
   const tried = [];
-  // 0) Alpaca daily bars (IEX feed) when keys are set
   if (hasAlpaca()) try {
     let rows = [], tok = "";
     const start = isoDay(Date.now() - 760 * 864e5);
@@ -88,31 +87,12 @@ async function daily(sym, log) {
     if (rows.length > 100) return rows.slice(-520);
     tried.push("alpaca: " + rows.length + " bars");
   } catch (e) { tried.push("alpaca: " + why(e)); }
-  // 1) Cboe daily history (same host family as the option chains, reachable from cloud servers)
   try {
-    const j = await get(SRC.cboeHist + encodeURIComponent(sym) + ".json");
-    const arr = Array.isArray(j.data) ? j.data : Array.isArray(j.data && j.data.data) ? j.data.data : [];
-    const rows = arr.map(x => ({ d: String(x.date || x.Date || "").slice(0, 10), c: Number(x.close ?? x.Close) })).filter(x => x.d && Number.isFinite(x.c) && x.c > 0).sort((a, b) => a.d < b.d ? -1 : 1);
-    if (rows.length > 100) return rows.slice(-520);
-    tried.push("cboe: " + (arr.length ? arr.length + " rows" : "unexpected format " + JSON.stringify(j).slice(0, 120)));
-  } catch (e) { tried.push("cboe: " + why(e)); }
-  // 2) Yahoo (two hosts)
-  for (const host of [SRC.yahoo, SRC.yahoo.replace("query1", "query2")]) {
-    try {
-      const j = await get(host + encodeURIComponent(sym) + "?range=2y&interval=1d");
-      const r = j.chart.result[0], q = r.indicators.quote[0], adj = r.indicators.adjclose?.[0]?.adjclose;
-      const rows = r.timestamp.map((t, i) => ({ d: new Date(t * 1000).toISOString().slice(0, 10), c: (adj || q.close)[i] })).filter(x => Number.isFinite(x.c));
-      if (rows.length > 100) return rows;
-    } catch (e) { tried.push(new URL(host).host + ": " + why(e)); }
-    if (host === SRC.yahoo.replace("query1", "query2")) break;
-  }
-  // 3) Stooq
-  try {
-    const t = await get(SRC.stooq + sym.toLowerCase() + ".us", "text");
-    const rows = t.trim().split(/\r?\n/).slice(1).map(l => l.split(",")).map(x => ({ d: x[0], c: Number(x[4]) })).filter(x => Number.isFinite(x.c));
-    if (rows.length >= 100) return rows.slice(-520);
-    tried.push("stooq: " + t.slice(0, 60));
-  } catch (e) { tried.push("stooq: " + why(e)); }
+    const c = await keyless.chart(sym, "2y", "1d");
+    const rows = (c.bars || []).filter(b => b.c > 0).map(b => ({ d: b.d, c: b.c }));
+    if (rows.length > 60) return rows.slice(-520);
+    tried.push((c.source || "chart") + ": " + rows.length);
+  } catch (e) { tried.push("chart: " + why(e)); }
   throw new Error(sym + " daily prices unavailable (" + tried.join("; ") + ")");
 }
 async function breadth() {
