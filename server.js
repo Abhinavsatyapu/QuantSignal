@@ -1,7 +1,7 @@
 // QuantSignal Terminal (ChatGPT version) behind a password.
 // ./site holds the ChatGPT site's own files, unchanged. Every /api/* request is passed through, unchanged, to the
 // ChatGPT backend (UPSTREAM), so pages behave exactly as on ChatGPT. Password: OWNER_PASSWORD (Render env var).
-const http = require("http"), { Readable } = require("stream"), zone = require("./zone"), books = require("./books"), dte = require("./dte-run"), omsMod = require("./oms/routes"), fs = require("fs"), path = require("path"), crypto = require("crypto");
+const http = require("http"), { Readable } = require("stream"), zone = require("./zone"), books = require("./books"), dte = require("./dte-run"), portal = require("./portal-live"), omsMod = require("./oms/routes"), fs = require("fs"), path = require("path"), crypto = require("crypto");
 const oms = omsMod.create({ log: m => console.log(new Date().toISOString(), m) });
 const PORT = process.env.PORT || 3000, SITE = path.join(__dirname, "site");
 const PASSWORD = process.env.OWNER_PASSWORD || process.env.APP_PASSWORD || "";
@@ -201,6 +201,10 @@ http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     return res.end(JSON.stringify(dte.snapshot(url.searchParams.get("day"))));
   }
+  if (url.pathname.startsWith("/api/live/")) {
+    const page = decodeURIComponent(url.pathname.slice("/api/live/".length)).replace(/\/$/, "");
+    return portal.refresh().then(() => { res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }); res.end(JSON.stringify(portal.snapshot(page))); }).catch(e => { res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }); res.end(JSON.stringify({ error: e.message, page })); });
+  }
   if (url.pathname === "/api/zone/books") {
     if (url.searchParams.get("refresh") === "1") books.kick();
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
@@ -220,4 +224,4 @@ http.createServer((req, res) => {
   if (!fs.existsSync(file)) file = path.join(SITE, "index.html");           // single-page-app routes like /paper
   res.writeHead(200, { ...sec, "Content-Type": TYPES[path.extname(file)] || "application/octet-stream" });
   fs.createReadStream(file).pipe(res);
-}).listen(PORT, "0.0.0.0", () => { console.log("QuantSignal on :" + PORT); if (process.env.ZONE !== "off") zone.start(m => console.log(new Date().toISOString(), m)); if (process.env.BOOKS !== "off") { dte.start(m => console.log(new Date().toISOString(), m)).catch(e => console.log("dte start failed: " + e.message)); books.start(m => console.log(new Date().toISOString(), m)); } oms.start().catch(e => console.log("oms start failed: " + e.message)); });
+}).listen(PORT, "0.0.0.0", () => { console.log("QuantSignal on :" + PORT); if (process.env.PORTAL !== "off") portal.start(m => console.log(new Date().toISOString(), m)); if (process.env.ZONE !== "off") zone.start(m => console.log(new Date().toISOString(), m)); if (process.env.BOOKS !== "off") { dte.start(m => console.log(new Date().toISOString(), m)).catch(e => console.log("dte start failed: " + e.message)); books.start(m => console.log(new Date().toISOString(), m)); } oms.start().catch(e => console.log("oms start failed: " + e.message)); });

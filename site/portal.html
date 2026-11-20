@@ -46,35 +46,35 @@ footer{max-width:1180px;margin:0 auto;padding:0 28px 36px;color:#5c6572;font-siz
   <div id="sections"></div>
   <p class="empty" id="empty">No card matches that filter.</p>
 </main>
-<footer>Cards marked NOT BUILT YET have no page. Live cards open inside this app. Nothing here places an order except OMS, and that stays on your Alpaca account.</footer>
+<footer>Every card opens a page. Prices are Yahoo, options are Yahoo's nearest expiry, yields are Treasury.gov, and the fear index is CNN. FRED is used when it answers. Nothing on this portal sends a live broker order.</footer>
 <script>
 const S = [
   ['Macro Review', [
-    ['Macro Fundamentals', 'OHLCV market-momentum dashboard. Not in this app.', null],
-    ['Macro Quants', 'Industry and sub-industry fundamental quant: cycle states, leaders and laggards, cheap improvers. Not in this app.', null],
-    ['Macros — Block by Block', 'Seven-block macro backdrop — growth, inflation, Fed path, yields, credit, M2, dollar. Read only. Not in this app.', null],
-    ['Cohort Review', 'Per-cohort wave lifecycle: gestation, ignition, mature, break. Read only. Not in this app.', null],
-    ['Cohort Strategies', 'High-probability strategies and a live scan of what is firing. Not in this app.', null],
+    ['Macro Fundamentals', 'OHLCV for the major ETFs and VIX from Yahoo daily bars. Session change, 5/20/60-session returns, and RVOL.', '/macro'],
+    ['Macro Quants', 'Sector ETFs versus SPY. Phase is the 50-day and 200-day EMA rule documented on the page. Leaders and laggards are the 20-session relative return.', '/macro-quants'],
+    ['Macros — Block by Block', 'Treasury curve, CNN Fear & Greed, HYG/IEF credit, UUP, and the SPY 60-session growth proxy. FRED blocks stay blank when FRED does not answer.', '/macro-blocks'],
+    ['Cohort Review', 'Sector-ETF phase: gestation, ignition, mature, break, repair. Read only.', '/cohorts'],
+    ['Cohort Strategies', 'Which of the documented cohort rules are on from the latest Yahoo pass.', '/cohort-strategies'],
   ]],
   ['GEX (SIMPLIFIED_US_TS)', [
-    ['Gamma — Swing Alerts', 'Danger Zones from the same chain as Zone Monitor: mean-revert, trend, and neutral counts, plus phase and wall moves. Other 8042 tabs are not built.', '/swing'],
-    ['Gex (Source Corrected)', 'Zone Monitor. Credit, breadth, gamma tide, regime, and the ticker-level book. Read only. Alpaca open interest when keys are set, otherwise Cboe delayed chains.', '/zone'],
+    ['Gamma — Swing Alerts', 'Danger Zones, campaigns, cockpit, flip, S1–S6, ignition, washout, and credit from the Yahoo option pass. Read only.', '/swing'],
+    ['Gex (Source Corrected)', 'Zone Monitor. Yahoo options when Alpaca keys are unset, Cboe only if Yahoo fails. Read only.', '/zone'],
   ]],
   ['Engines (SIMPLIFIED_US_TS)', [
-    ['RVOL & Order Flow — read only', 'Live relative volume and per-ticker order-flow imbalance. Not in this app. No order-flow feed is configured.', null],
-    ['OMS', 'Operator order entry on the Alpaca account configured for this app. Paper until live is approved. Risk checks stay on the server.', '/oms'],
+    ['RVOL & Order Flow — read only', 'Stock RVOL versus the prior 20 sessions, volume velocity, and call-minus-put contract volume on the nearest expiry. No signed flow feed.', '/rvol'],
+    ['OMS', 'Order entry stays on the paper host. Live Alpaca orders are refused even if the live switches are set.', '/oms'],
     ['0DTE-Caps', '0DTE CAPPED → rest-of-day short, PAPER. The 10:30 read, lid stop, 15:50 cover, same-day control, and the 100-trade scorecard. View only, no orders.', '/0dte'],
   ]],
   ['Cohort Navigation Strategy', [
-    ['Planning — Phase Navigation', 'Phase rulebook per cohort. Not in this app. Read only where the reference has it.', null],
-    ['Fleet — Launch & Oversight', 'Instance roster. Not in this app. Nothing here launches a bot.', null],
-    ['Execution — Grid (instance)', 'Positions and legs for one instance. Not in this app.', null],
-    ['Config (instance)', 'Inputs and rebalance confirm. Not in this app. No rebalance is sent.', null],
-    ['PnL (instance)', 'Per-instance P&L. Not in this app.', null],
+    ['Planning — Phase Navigation', 'Today\'s mode per sector ETF. PAPER WATCH or stand aside. Read only.', '/plan'],
+    ['Fleet — Launch & Oversight', 'Paper roster of ignition and mature cohorts. Share count stays 0. Nothing launches.', '/fleet'],
+    ['Execution — Grid (instance)', 'Paper levels at ±1%, ±2%, and ±3% of the lead cohort\'s last trade. Nothing is sent.', '/grid'],
+    ['Config (instance)', 'The documented inputs. Rebalance is off. No order leaves this page.', '/config'],
+    ['PnL (instance)', 'One-share session mark of each sector ETF. Not a booked position.', '/pnl'],
   ]],
   ['Grid Bots', [
-    ['4000 series bots — 1 or 2 leg put combo with grid', 'Collar-style put-combo grid. Not in this app. No bot is launched from this portal.', null],
-    ['Structure Planner — size a position, see the payoff at expiry', 'Tranche sizing off a live chain. Not in this app. Never trades.', null],
+    ['4000 series bots — 1 or 2 leg put combo with grid', 'Paper sketch of a short put at the put wall. No bot is launched and no order is sent.', '/bots'],
+    ['Structure Planner — size a position, see the payoff at expiry', 'SPY short-put intrinsic payoff versus the share, from the live put wall. Never trades.', '/planner'],
   ]],
   ['Quant Signals', [
     ['Trading Terminal', 'US stock perps, market regime, stock vs perp, and the live scanner.', '/terminal'],

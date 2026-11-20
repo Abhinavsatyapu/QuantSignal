@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/zone-book.css">
+<link rel="stylesheet" href="/live.css">
 </head>
 <body data-page="reversals">
 <header class="top">
@@ -21,7 +22,9 @@
   </nav>
   <div class="meta"><span id="clock"></span><button id="refresh" type="button">Refresh</button><a class="back" href="/">Portal</a><a class="back" href="/logout">Sign out</a></div>
 </header>
-<main id="app"><p class="skeleton">Loading reversals…</p></main>
+<div id="stall" style="padding:12px 16px 0"><p class="skeleton">Loading the short-stall book…</p></div>
+<main id="app"><p class="skeleton">Loading the gamma posture book…</p></main>
+<script src="/live.js"></script>
 <script src="/zone-book.js"></script>
 </body>
 </html>
