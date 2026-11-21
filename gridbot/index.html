@@ -3,173 +3,144 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Grid Bot — Binance</title>
+  <meta name="theme-color" content="#0b0e13">
+  <title>Grids — Market making bot</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    /* Grids — institutional dark terminal theme. Layout, element ids and behaviour are unchanged. */
+    :root{--bg:#0b0e13;--bg2:#0f131a;--panel:#131923;--panel2:#18202c;--line:#222b39;--line2:#2c3748;--ink:#e6ebf2;--ink2:#b6c0cf;--muted:#8a95a8;--dim:#6f7b8f;
+      --green:#34c77b;--red:#f0596a;--amber:#e8a93a;--blue:#6aa5ff;--gold:#f0b90b;--m:"IBM Plex Mono",ui-monospace,Menlo,monospace;--f:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif}
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Inter', sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; }
+    html,body { background: var(--bg); color: var(--ink); }
+    body { font: 13px/1.5 var(--f); min-height: 100vh; -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+    :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
     /* ── Header ── */
-    .header {
-      background: #1a1a2e; color: #fff; padding: 0 28px; height: 54px;
-      display: flex; align-items: center; justify-content: space-between;
-      position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    }
-    .header-logo { font-size: 17px; font-weight: 700; color: #fff; }
-    .header-logo span { color: #f0b90b; }
-    .header-symbol {
-      font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #aaa;
-      background: #2a2a40; padding: 4px 10px; border-radius: 4px;
-    }
-    .status-badge {
-      display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600;
-      padding: 5px 12px; border-radius: 20px; background: #2a2a40;
-      border: 1px solid #3a3a50; color: #888;
-    }
-    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #555; }
-    .status-dot.live    { background: #22c55e; box-shadow: 0 0 6px #22c55e; animation: blink 1.4s infinite; }
-    .status-dot.stopped { background: #ef4444; }
-    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .header { position: sticky; top: 0; z-index: 100; height: 52px; padding: 0 22px; display: flex; align-items: center; gap: 16px;
+      background: rgba(11,14,19,.94); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+    .header-logo { font: 700 15px var(--m); letter-spacing: .14em; text-transform: uppercase; color: var(--ink); }
+    .header-logo span { color: var(--gold); }
+    .header-logo::after { content: "MARKET-MAKING BOT"; margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--line2); font: 500 10.5px var(--m); letter-spacing: .16em; color: var(--dim); vertical-align: 2px; }
+    .header-symbol { margin-left: auto; font: 600 13px var(--m); letter-spacing: .04em; color: var(--ink); background: var(--panel); border: 1px solid var(--line2); padding: 5px 12px; border-radius: 6px; }
+    .status-badge { display: flex; align-items: center; gap: 8px; font: 600 11.5px var(--m); letter-spacing: .1em; padding: 6px 12px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line2); color: var(--muted); }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #4a5568; }
+    .status-dot.live    { background: var(--green); box-shadow: 0 0 0 3px rgba(52,199,123,.18); animation: blink 1.6s infinite; }
+    .status-dot.stopped { background: var(--red); }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
+    @media (prefers-reduced-motion: reduce) { .status-dot.live { animation: none; } }
 
     /* ── Layout ── */
-    .page {
-      display: grid; grid-template-columns: 340px 1fr;
-      gap: 16px; padding: 16px 20px; max-width: 1440px; margin: 0 auto;
-    }
+    .page { display: grid; grid-template-columns: clamp(300px, 28vw, 360px) minmax(0,1fr); gap: 14px; padding: 14px 18px 40px; max-width: 1680px; margin: 0 auto; align-items: start; }
+    .page > div { min-width: 0; }
 
-    /* ── Card ── */
-    .card { background: #fff; border-radius: 10px; border: 1px solid #e2e8f0; box-shadow: 0 1px 4px rgba(0,0,0,0.05); overflow: hidden; }
-    .card-header {
-      padding: 11px 16px; border-bottom: 1px solid #e2e8f0; background: #fafbfc;
-      font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: #64748b;
-      display: flex; align-items: center; justify-content: space-between;
-    }
-    .card-body { padding: 14px 16px; }
+    /* ── Panels ── */
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .card-header { padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--bg2); display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      font: 600 10.5px var(--m); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+    .card-body { padding: 14px; }
 
     /* ── Form ── */
-    .section-title { font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #94a3b8; margin: 12px 0 6px; }
+    .section-title { display: flex; align-items: center; gap: 8px; font: 600 10px var(--m); letter-spacing: .16em; text-transform: uppercase; color: var(--dim); margin: 16px 0 8px; }
+    .section-title::after { content: ""; flex: 1; height: 1px; background: var(--line); }
     .section-title:first-child { margin-top: 0; }
-    .field { margin-bottom: 8px; }
-    .field label { display: block; font-size: 11px; font-weight: 500; color: #475569; margin-bottom: 3px; }
-    .field input, .field select {
-      width: 100%; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 6px;
-      font-family: 'Inter', sans-serif; font-size: 13px; color: #1a1a2e;
-      background: #fff; outline: none; transition: border-color 0.15s, box-shadow 0.15s;
-    }
-    .field input:focus, .field select:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
-    .field input[readonly] { background: #f8fafc; color: #64748b; cursor: default; }
-    .field input[readonly]:focus { border-color: #cbd5e1; box-shadow: none; }
+    .field { margin-bottom: 9px; }
+    .field label { display: block; font: 500 11px var(--f); color: var(--muted); margin-bottom: 4px; }
+    .field input, .field select { width: 100%; padding: 8px 10px; border: 1px solid var(--line2); border-radius: 6px; font: 13px var(--m); color: var(--ink);
+      background: var(--bg2); outline: none; transition: border-color .15s, box-shadow .15s; }
+    .field select { font-family: var(--f); }
+    .field input::placeholder { color: #4f5a6c; }
+    .field input:focus, .field select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(106,165,255,.15); }
+    .field input[readonly] { background: var(--panel2); color: var(--muted); cursor: default; }
+    .field input[readonly]:focus { border-color: var(--line2); box-shadow: none; }
     .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    input[type=range] { accent-color: var(--blue); }
 
-    /* ── Symbol dropdown ── */
+    /* ── Symbol search ── */
     .symbol-wrap { position: relative; }
-    .symbol-clear { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 13px; display: none; }
-    .symbol-dropdown {
-      position: absolute; top: calc(100% + 3px); left: 0; right: 0;
-      background: #fff; border: 1px solid #cbd5e1; border-radius: 6px;
-      max-height: 200px; overflow-y: auto; z-index: 300;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.12); display: none;
-    }
+    .symbol-clear { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--dim); cursor: pointer; font-size: 13px; display: none; }
+    .symbol-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--panel2); border: 1px solid var(--line2); border-radius: 8px;
+      max-height: 240px; overflow-y: auto; z-index: 300; box-shadow: 0 12px 32px rgba(0,0,0,.45); display: none; }
     .symbol-dropdown.open { display: block; }
-    .sym-item { padding: 7px 12px; font-size: 12px; font-family: 'JetBrains Mono', monospace; cursor: pointer; color: #334155; border-bottom: 1px solid #f1f5f9; }
-    .sym-item:hover { background: #eff6ff; color: #1d4ed8; }
-    .sym-item.msg { color: #94a3b8; font-family: 'Inter', sans-serif; cursor: default; }
-    .sym-item.msg:hover { background: none; color: #94a3b8; }
+    .sym-item { padding: 8px 12px; font: 12.5px var(--m); cursor: pointer; color: var(--ink2); border-bottom: 1px solid var(--line); }
+    .sym-item:hover { background: rgba(106,165,255,.10); color: var(--ink); }
+    .sym-item.msg { color: var(--dim); font-family: var(--f); cursor: default; }
+    .sym-item.msg:hover { background: none; color: var(--dim); }
 
     /* ── Buttons ── */
-    .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
-    .btn { padding: 9px 14px; font-size: 13px; font-weight: 600; font-family: 'Inter', sans-serif; border: none; border-radius: 7px; cursor: pointer; transition: all 0.15s; }
-    .btn-start { background: #16a34a; color: #fff; }
-    .btn-start:hover:not(:disabled) { background: #15803d; }
-    .btn-stop  { background: #dc2626; color: #fff; }
-    .btn-stop:hover:not(:disabled)  { background: #b91c1c; }
-    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .note { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 6px; padding: 7px 10px; font-size: 11px; color: #92400e; margin-bottom: 10px; }
-    .auto-badge { font-size: 10px; background: #dbeafe; color: #1d4ed8; padding: 1px 5px; border-radius: 3px; font-weight: 600; }
+    .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+    .btn { padding: 10px 14px; font: 600 12.5px var(--m); letter-spacing: .08em; text-transform: uppercase; border: 1px solid transparent; border-radius: 7px; cursor: pointer; transition: background .15s, border-color .15s, opacity .15s; }
+    .btn-start { background: #1d7a4b; border-color: #26995e; color: #eafff3; }
+    .btn-start:hover:not(:disabled) { background: #23905a; }
+    .btn-stop  { background: transparent; border-color: rgba(240,89,106,.6); color: #ff9aa4; }
+    .btn-stop:hover:not(:disabled) { background: rgba(240,89,106,.12); }
+    .btn:disabled { opacity: .38; cursor: not-allowed; }
+    .note { background: rgba(232,169,58,.07); border: 1px solid rgba(232,169,58,.3); border-radius: 6px; padding: 8px 10px; font-size: 11.5px; color: #e9c27a; margin-bottom: 12px; }
+    .auto-badge { font: 600 9.5px var(--m); letter-spacing: .08em; background: rgba(106,165,255,.14); color: var(--blue); padding: 1px 6px; border-radius: 4px; }
 
-    /* ── Stats grid ── */
-    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
-    .stat-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; }
-    .stat-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: #94a3b8; margin-bottom: 4px; }
-    .stat-value { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 500; color: #1a1a2e; }
-    .stat-value.green  { color: #16a34a; }
-    .stat-value.red    { color: #dc2626; }
-    .stat-value.blue   { color: #2563eb; }
-    .stat-value.orange { color: #d97706; }
+    /* ── KPI tiles ── */
+    .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin-bottom: 12px; }
+    .pnl-grid { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 10px; margin-bottom: 12px; }
+    .stat-card, .pnl-card { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 11px 13px; min-width: 0; }
+    .stat-label, .rep-label { font: 600 9.5px var(--m); letter-spacing: .14em; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .stat-value { font: 600 19px var(--m); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .stat-value.green  { color: var(--green); } .stat-value.red { color: var(--red); } .stat-value.blue { color: var(--blue); } .stat-value.orange { color: var(--amber); }
+    .pnl-positive { box-shadow: inset 0 2px 0 var(--green); } .pnl-negative { box-shadow: inset 0 2px 0 var(--red); } .pnl-neutral { box-shadow: inset 0 2px 0 #3a4b66; }
 
-    /* ── PnL Stats row ── */
-    .pnl-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
-    .pnl-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; }
-    .pnl-positive { border-top: 3px solid #16a34a; }
-    .pnl-negative { border-top: 3px solid #dc2626; }
-    .pnl-neutral  { border-top: 3px solid #2563eb; }
-
-    /* ── Grid visual ── */
+    /* ── Order ladder ── */
     .grid-levels { display: flex; flex-direction: column; gap: 3px; }
     .level-row { display: flex; align-items: center; gap: 8px; }
-    .level-label { width: 58px; text-align: right; font-size: 10px; font-weight: 600; text-transform: uppercase; flex-shrink: 0; }
-    .level-bar { flex: 1; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
-    .sell-bar  { background: #fef2f2; border-left: 3px solid #ef4444; color: #dc2626; }
-    .price-bar { background: #eff6ff; border-left: 3px solid #3b82f6; color: #1d4ed8; font-weight: 600; }
-    .buy-bar   { background: #f0fdf4; border-left: 3px solid #22c55e; color: #16a34a; }
-    .level-tag { font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 700; letter-spacing: 0.4px; }
-    .tag-grid   { background: #dbeafe; color: #1d4ed8; }
-    .tag-target { background: #fef3c7; color: #92400e; }
+    .level-label { width: 58px; text-align: right; font: 600 9.5px var(--m); letter-spacing: .1em; text-transform: uppercase; flex-shrink: 0; color: var(--dim); }
+    .level-bar { flex: 1; height: 28px; border-radius: 5px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; font: 12.5px var(--m); }
+    .sell-bar  { background: rgba(240,89,106,.07); box-shadow: inset 2px 0 0 var(--red); color: #ff8b97; }
+    .price-bar { background: rgba(106,165,255,.10); box-shadow: inset 2px 0 0 var(--blue); color: #a9c8ff; font-weight: 700; }
+    .buy-bar   { background: rgba(52,199,123,.07); box-shadow: inset 2px 0 0 var(--green); color: #6fe0a6; }
+    .level-tag { font: 700 9px var(--m); padding: 1px 6px; border-radius: 4px; letter-spacing: .06em; }
+    .tag-grid   { background: rgba(106,165,255,.16); color: var(--blue); }
+    .tag-target { background: rgba(232,169,58,.16); color: var(--amber); }
 
-    /* ── Report Panel ── */
+    /* ── Report ── */
     .report-tabs { display: flex; gap: 4px; }
-    .tab-btn {
-      padding: 4px 10px; font-size: 11px; font-weight: 600; font-family: 'Inter', sans-serif;
-      border: 1px solid #cbd5e1; border-radius: 5px; cursor: pointer;
-      background: #fff; color: #64748b; transition: all 0.15s;
-    }
-    .tab-btn.active { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
-    .custom-date-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end; margin-top: 10px; display: none; }
+    .tab-btn { padding: 5px 11px; font: 600 10.5px var(--m); letter-spacing: .06em; border: 1px solid var(--line2); border-radius: 6px; cursor: pointer; background: transparent; color: var(--muted); transition: all .15s; }
+    .tab-btn:hover { color: var(--ink); border-color: #3a475b; }
+    .tab-btn.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+    .custom-date-row { grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end; margin-top: 10px; display: none; }
     .custom-date-row.visible { display: grid; }
-    .custom-date-row input[type="date"] { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; font-family: 'Inter', sans-serif; outline: none; }
-    .btn-apply { padding: 6px 12px; font-size: 12px; font-weight: 600; background: #1a1a2e; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
-
-    /* Report summary cards */
-    .report-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 12px 0; }
-    .rep-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 7px; padding: 10px 12px; }
-    .rep-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: #94a3b8; margin-bottom: 3px; }
-    .rep-value { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 500; }
-    .rep-value.pos { color: #16a34a; }
-    .rep-value.neg { color: #dc2626; }
+    .custom-date-row input[type="date"] { padding: 7px 10px; border: 1px solid var(--line2); border-radius: 6px; font: 12px var(--m); background: var(--bg2); color: var(--ink); outline: none; color-scheme: dark; }
+    .btn-apply { padding: 7px 12px; font: 600 11px var(--m); background: var(--ink); color: var(--bg); border: none; border-radius: 6px; cursor: pointer; }
+    .report-summary { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 10px; margin: 12px 0; }
+    .rep-card { background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+    .rep-value { font: 600 16px var(--m); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .rep-value.pos { color: var(--green); } .rep-value.neg { color: var(--red); }
 
     /* ── Tables ── */
-    .table-wrap { overflow-x: auto; max-height: 200px; overflow-y: auto; }
+    .table-wrap { overflow: auto; max-height: 260px; }
     table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    thead th { background: #f8fafc; padding: 7px 10px; text-align: left; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; position: sticky; top: 0; border-bottom: 1px solid #e2e8f0; }
-    tbody tr { border-bottom: 1px solid #f1f5f9; }
-    tbody tr:hover { background: #f8fafc; }
-    tbody td { padding: 6px 10px; font-family: 'JetBrains Mono', monospace; color: #334155; }
-    .sell-text { color: #dc2626; font-weight: 600; }
-    .buy-text  { color: #16a34a; font-weight: 600; }
-    .pos-text  { color: #16a34a; }
-    .neg-text  { color: #dc2626; }
-    .empty-td  { text-align: center; color: #94a3b8; font-family: 'Inter', sans-serif; padding: 16px; }
+    thead th { position: sticky; top: 0; background: var(--bg2); padding: 8px 10px; text-align: left; font: 600 9.5px var(--m); letter-spacing: .12em; text-transform: uppercase; color: var(--dim); border-bottom: 1px solid var(--line); white-space: nowrap; }
+    tbody tr { border-bottom: 1px solid var(--line); }
+    tbody tr:hover { background: rgba(255,255,255,.02); }
+    tbody td { padding: 7px 10px; font-family: var(--m); color: var(--ink2); white-space: nowrap; }
+    .sell-text { color: var(--red); font-weight: 600; } .buy-text { color: var(--green); font-weight: 600; }
+    .pos-text { color: var(--green); } .neg-text { color: var(--red); }
+    .empty-td { text-align: center; color: var(--dim); font-family: var(--f); padding: 18px; }
 
-    /* ── Log feed ── */
-    .log-feed { max-height: 160px; overflow-y: auto; padding: 2px 0; }
-    .log-line { display: flex; gap: 10px; padding: 3px 0; border-bottom: 1px solid #f1f5f9; }
-    .log-time { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #94a3b8; flex-shrink: 0; }
-    .log-text { font-size: 12px; color: #475569; }
-    .log-text.success { color: #16a34a; }
-    .log-text.error   { color: #dc2626; }
-    .log-text.warn    { color: #d97706; }
+    /* ── Activity log ── */
+    .log-feed { max-height: 220px; overflow-y: auto; padding: 2px 0; }
+    .log-line { display: flex; gap: 12px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+    .log-time { font: 11px var(--m); color: var(--dim); flex-shrink: 0; }
+    .log-text { font: 12px var(--m); color: var(--ink2); }
+    .log-text.success { color: var(--green); } .log-text.error { color: var(--red); } .log-text.warn { color: var(--amber); }
 
-    /* ── Scrollbar ── */
-    ::-webkit-scrollbar { width: 4px; height: 4px; }
-    ::-webkit-scrollbar-track { background: #f1f5f9; }
-    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #2a3445; border-radius: 3px; }
+    @media (max-width: 1100px) { .page { grid-template-columns: 1fr; } .pnl-grid, .report-summary { grid-template-columns: repeat(3, minmax(0,1fr)); } }
+    @media (max-width: 640px) { .stats-grid, .pnl-grid, .report-summary { grid-template-columns: repeat(2, minmax(0,1fr)); } .header-logo::after { display: none; } .page { padding: 10px; } }
   </style>
 </head>
 <body>
 
 <!-- ── Header ─────────────────────────────────────────────── -->
 <div class="header">
-  <div class="header-logo">Grid<span>Bot</span></div>
+  <div class="header-logo">Grid<span>s</span></div>
   <div class="header-symbol" id="headerSymbol">No symbol</div>
   <div class="status-badge">
     <div class="status-dot" id="statusDot"></div>
@@ -224,11 +195,11 @@
         <div class="field"><label>Target Spread ($)</label><input type="number" id="targetSpread" placeholder="e.g. 0.5" step="0.01"/></div>
         <div class="field"><label>Quantity Per Step</label><input type="number" id="qtyPerStep" placeholder="e.g. 0.1" step="0.001"/></div>
 
-        <div class="section-title">Futures Hedge <span style="font-size:9px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:3px;font-weight:700;margin-left:4px;">OPTIONAL</span></div>
+        <div class="section-title">Futures Hedge <span style="font-size:9px;background:rgba(232,169,58,.16);color:#e8a93a;padding:1px 6px;border-radius:3px;font-weight:700;margin-left:4px;">OPTIONAL</span></div>
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;font-weight:600;color:#374151;">
-            <div id="hedgeToggleWrap" onclick="toggleHedge()" style="width:40px;height:22px;border-radius:11px;background:#e2e8f0;cursor:pointer;position:relative;transition:background .2s;">
-              <div id="hedgeToggleThumb" style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.2);"></div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;font-weight:600;color:#b6c0cf;">
+            <div id="hedgeToggleWrap" onclick="toggleHedge()" style="width:40px;height:22px;border-radius:11px;background:#222b39;cursor:pointer;position:relative;transition:background .2s;">
+              <div id="hedgeToggleThumb" style="width:18px;height:18px;border-radius:50%;background:#131923;position:absolute;top:2px;left:2px;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.2);"></div>
             </div>
             Enable Futures Hedge
           </label>
@@ -239,9 +210,9 @@
             <div style="display:flex;align-items:center;gap:8px;">
               <input type="range" id="hedgePct" min="50" max="100" step="5" value="80"
                 style="flex:1;" oninput="document.getElementById('hedgePctVal').textContent=this.value+'%'"/>
-              <span id="hedgePctVal" style="font-weight:700;color:#2563eb;min-width:36px;">80%</span>
+              <span id="hedgePctVal" style="font-weight:700;color:#6aa5ff;min-width:36px;">80%</span>
             </div>
-            <div style="display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;margin-top:2px;">
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:#6f7b8f;margin-top:2px;">
               <span>50%</span><span>60%</span><span>70%</span><span>80%</span><span>90%</span><span>100%</span>
             </div>
           </div>
@@ -249,11 +220,11 @@
             <label>Rebalance Threshold (SOL)</label>
             <input type="number" id="hedgeThreshold" value="1" min="0.5" step="0.5"
               placeholder="e.g. 1" style="width:100%;"/>
-            <div style="font-size:10px;color:#94a3b8;margin-top:2px;">
+            <div style="font-size:10px;color:#6f7b8f;margin-top:2px;">
               Only rebalance futures when diff ≥ this value. Higher = fewer trades & fees.
             </div>
           </div>
-          <div style="font-size:10px;color:#94a3b8;margin-top:-4px;margin-bottom:8px;">
+          <div style="font-size:10px;color:#6f7b8f;margin-top:-4px;margin-bottom:8px;">
             ⚡ Requires FUTURES_API_KEY in .env
           </div>
         </div>
@@ -263,7 +234,7 @@
           <div class="field"><label>Upper Limit</label><input type="text" id="upperLimitPreview" readonly placeholder="Entry + Distance"/></div>
           <div class="field"><label>Lower Limit</label><input type="text" id="lowerLimitPreview" readonly placeholder="Entry − Distance"/></div>
         </div>
-        <div style="font-size:10px;color:#94a3b8;margin-top:-4px;margin-bottom:8px;">Auto-set from live price ± distance on start.</div>
+        <div style="font-size:10px;color:#6f7b8f;margin-top:-4px;margin-bottom:8px;">Auto-set from live price ± distance on start.</div>
 
         <div class="btn-row">
           <button class="btn btn-start" id="startBtn" onclick="startBot()">▶ Start Bot</button>
@@ -281,7 +252,7 @@
       <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
         <span>📊 Account Overview</span>
         <button onclick="refreshAccountPnl()" id="acctRefreshBtn"
-          style="font-size:10px;padding:2px 10px;border-radius:4px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;color:#374151;">
+          style="font-size:10px;padding:2px 10px;border-radius:4px;border:1px solid #222b39;background:#131923;cursor:pointer;color:#b6c0cf;">
           ↻ Refresh
         </button>
       </div>
@@ -303,12 +274,12 @@
             <div class="stat-label">Futures Unrealized PnL</div>
             <div class="stat-value" id="acctFutPnl">—</div>
           </div>
-          <div class="pnl-card pnl-neutral" style="border-top:3px solid #2563eb;">
+          <div class="pnl-card pnl-neutral" style="border-top:3px solid #6aa5ff;">
             <div class="stat-label">Total Portfolio ($)</div>
             <div class="stat-value blue" id="acctTotal" style="font-size:1.3em;font-weight:800;">—</div>
           </div>
         </div>
-        <div style="font-size:10px;color:#94a3b8;margin-top:6px;" id="acctLastUpdated">Not loaded yet — click Refresh</div>
+        <div style="font-size:10px;color:#6f7b8f;margin-top:6px;" id="acctLastUpdated">Not loaded yet — click Refresh</div>
       </div>
     </div>
 
@@ -367,7 +338,7 @@
         <div class="card-header">Live Order Grid</div>
         <div class="card-body">
           <div class="grid-levels" id="gridVisual">
-            <div style="color:#94a3b8;font-size:12px;padding:4px 0;">Start bot to see grid...</div>
+            <div style="color:#6f7b8f;font-size:12px;padding:4px 0;">Start bot to see grid...</div>
           </div>
         </div>
       </div>
@@ -376,9 +347,9 @@
         <div class="card-header">
           Open Orders
           <div style="display:flex;gap:6px;align-items:center;">
-            <span style="font-size:10px;background:#dcfce7;color:#16a34a;padding:1px 6px;border-radius:3px;font-weight:700;">E=Entry</span>
-            <span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:3px;font-weight:700;">T=Target</span>
-            <span id="orderBadge" style="background:#dbeafe;color:#1d4ed8;font-size:10px;padding:1px 7px;border-radius:10px;font-weight:700;">0</span>
+            <span style="font-size:10px;background:rgba(52,199,123,.14);color:#34c77b;padding:1px 6px;border-radius:3px;font-weight:700;">E=Entry</span>
+            <span style="font-size:10px;background:rgba(232,169,58,.16);color:#e8a93a;padding:1px 6px;border-radius:3px;font-weight:700;">T=Target</span>
+            <span id="orderBadge" style="background:rgba(106,165,255,.14);color:#6aa5ff;font-size:10px;padding:1px 7px;border-radius:10px;font-weight:700;">0</span>
           </div>
         </div>
         <div class="table-wrap">
@@ -413,7 +384,7 @@
         <div class="report-summary" id="reportSummary" style="grid-template-columns:repeat(6,1fr)">
           <div class="rep-card"><div class="rep-label">Total PnL</div><div class="rep-value" id="rPnl">—</div></div>
           <div class="rep-card"><div class="rep-label">Round Trips</div><div class="rep-value" id="rCount">—</div></div>
-          <div class="rep-card"><div class="rep-label">PnL per RT</div><div class="rep-value" id="rPerRt" style="color:#16a34a">—</div></div>
+          <div class="rep-card"><div class="rep-label">PnL per RT</div><div class="rep-value" id="rPerRt" style="color:#34c77b">—</div></div>
           <div class="rep-card"><div class="rep-label">Buys Filled</div><div class="rep-value buy-text" id="rBuys">—</div></div>
           <div class="rep-card"><div class="rep-label">Sells Filled</div><div class="rep-value sell-text" id="rSells">—</div></div>
           <div class="rep-card"><div class="rep-label">Win Rate</div><div class="rep-value" id="rWinRate">—</div></div>
@@ -443,7 +414,7 @@
     <div class="card" id="hedgeCard" style="display:none;">
       <div class="card-header">
         🛡 Futures Hedge
-        <span id="hedgeStatusBadge" style="font-size:10px;padding:2px 8px;border-radius:4px;background:#dcfce7;color:#16a34a;font-weight:700;">ACTIVE</span>
+        <span id="hedgeStatusBadge" style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(52,199,123,.14);color:#34c77b;font-weight:700;">ACTIVE</span>
       </div>
       <div class="card-body">
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px;">
@@ -464,7 +435,7 @@
             <div class="stat-value" id="hDiff">—</div>
           </div>
         </div>
-        <div style="font-size:11px;color:#64748b;padding:4px 0 2px;">
+        <div style="font-size:11px;color:#8a95a8;padding:4px 0 2px;">
           <span style="margin-right:16px;">⚡ Rebalances when diff ≥ 1 SOL only</span>
           <span id="hLastCheck">Last check: —</span>
           <span id="hLastRebalance" style="margin-left:16px;">Last rebalance: —</span>
@@ -585,7 +556,7 @@ function renderDropdown(symbols) {
   if (!symbols.length) { dd.innerHTML = `<div class="sym-item msg">No symbols found</div>`; return; }
   dd.innerHTML = symbols.map(s => {
     const safe = s.ccxt.replace(/'/g,"\\'");
-    const extra = s.native !== s.ccxt ? `<span style="color:#94a3b8;margin-left:6px;font-size:10px">${s.native}</span>` : "";
+    const extra = s.native !== s.ccxt ? `<span style="color:#6f7b8f;margin-left:6px;font-size:10px">${s.native}</span>` : "";
     return `<div class="sym-item" onclick="selectSymbol('${safe}','${s.native}')">${s.ccxt}${extra}</div>`;
   }).join("");
 }
@@ -629,7 +600,7 @@ function toggleHedge() {
   const wrap  = document.getElementById("hedgeToggleWrap");
   const thumb = document.getElementById("hedgeToggleThumb");
   const fields = document.getElementById("hedgeFields");
-  wrap.style.background  = hedgeEnabled ? "#2563eb" : "#e2e8f0";
+  wrap.style.background  = hedgeEnabled ? "#6aa5ff" : "#222b39";
   thumb.style.left       = hedgeEnabled ? "20px"    : "2px";
   fields.style.display   = hedgeEnabled ? ""        : "none";
 }
@@ -728,11 +699,11 @@ function renderState(state) {
   const dot = document.getElementById("statusDot");
   const txt = document.getElementById("statusText");
   if (state.running) {
-    dot.className = "status-dot live"; txt.textContent = "LIVE"; txt.style.color = "#22c55e";
+    dot.className = "status-dot live"; txt.textContent = "LIVE"; txt.style.color = "#34c77b";
     document.getElementById("startBtn").disabled = true; document.getElementById("startBtn").textContent = "▶ Start Bot";
     document.getElementById("stopBtn").disabled = false;
   } else {
-    dot.className = "status-dot stopped"; txt.textContent = "STOPPED"; txt.style.color = "#ef4444";
+    dot.className = "status-dot stopped"; txt.textContent = "STOPPED"; txt.style.color = "#f0596a";
     document.getElementById("startBtn").disabled = false; document.getElementById("startBtn").textContent = "▶ Start Bot";
     document.getElementById("stopBtn").disabled = true;
   }
@@ -814,24 +785,24 @@ function renderState(state) {
 // ══════════════════════════════════════════════════════════════
 function renderGridVisual(orders, price) {
   const el = document.getElementById("gridVisual");
-  if (!price) { el.innerHTML = `<div style="color:#94a3b8;font-size:12px">Start bot to see grid...</div>`; return; }
+  if (!price) { el.innerHTML = `<div style="color:#6f7b8f;font-size:12px">Start bot to see grid...</div>`; return; }
   const sells = [...orders.filter(o=>o.side==="sell")].sort((a,b)=>b.price-a.price);
   const buys  = [...orders.filter(o=>o.side==="buy") ].sort((a,b)=>b.price-a.price);
   let html = "";
   sells.slice(0,3).forEach((o,i) => {
     const badge = o.type === "entry"
-      ? `<span style="font-size:9px;background:#fee2e2;color:#dc2626;padding:1px 5px;border-radius:3px;font-weight:700;">ENTRY</span>`
-      : `<span style="font-size:9px;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;font-weight:700;">TARGET</span>`;
-    html += `<div class="level-row"><span class="level-label" style="color:#ef4444">${["SELL 3","SELL 2","SELL 1"][i]}</span>
+      ? `<span style="font-size:9px;background:rgba(240,89,106,.14);color:#f0596a;padding:1px 5px;border-radius:3px;font-weight:700;">ENTRY</span>`
+      : `<span style="font-size:9px;background:rgba(232,169,58,.16);color:#e8a93a;padding:1px 5px;border-radius:3px;font-weight:700;">TARGET</span>`;
+    html += `<div class="level-row"><span class="level-label" style="color:#f0596a">${["SELL 3","SELL 2","SELL 1"][i]}</span>
     <div class="level-bar sell-bar"><span>SELL $${o.price.toFixed(4)} ×${o.qty}</span>${badge}</div></div>`;
   });
-  html += `<div class="level-row"><span class="level-label" style="color:#2563eb">PRICE</span>
+  html += `<div class="level-row"><span class="level-label" style="color:#6aa5ff">PRICE</span>
   <div class="level-bar price-bar"><span>▶ $${price.toFixed(4)}</span><span style="font-size:10px;opacity:.5">LIVE</span></div></div>`;
   buys.slice(0,3).forEach((o,i) => {
     const badge = o.type === "entry"
-      ? `<span style="font-size:9px;background:#dcfce7;color:#16a34a;padding:1px 5px;border-radius:3px;font-weight:700;">ENTRY</span>`
-      : `<span style="font-size:9px;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;font-weight:700;">TARGET</span>`;
-    html += `<div class="level-row"><span class="level-label" style="color:#16a34a">${["BUY 1","BUY 2","BUY 3"][i]}</span>
+      ? `<span style="font-size:9px;background:rgba(52,199,123,.14);color:#34c77b;padding:1px 5px;border-radius:3px;font-weight:700;">ENTRY</span>`
+      : `<span style="font-size:9px;background:rgba(232,169,58,.16);color:#e8a93a;padding:1px 5px;border-radius:3px;font-weight:700;">TARGET</span>`;
+    html += `<div class="level-row"><span class="level-label" style="color:#34c77b">${["BUY 1","BUY 2","BUY 3"][i]}</span>
     <div class="level-bar buy-bar"><span>BUY $${o.price.toFixed(4)} ×${o.qty}</span>${badge}</div></div>`;
   });
   el.innerHTML = html;
@@ -856,12 +827,12 @@ function renderOrdersTable(orders) {
       : "background:#f0fff4;";   // light green for buy  rows
 
     const typeBadge = isEntry
-      ? `<span style="display:inline-block;font-size:10px;background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:.4px;">ENTRY</span>`
-      : `<span style="display:inline-block;font-size:10px;background:#fef9c3;color:#854d0e;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:.4px;">TARGET</span>`;
+      ? `<span style="display:inline-block;font-size:10px;background:rgba(106,165,255,.14);color:#6aa5ff;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:.4px;">ENTRY</span>`
+      : `<span style="display:inline-block;font-size:10px;background:rgba(232,169,58,.16);color:#e8a93a;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:.4px;">TARGET</span>`;
 
     const sideText = isSell
-      ? `<b style="color:#dc2626;">SELL</b>`
-      : `<b style="color:#16a34a;">BUY</b>`;
+      ? `<b style="color:#f0596a;">SELL</b>`
+      : `<b style="color:#34c77b;">BUY</b>`;
 
     return `<tr>
       <td style="${cellBg}padding:6px 8px;">${typeBadge}</td>
@@ -931,15 +902,15 @@ function renderReport(data) {
   tbody.innerHTML = data.roundTrips.map((rt, i) => {
     const dur       = formatDuration(rt.durationMs);
     const closeTime = new Date(rt.closeTs).toLocaleTimeString();
-    const rowBg     = i % 2 === 0 ? "" : "background:#f8fafc;";
+    const rowBg     = i % 2 === 0 ? "" : "background:#0f131a;";
     return `<tr style="${rowBg}">
       <td class="${rt.openSide==="BUY"?"buy-text":"sell-text"}" style="font-weight:600">${rt.openSide}</td>
       <td class="buy-text" style="font-weight:600">$${rt.buyPrice.toFixed(4)}</td>
       <td class="sell-text" style="font-weight:600">$${rt.sellPrice.toFixed(4)}</td>
       <td>${rt.qty}</td>
       <td class="pos-text" style="font-weight:600">+${rt.pnl.toFixed(4)}</td>
-      <td style="color:#64748b">${dur}</td>
-      <td style="color:#64748b">${closeTime}</td>
+      <td style="color:#8a95a8">${dur}</td>
+      <td style="color:#8a95a8">${closeTime}</td>
     </tr>`;
   }).join("");
 }

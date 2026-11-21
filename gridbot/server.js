@@ -65,9 +65,11 @@ app.use((req, res, next) => {
 });
 // mutating calls must come from the page itself (blocks cross-site form posts)
 app.use((req, res, next) => { if (req.method === "POST" && req.headers["x-gb"] !== "1") return res.status(403).json({ error: "Missing X-GB header" }); next(); });
-const BANNER = (embedded) => `<div style="position:sticky;top:0;z-index:9999;padding:8px 14px;font:600 13px system-ui;${MODE === "LIVE" ? "background:#e2454f;color:#fff" : "background:#2f6fe0;color:#fff"}">
-${MODE === "LIVE" ? "⚠ LIVE — REAL MONEY on Binance" : "TESTNET — Binance test exchange, no real money" + (LIVE_REQUESTED ? " (BINANCE_TESTNET=no is set, but GRID_LIVE_APPROVED is not)" : "")}
-${embedded ? "" : ' · <a href="/logout" style="color:#fff">Sign out</a>'}</div>`;
+const BANNER = (embedded) => `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:7px 22px;font:600 11px 'IBM Plex Mono',ui-monospace,monospace;letter-spacing:.08em;
+${MODE === "LIVE" ? "background:#3a1217;color:#ffb3ba;border-bottom:1px solid #7a2630" : "background:#0f1724;color:#a9c8ff;border-bottom:1px solid #1e2c44"}">
+<span style="padding:2px 8px;border-radius:4px;${MODE === "LIVE" ? "background:#e0434f;color:#fff" : "background:#1f3a66;color:#cfe0ff"}">${MODE === "LIVE" ? "LIVE · REAL MONEY" : "TESTNET"}</span>
+<span>${MODE === "LIVE" ? "Orders go to the live Binance exchange." : "Binance test exchange — no real money" + (LIVE_REQUESTED ? " · BINANCE_TESTNET=no is set, but GRID_LIVE_APPROVED is not" : "")}</span>
+${embedded ? "" : '<a href="/logout" style="margin-left:auto;color:inherit">Sign out</a>'}</div>`;
 const INDEX = require("fs").readFileSync(require("path").join(__dirname, "index.html"), "utf8");
 app.get(["/", "/index.html"], (req, res) => res.type("html").send(INDEX.replace("<body>", "<body>" + BANNER(portalOk(req)))));
 
