@@ -1,5 +1,5 @@
 /* Renders Ticker levels, Ignitions and Reversals from /api/zone/books. */
-const page = document.body.dataset.page;
+const bookPage = document.body.dataset.page;
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const num = (v, d = 2) => v == null || !Number.isFinite(+v) ? "—" : (+v).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -201,11 +201,11 @@ function weekly() {
   </section>`;
 }
 function render(d) {
-  if (page === "weekly") return weekly();
-  if (page === "swing") return danger(d);
-  if (page === "airpocket") return airpockets(d);
-  if (page === "ignitions") return ignitions(d);
-  if (page === "reversals") return reversals(d);
+  if (bookPage === "weekly") return weekly();
+  if (bookPage === "swing") return danger(d);
+  if (bookPage === "airpocket") return airpockets(d);
+  if (bookPage === "ignitions") return ignitions(d);
+  if (bookPage === "reversals") return reversals(d);
   return levels(d);
 }
 function applyFilter() {

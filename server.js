@@ -225,6 +225,16 @@ async function hlAssets(req, res) {
   } catch (e) { if (hlCache.data) return send(200, { ...hlCache.data, warning: "stale: " + e.message }); send(502, { error: "Hyperliquid: " + e.message }); }
 }
 
+// startup self-check of the ChatGPT backend (UPSTREAM) that the terminal pages read: status + content type per endpoint
+async function upstreamCheck() {
+  const probes = [["GET", "/api/stocks"], ["GET", "/api/option-universe"], ["GET", "/api/news"], ["POST", "/api/hyperliquid", { type: "allMids" }]];
+  for (const [m, p, b] of probes) {
+    const t0 = Date.now();
+    try { const r = await fetch(new URL(p, UPSTREAM), { method: m, headers: b ? { "Content-Type": "application/json" } : {}, body: b ? JSON.stringify(b) : undefined, signal: AbortSignal.timeout(30000) });
+      const txt = await r.text(); console.log(`upstream ${p}: HTTP ${r.status} · ${r.headers.get("content-type") || "?"} · ${txt.length} bytes · ${Date.now() - t0} ms · ${txt.slice(0, 90).replace(/\s+/g, " ")}`); }
+    catch (e) { console.log(`upstream ${p}: FAILED ${e.message}`); }
+  }
+}
 http.createServer((req, res) => {
   const url = new URL(req.url, "http://x"), ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0];
   if (url.pathname === "/health") { res.writeHead(200); return res.end("ok"); }
@@ -295,15 +305,4 @@ http.createServer((req, res) => {
   if (!fs.existsSync(file)) file = path.join(SITE, "index.html");           // single-page-app routes like /paper
   res.writeHead(200, { ...sec, "Content-Type": TYPES[path.extname(file)] || "application/octet-stream" });
   fs.createReadStream(file).pipe(res);
-// startup self-check of the ChatGPT backend (UPSTREAM) that the terminal pages read: status + content type per endpoint
-async function upstreamCheck() {
-  const probes = [["GET", "/api/stocks"], ["GET", "/api/option-universe"], ["GET", "/api/news"], ["POST", "/api/hyperliquid", { type: "allMids" }]];
-  for (const [m, p, b] of probes) {
-    const t0 = Date.now();
-    try { const r = await fetch(new URL(p, UPSTREAM), { method: m, headers: b ? { "Content-Type": "application/json" } : {}, body: b ? JSON.stringify(b) : undefined, signal: AbortSignal.timeout(30000) });
-      const txt = await r.text(); console.log(`upstream ${p}: HTTP ${r.status} · ${r.headers.get("content-type") || "?"} · ${txt.length} bytes · ${Date.now() - t0} ms · ${txt.slice(0, 90).replace(/\s+/g, " ")}`); }
-    catch (e) { console.log(`upstream ${p}: FAILED ${e.message}`); }
-  }
-}
-// load the hidden helper below, after the server starts
 }).listen(PORT, "0.0.0.0", () => { setTimeout(upstreamCheck, 5000); console.log("QuantSignal on :" + PORT); if (process.env.PORTAL !== "off") portal.start(m => console.log(new Date().toISOString(), m)); if (process.env.ZONE !== "off") zone.start(m => console.log(new Date().toISOString(), m)); if (process.env.BOOKS !== "off") { dte.start(m => console.log(new Date().toISOString(), m)).catch(e => console.log("dte start failed: " + e.message)); books.start(m => console.log(new Date().toISOString(), m)); } oms.start().catch(e => console.log("oms start failed: " + e.message)); });
