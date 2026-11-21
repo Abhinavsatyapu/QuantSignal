@@ -28,6 +28,9 @@ const cookieOk = header => { const m = new RegExp("(?:^|;\\s*)" + COOKIE + "=([^
   const [exp, sig] = decodeURIComponent(m[1]).split("."); if (!exp || !sig || +exp < Date.now()) return false;
   const want = sign(exp); return sig.length === want.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(want)); };
 const fails = new Map();
+// The QuantSignal portal proxies this bot under /grids (same sign-in as the portal) using a shared key.
+const PORTAL_KEY = process.env.GRIDS_PORTAL_KEY || "";
+const portalOk = req => { const k = String(req.headers["x-portal-key"] || ""); return PORTAL_KEY.length >= 24 && k.length === PORTAL_KEY.length && crypto.timingSafeEqual(Buffer.from(k), Buffer.from(PORTAL_KEY)); };
 
 const app    = express();
 const server = http.createServer(app);
@@ -56,17 +59,17 @@ app.post("/login", (req, res) => {
 });
 app.get("/logout", (req, res) => res.set("Set-Cookie", `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`).redirect(303, "/"));
 app.use((req, res, next) => {
-  if (cookieOk(req.headers.cookie)) return next();
+  if (cookieOk(req.headers.cookie) || portalOk(req)) return next();
   if (req.path.startsWith("/api/")) return res.status(401).json({ error: "Sign in required" });
   res.status(200).send(loginPage(""));
 });
 // mutating calls must come from the page itself (blocks cross-site form posts)
 app.use((req, res, next) => { if (req.method === "POST" && req.headers["x-gb"] !== "1") return res.status(403).json({ error: "Missing X-GB header" }); next(); });
-const BANNER = () => `<div style="position:sticky;top:0;z-index:9999;padding:8px 14px;font:600 13px system-ui;${MODE === "LIVE" ? "background:#e2454f;color:#fff" : "background:#2f6fe0;color:#fff"}">
+const BANNER = (embedded) => `<div style="position:sticky;top:0;z-index:9999;padding:8px 14px;font:600 13px system-ui;${MODE === "LIVE" ? "background:#e2454f;color:#fff" : "background:#2f6fe0;color:#fff"}">
 ${MODE === "LIVE" ? "⚠ LIVE — REAL MONEY on Binance" : "TESTNET — Binance test exchange, no real money" + (LIVE_REQUESTED ? " (BINANCE_TESTNET=no is set, but GRID_LIVE_APPROVED is not)" : "")}
- · <a href="/logout" style="color:#fff">Sign out</a></div>`;
+${embedded ? "" : ' · <a href="/logout" style="color:#fff">Sign out</a>'}</div>`;
 const INDEX = require("fs").readFileSync(require("path").join(__dirname, "index.html"), "utf8");
-app.get(["/", "/index.html"], (req, res) => res.type("html").send(INDEX.replace("<body>", "<body>" + BANNER())));
+app.get(["/", "/index.html"], (req, res) => res.type("html").send(INDEX.replace("<body>", "<body>" + BANNER(portalOk(req)))));
 
 // ── Global bot state ────────────────────────────────────────
 let botState = {

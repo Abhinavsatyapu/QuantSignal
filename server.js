@@ -50,6 +50,31 @@ button{font:inherit;font-weight:600;padding:10px;border:0;border-radius:8px;back
 <label for="pw" class="sr">Password</label><input id="pw" name="password" type="password" autocomplete="current-password" autofocus required>
 ${msg ? `<p class="e">${msg}</p>` : ""}<button type="submit">Sign in</button></form></body></html>`;
 
+
+// ---- Grids — Market making bot, served under /grids on the portal (portal sign-in, server-to-server key) ----
+const GRIDS_URL = (process.env.GRIDS_URL || "https://grids-market-making-bot.onrender.com").replace(/\/$/, ""), GRIDS_KEY = process.env.GRIDS_PORTAL_KEY || "";
+const GRIDS_SHIM = `<script>/* live updates by polling (the portal does not proxy websockets) */(function(){class PollWS{constructor(){this.readyState=0;this.seen=null;this.first=true;setTimeout(()=>{this.readyState=1;this.onopen&&this.onopen({});this.tick()},30)}
+async tick(){try{const s=await fetch('/grids/api/status',{cache:'no-store'});if(s.ok){const d=await s.json();this.onmessage&&this.onmessage({data:JSON.stringify({type:'state',data:d})})}
+const l=await fetch('/grids/api/logs',{cache:'no-store'});if(l.ok){const a=await l.json(),fresh=[];for(const e of a){if(this.seen&&e.ts===this.seen.ts&&e.msg===this.seen.msg)break;fresh.push(e)}if(a[0])this.seen=a[0];if(this.first){fresh.splice(40);this.first=false}
+fresh.reverse().forEach(e=>this.onmessage&&this.onmessage({data:JSON.stringify({type:'log',data:e})}))}}catch(e){}setTimeout(()=>this.tick(),document.hidden?10000:3000)}
+send(){}close(){}addEventListener(t,f){this['on'+t]=f}}window.WebSocket=PollWS})();</script>`;
+async function gridsProxy(req, res, url) {
+  const sub = url.pathname.slice("/grids".length) || "/";
+  if (!GRIDS_KEY) { res.writeHead(503, { "Content-Type": "text/html; charset=utf-8" }); return res.end('<p style="font:15px system-ui;padding:20px">Grids is not linked yet: set the same <b>GRIDS_PORTAL_KEY</b> on this service and on grids-market-making-bot in Render.</p>'); }
+  if (!(sub === "/" || sub === "/index.html" || sub.startsWith("/api/"))) { res.writeHead(404); return res.end(); }
+  let body; if (req.method === "POST") { const chunks = []; for await (const c of req) { chunks.push(c); if (chunks.reduce((n, x) => n + x.length, 0) > 65536) { res.writeHead(413); return res.end(); } } body = Buffer.concat(chunks); }
+  try {
+    const r = await fetch(GRIDS_URL + sub + url.search, { method: req.method, body, redirect: "manual", signal: AbortSignal.timeout(90000),
+      headers: { "x-portal-key": GRIDS_KEY, "content-type": req.headers["content-type"] || "application/json", ...(req.headers["x-gb"] ? { "x-gb": req.headers["x-gb"] } : {}) } });
+    const type = r.headers.get("content-type") || "application/octet-stream", head = { "Content-Type": type, "Cache-Control": "no-store", "X-Frame-Options": "SAMEORIGIN" };
+    if (type.includes("text/html")) {
+      let html = await r.text();
+      html = html.replace(/(["'`])\/api\//g, "$1/grids/api/").replace("<head>", "<head>" + GRIDS_SHIM);
+      res.writeHead(r.status, head); return res.end(html);
+    }
+    res.writeHead(r.status, head); res.end(Buffer.from(await r.arrayBuffer()));
+  } catch (e) { res.writeHead(502, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Grids bot unreachable (it may be waking up — try again in a minute): " + e.message })); }
+}
 async function proxy(req, res, url) {
   const headers = {};
   for (const [k, v] of Object.entries(req.headers)) if (!["host", "cookie", "connection", "content-length", "x-forwarded-for", "x-forwarded-proto", "x-forwarded-host", "x-real-ip", "forwarded", "origin", "referer", "accept-encoding"].includes(k)) headers[k] = v;
@@ -245,6 +270,8 @@ http.createServer((req, res) => {
     return req.on("end", () => { try { const out = plannerMath.summary(JSON.parse(body || "{}")); res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify(out)); }
       catch (e) { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: e.message })); } });
   }
+  if (url.pathname === "/grids") { res.writeHead(302, { Location: "/grids/" }); return res.end(); }
+  if (url.pathname.startsWith("/grids/")) return gridsProxy(req, res, url);
   if (url.pathname === "/api/hl/assets") return hlAssets(req, res);
   if (url.pathname === "/api/av/quotes") return avQuotes(req, res, url);
   if (url.pathname === "/api/av/regime") return avRegime(req, res, url);
