@@ -46,6 +46,7 @@ class Agent:
         line = f"{dt.datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC · {msg}"
         self.state["log"] = (self.state["log"] + [line])[-150:]
         self.state["message"] = msg
+        print("agent:", msg, flush=True)
 
     def save(self):
         self.db.kv_set("agent_state", {k: v for k, v in self.state.items()})
