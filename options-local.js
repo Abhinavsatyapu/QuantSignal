@@ -25,15 +25,23 @@ async function chainRange(symbol, near, far) {
   for (const d of pick) { try { const c = d === first.expiry ? first : await pc.chain(symbol, d); if (c.expiry === d) all.push(...contracts(c)); } catch {} }
   return { first, contracts: all, partial: exps.length > pick.length };
 }
+const UPSTREAM = process.env.UPSTREAM || "https://quant-signal-frontend.satyapuabhinav1609.chatgpt.site";
+let uniCache = null;
 async function universe() {
-  if (!(ALP.key && ALP.secret)) throw new Error("full catalogue needs Alpaca keys on the server — any US ticker can still be typed");
+  if (!(ALP.key && ALP.secret)) {                       // no Alpaca: the US-listed symbol directory from the data service
+    if (uniCache && Date.now() - uniCache.at < 6 * 3600e3) return uniCache.v;
+    const r = await fetch(new URL("/api/option-universe", UPSTREAM), { signal: AbortSignal.timeout(25000) });
+    if (!r.ok) throw new Error("symbol directory HTTP " + r.status);
+    const j = await r.json(), v = (j.assets || []).map(a => ({ symbol: a.symbol, name: a.name || a.symbol }));
+    uniCache = { at: Date.now(), v, source: j.source || "US exchange symbol directory" }; return v;
+  }
   const r = await fetch("https://paper-api.alpaca.markets/v2/assets?status=active&asset_class=us_equity&attributes=options_enabled", { headers: { "APCA-API-KEY-ID": ALP.key, "APCA-API-SECRET-KEY": ALP.secret }, signal: AbortSignal.timeout(25000) });
   if (!r.ok) throw new Error("Alpaca HTTP " + r.status);
   return (await r.json()).map(a => ({ symbol: a.symbol, name: a.name }));
 }
 async function handle(body) {
   const action = body.action || "chain";
-  if (action === "universe") return { assets: await universe(), source: "Alpaca assets (server keys)" };
+  if (action === "universe") { const assets = await universe(); return { assets, source: ALP.key && ALP.secret ? "Alpaca assets (server keys)" : (uniCache && uniCache.source) || "US exchange symbol directory" }; }
   if (action === "legs") {
     const groups = new Map(), stocks = {}, out = [];
     for (const s of body.contracts || []) { const p = parse(s); if (p) { const k = p.u + "|" + p.exp; groups.set(k, (groups.get(k) || []).concat(p)); } }

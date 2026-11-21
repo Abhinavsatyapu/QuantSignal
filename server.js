@@ -75,6 +75,10 @@ async function gridsProxy(req, res, url) {
     res.writeHead(r.status, head); res.end(Buffer.from(await r.arrayBuffer()));
   } catch (e) { res.writeHead(502, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Grids bot unreachable (it may be waking up — try again in a minute): " + e.message })); }
 }
+// short cache in front of the data service: fewer 429s, prices stay fresh (stream endpoints are never cached)
+const UP_TTL = [[/^\/api\/stocks$/, 10e3], [/^\/api\/news$/, 120e3], [/^\/api\/option-universe$/, 6 * 3600e3], [/^\/api\/hyperliquid$/, 3e3]];
+const upCache = new Map();
+function upTtl(url, method) { if (url.pathname.startsWith("/api/stream")) return 0; const hit = UP_TTL.find(([re]) => re.test(url.pathname)); if (!hit) return 0; return method === "GET" || url.pathname === "/api/hyperliquid" ? hit[1] : 0; }
 async function proxy(req, res, url) {
   const headers = {};
   for (const [k, v] of Object.entries(req.headers)) if (!["host", "cookie", "connection", "content-length", "x-forwarded-for", "x-forwarded-proto", "x-forwarded-host", "x-real-ip", "forwarded", "origin", "referer", "accept-encoding"].includes(k)) headers[k] = v;
@@ -87,7 +91,17 @@ async function proxy(req, res, url) {
       for await (const c of req) { size += c.length; if (size > 5e6) throw new Error("request too large"); chunks.push(c); }
       body = Buffer.concat(chunks);
     }
+    const ttl = upTtl(url, req.method), key = ttl ? req.method + " " + url.pathname + url.search + " " + (body ? require("crypto").createHash("sha1").update(body).digest("hex") : "") : null;
+    const hit = key && upCache.get(key);
+    if (hit && Date.now() - hit.at < ttl) { res.writeHead(hit.status, { "Content-Type": hit.type, "Cache-Control": "no-store", "X-QS-Cache": "hit" }); return res.end(hit.buf); }
     const r = await fetch(new URL(url.pathname + url.search, UPSTREAM), { method: req.method, headers, signal: ctl.signal, body });
+    if (key) {
+      const buf = Buffer.from(await r.arrayBuffer()), type = r.headers.get("content-type") || "application/json";
+      if (r.ok) { upCache.set(key, { at: Date.now(), status: r.status, type, buf }); if (upCache.size > 500) upCache.delete(upCache.keys().next().value); }
+      else if ((r.status === 429 || r.status >= 500) && hit && Date.now() - hit.at < 60e3) {   // rate-limited: last good answer (≤ 60 s), marked stale
+        res.writeHead(hit.status, { "Content-Type": hit.type, "Cache-Control": "no-store", "X-QS-Cache": "stale", "X-QS-Age": String(Math.round((Date.now() - hit.at) / 1000)) }); return res.end(hit.buf); }
+      res.writeHead(r.status, { "Content-Type": type, "Cache-Control": "no-store" }); return res.end(buf);
+    }
     const h = {}; r.headers.forEach((v, k) => { if (!["set-cookie", "content-encoding", "content-length", "transfer-encoding", "connection"].includes(k)) h[k] = v; });
     res.writeHead(r.status, { ...h, "Cache-Control": "no-store" });
     if (r.body) Readable.fromWeb(r.body).on("error", () => res.end()).pipe(res); else res.end();   // NDJSON streams pass straight through

@@ -1,4 +1,6 @@
 /* Renders Ticker levels, Ignitions and Reversals from /api/zone/books. */
+(() => {   // own scope: live.js runs on the same pages and declares $, esc, page …
+"use strict";
 const bookPage = document.body.dataset.page;
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -242,3 +244,4 @@ $("#refresh").onclick = () => load(true);
 setInterval(() => { const c = $("#clock"); if (c) c.textContent = new Date().toLocaleTimeString(); }, 1000);
 load(false);
 setInterval(() => { if (!document.hidden) load(false); }, 20000);
+})();
