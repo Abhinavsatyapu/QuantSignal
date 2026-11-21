@@ -20,8 +20,18 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 function note(name, ok, detail, ms, error) {
   feeds[name] = { name, ok: !!ok, detail: detail || "", ms: ms == null ? null : Math.round(ms), error: error ? String(error.message || error) : null, at: new Date().toISOString() };
 }
+// A quote may only open a new daily bar on a real session that has started (weekday, not an NYSE holiday, ≥ 9:30 ET).
+// Nasdaq stamps weekend / pre-open quotes with the current date while the price is the last close.
+const { nyParts } = require("./oms/simbroker");
+function newSessionBar(qday) {
+  if (!qday) return false;
+  const n = nyParts(Date.now());
+  return n.trading && qday === n.day && n.mins >= 570;
+}
+const nqSym = s => String(s).replace(/^\^/, "");
 function assetClasses(symbol) {
-  if (!symbol || symbol.startsWith("^")) return [];
+  if (!symbol) return [];
+  if (symbol.startsWith("^")) return ["index"];                 // ^VIX → Nasdaq index feed "VIX"
   return ETFS.has(symbol) ? ["etf", "stocks"] : ["stocks", "etf"];
 }
 
@@ -127,7 +137,7 @@ async function nasdaqHistory(symbol) {
   let last;
   for (const asset of classes) {
     try {
-      const j = await fetchJson(`https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/historical?assetclass=${asset}&fromdate=${fmt(from)}&todate=${fmt(to)}&limit=9999`, 25000, { Accept: "application/json" });
+      const j = await fetchJson(`https://api.nasdaq.com/api/quote/${encodeURIComponent(nqSym(symbol))}/historical?assetclass=${asset}&fromdate=${fmt(from)}&todate=${fmt(to)}&limit=9999`, 25000, { Accept: "application/json" });
       const bars = parseHistRows(j.data && j.data.tradesTable && j.data.tradesTable.rows);
       if (bars.length > 40) return bars;
       last = new Error(asset + " history short");
@@ -147,7 +157,7 @@ async function yahooChart(symbol, range, interval) {
       const bars = r.timestamp.map((t, i) => ({
         d: new Date(t * 1000).toISOString().slice(0, 10),
         o: num(q.open && q.open[i]), h: num(q.high && q.high[i]), l: num(q.low && q.low[i]), c: num(q.close && q.close[i]), v: num(q.volume && q.volume[i]) || 0,
-      })).filter(b => b.c > 0);
+      })).filter(b => b.c > 0).reduce((out, b) => { if (out.length && out.at(-1).d === b.d) out[out.length - 1] = b; else out.push(b); return out; }, []);
       const price = num(r.meta && r.meta.regularMarketPrice) || (bars.at(-1) && bars.at(-1).c);
       return { symbol, price, bars, source: "Yahoo chart v8" };
     } catch (e) { last = e; }
@@ -163,7 +173,7 @@ async function chart(symbol, range = "2y", interval = "1d") {
     const q = await nasdaqInfo(symbol);
     if (!(q.last > 0)) return base;
     const bars = base.bars.slice(), lb = bars.at(-1);
-    if (q.day && q.day > lb.d) bars.push({ d: q.day, o: q.last, h: q.last, l: q.last, c: q.last, v: 0 });
+    if (q.day && q.day > lb.d) { if (newSessionBar(q.day)) bars.push({ d: q.day, o: q.last, h: q.last, l: q.last, c: q.last, v: 0 }); }
     else if (!q.day || q.day === lb.d) bars[bars.length - 1] = { ...lb, c: q.last, h: Math.max(lb.h ?? q.last, q.last), l: Math.min(lb.l ?? q.last, q.last) };
     return { ...base, price: q.last, bars, quoteAt: new Date().toISOString() };
   } catch { return base; }
@@ -177,7 +187,7 @@ async function chartBase(symbol, range, interval) {
       try {
         const q = await nasdaqInfo(symbol);
         if (q.last > 0) price = q.last;
-        if (q.day && q.day > bars.at(-1).d && q.last > 0) bars.push({ d: q.day, o: q.last, h: q.last, l: q.last, c: q.last, v: 0 });
+        if (q.day && q.day > bars.at(-1).d && q.last > 0 && newSessionBar(q.day)) bars.push({ d: q.day, o: q.last, h: q.last, l: q.last, c: q.last, v: 0 });
       } catch { /* history alone is enough */ }
       note("nasdaq-chart", true, symbol + " " + bars.length + " bars", Date.now() - t0);
       return { symbol, price, bars, source: "Nasdaq historical" };
@@ -272,7 +282,7 @@ async function nasdaqInfo(symbol) {
     let last;
     for (const asset of classes.length ? classes : ["stocks"]) {
       try {
-        const j = await fetchJson(`https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/info?assetclass=${asset}`, 15000, { Accept: "application/json" });
+        const j = await fetchJson(`https://api.nasdaq.com/api/quote/${encodeURIComponent(nqSym(symbol))}/info?assetclass=${asset}`, 15000, { Accept: "application/json" });
         const p = j.data && j.data.primaryData;
         const lastSale = num(p && p.lastSalePrice);
         if (!(lastSale > 0)) throw new Error("empty");
