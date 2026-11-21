@@ -208,7 +208,16 @@ class Universe:
         except Exception as e:
             info["errors"].append(f"S&P 500 list: {e}")
         try:
-            nd = self._wiki("https://en.wikipedia.org/wiki/Nasdaq-100", ["Ticker", "Symbol"], "GICS Sector")
+            try:
+                j = nasdaq._get("https://api.nasdaq.com/api/quote/list-type/nasdaq100")
+                rows = (((j or {}).get("data") or {}).get("data") or {}).get("rows") or []
+                nd = pd.DataFrame({"symbol": [str(r.get("symbol", "")).strip().replace(".", "-") for r in rows],
+                                   "name": [r.get("companyName", "") for r in rows], "sector": None})
+                nd = nd[nd.symbol.str.match(r"^[A-Z][A-Z0-9-]{0,6}$")]
+                if len(nd) < 80:
+                    raise RuntimeError(f"Nasdaq list returned {len(nd)} rows")
+            except Exception:
+                nd = self._wiki("https://en.wikipedia.org/wiki/Nasdaq-100", ["Ticker", "Symbol"], "GICS Sector")
             for _, r in nd.iterrows():
                 groups.setdefault(r.symbol, set()).add("Nasdaq 100")
                 meta.setdefault(r.symbol, {"name": r["name"], "sector": r.sector if r.sector and r.sector != "None" else None})
