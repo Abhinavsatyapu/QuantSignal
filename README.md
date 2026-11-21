@@ -84,3 +84,13 @@ fill import with de-duplication, peak-equity tracking, position reconciliation e
 idempotency, concurrent approvals, duplicate protection, request-time and exchange rejections, risk re-check at approval,
 kill switch (+ cancel-all), cancel, modify/replace, restart recovery, broker outage during submit, fills, realized P&L,
 reconciliation, input validation.
+
+## Built-in paper broker (OMS without Alpaca)
+
+When `ALPACA_KEY_ID` / `ALPACA_SECRET_KEY` are not set (or `OMS_BROKER=sim`), the OMS uses `oms/simbroker.js`: the same
+interface as the Alpaca adapter, filling against live Nasdaq quotes. Market orders (regular hours only) buy at the ask and
+sell at the bid; limits fill when the quote crosses; stops trigger on the last trade; bracket / OTO exits are opened after
+the fill with one-cancels-other; day orders expire at the close (orders placed after the close belong to the next
+session); IOC / FOK cancel if not fillable at once; buying power is 2 × equity − gross. No partial fills or market impact.
+State (cash, positions, orders, fills) is one jsonb row in `oms_sim`. `SIM_START_CASH` sets the opening cash (default
+100000); `POST /api/oms/sim/reset {reason, cash}` starts over. Tests: `test/simbroker.test.js`, `test/oms-sim.test.js`.

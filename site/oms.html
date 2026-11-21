@@ -62,7 +62,7 @@ dialog h3{margin:0 0 8px;font-size:16px}.tl{margin:0;padding:0;list-style:none;d
 <div class="banner" id="banners"></div>
 <main>
   <div class="col">
-    <section class="card"><h2>Account</h2><div class="kv" id="acct"><div><span>Status</span><b>…</b></div></div></section>
+    <section class="card"><h2>Account <span class="r"><button class="btn sm" id="simReset" type="button" hidden>Reset paper account</button></span></h2><div class="dim" id="brokerLine" style="font-size:12.5px;margin:-4px 0 10px"></div><div class="kv" id="acct"><div><span>Status</span><b>…</b></div></div></section>
     <section class="card"><h2>New order</h2>
       <form class="grid" id="ticket" autocomplete="off">
         <div class="full seg"><button type="button" class="btn on buy" data-side="buy">Buy</button><button type="button" class="btn sell" data-side="sell">Sell</button></div>
@@ -169,6 +169,10 @@ $('#kill').onclick = async () => {
   if (!a) return;
   try { await api('/kill', { on, reason: a.reason, cancelAll: !!$('#k_cancel')?.checked, flatten: !!$('#k_flat')?.checked }); } catch (e) { alertBox(e.message); } load();
 };
+$('#simReset').onclick = async () => {
+  const a = await ask('Reset the paper account', 'Clears every paper position, order and fill at the built-in broker and starts again with fresh cash. The OMS history stays.', '<label style="margin-bottom:10px">Starting cash ($)<input id="r_cash" type="number" min="1000" step="1000" value="100000"></label>');
+  if (!a) return; try { await api('/sim/reset', { reason: a.reason, cash: $('#r_cash')?.value }); } catch (e) { alertBox(e.message); } load();
+};
 $('#recon').onclick = async () => { try { const r = await api('/reconcile', {}); $('#reconMsg').innerHTML = r.ok ? '<span class="pos">Positions match the OMS records.</span>' : '<span class="neg">Differences found:</span><ul>' + r.diffs.map(d => `<li>${esc(d.symbol)}: broker ${esc(d.broker)} vs OMS ${esc(d.oms)} — ${esc(d.note)}</li>`).join('') + '</ul>'; } catch (e) { alertBox(e.message); } };
 $('#refresh').onclick = () => api('/sync', {}).catch(() => {}).then(load);
 document.querySelectorAll('#htabs button').forEach(b => b.onclick = () => { hist = b.dataset.h; document.querySelectorAll('#htabs button').forEach(x => x.classList.toggle('on', x === b)); loadHistory(); });
@@ -182,6 +186,9 @@ async function loadHistory() {
 
 async function load() {
   try { S = await api('/status'); } catch (e) { $('#banners').innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  const sim = /Built-in/.test(S.broker || '');
+  $('#brokerLine').innerHTML = sim ? `Broker: <b>${esc(S.broker)}</b> — orders fill against live Nasdaq quotes (market: buy at the ask, sell at the bid, regular hours; limits when the quote crosses; stops on the last trade; brackets with one-cancels-other; day orders expire at the close). No outside account, no real money.` : `Broker: <b>${esc(S.broker || 'Alpaca paper')}</b>`;
+  $('#simReset').hidden = !sim;
   $('#mode').textContent = S.mode === 'live' ? 'LIVE · REAL MONEY' : 'PAPER'; $('#mode').className = 'mode ' + S.mode;
   $('#kill').textContent = S.limits.killSwitch ? 'Kill switch: ON' : 'Kill switch'; $('#kill').className = 'btn sm ' + (S.limits.killSwitch ? 'pri' : 'bad');
   $('#sync').textContent = S.lastSync ? 'synced ' + new Date(S.lastSync).toLocaleTimeString() : '';

@@ -2,13 +2,21 @@
 // Every state-changing call must be a POST with JSON and the header "X-QS-OMS: 1" (blocks cross-site form posts).
 "use strict";
 const { Pool } = require("pg");
-const DB = require("./db"), Engine = require("./engine"), Alpaca = require("./alpaca");
+const DB = require("./db"), Engine = require("./engine"), Alpaca = require("./alpaca"), Sim = require("./simbroker");
 
 function create({ env = process.env, log = console.log, broker, pool } = {}) {
   if (!pool && !env.DATABASE_URL) return { handle: (req, res) => send(res, 503, { error: "The OMS needs a database. Set DATABASE_URL (Neon) in Render → Environment." }), start: async () => {}, enabled: false };
   pool = pool || new Pool({ connectionString: env.DATABASE_URL, ssl: /@(localhost|127\.0\.0\.1)[:/]/.test(env.DATABASE_URL) ? false : { rejectUnauthorized: true }, max: 4 });
   pool.on("error", () => {});
-  const db = DB.create(pool), engine = Engine.create({ db, broker: broker || Alpaca.create(env), log });
+  // broker: Alpaca when its keys are set (unless OMS_BROKER=sim), otherwise the built-in paper broker on live quotes
+  const useSim = !broker && (env.OMS_BROKER === "sim" || !(env.ALPACA_KEY_ID && env.ALPACA_SECRET_KEY));
+  if (!broker && useSim) {
+    const keyless = require("../keyless");
+    broker = Sim.create({ quote: s => keyless.nasdaqInfo(s), store: Sim.pgStore(pool), startCash: Number(env.SIM_START_CASH) || 100000, log });
+  }
+  broker = broker || Alpaca.create(env);
+  const brokerName = broker.name || "Alpaca paper";
+  const db = DB.create(pool), engine = Engine.create({ db, broker, log });
 
   async function body(req) {
     let s = ""; for await (const c of req) { s += c; if (s.length > 20000) throw Object.assign(new Error("body too large"), { status: 413 }); }
@@ -20,7 +28,12 @@ function create({ env = process.env, log = console.log, broker, pool } = {}) {
       if (m === "POST" && req.headers["x-qs-oms"] !== "1") return send(res, 403, { error: "missing X-QS-OMS header" });
       const b = m === "POST" ? await body(req) : {};
       let r;
-      if (m === "GET" && p === "/status") r = await engine.status();
+      if (m === "GET" && p === "/status") r = { ...(await engine.status()), broker: brokerName };
+      else if (m === "POST" && p === "/sim/reset") {
+        if (!broker.reset) return send(res, 400, { error: "reset is only for the built-in paper broker" });
+        if (String(b.reason || "").trim().length < 3) return send(res, 400, { error: "a reason is required" });
+        r = await broker.reset(Number(b.cash) > 0 ? Number(b.cash) : undefined); await db.audit("sim_reset", b.reason, { cash: r.cash }, true);
+      }
       else if (m === "GET" && p === "/key") r = { idem_key: engine.newKey() };
       else if (m === "GET" && p === "/orders") {
         const st = url.searchParams.get("status"), lim = Math.min(500, Number(url.searchParams.get("limit")) || 200);
@@ -46,7 +59,7 @@ function create({ env = process.env, log = console.log, broker, pool } = {}) {
       send(res, 200, r);
     } catch (e) { send(res, e.status && e.status < 600 ? e.status : 500, { error: e.message }); if (!e.status || e.status >= 500) log("oms error: " + e.message); }
   }
-  return { handle, start: () => engine.start().then(() => log(`oms: ready · ${engine && Alpaca.config(env).mode} mode · broker keys ${Alpaca.config(env).keyId ? "set" : "NOT set"}`)), engine, db, enabled: true };
+  return { handle, start: () => engine.start().then(() => log(`oms: ready · paper · broker: ${brokerName}`)), engine, db, broker, enabled: true };
 }
 function send(res, code, obj) { res.writeHead(code, { "Content-Type": "application/json", "Cache-Control": "no-store" }); res.end(JSON.stringify(obj)); }
 module.exports = { create };

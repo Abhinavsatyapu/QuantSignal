@@ -280,7 +280,9 @@ async function nasdaqInfo(symbol) {
         const stamp = /([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})/.exec(p.lastTradeTimestamp || "");
         const mon = stamp && MONTH[stamp[1].slice(0, 3).toLowerCase()];
         const day = stamp && mon != null ? `${stamp[3]}-${String(mon + 1).padStart(2, "0")}-${String(+stamp[2]).padStart(2, "0")}` : null;
-        return { symbol, last: lastSale, day, change: p.percentageChange || null, source: "Nasdaq quote" };
+        const bid = num(p.bidPrice), ask = num(p.askPrice), sec = j.data && j.data.secondaryData;
+        return { symbol, last: lastSale, day, change: p.percentageChange || null, bid: bid > 0 ? bid : null, ask: ask > 0 ? ask : null,
+                 realTime: !!p.isRealTime, at: p.lastTradeTimestamp || null, extLast: num(sec && sec.lastSalePrice) || null, source: "Nasdaq quote" };
       } catch (e) { last = e; }
     }
     note("nasdaq-quote", false, symbol, Date.now() - t0, last);
