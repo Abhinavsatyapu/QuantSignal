@@ -6,7 +6,7 @@ const DB = require("./db"), Engine = require("./engine"), Alpaca = require("./al
 
 function create({ env = process.env, log = console.log, broker, pool } = {}) {
   if (!pool && !env.DATABASE_URL) return { handle: (req, res) => send(res, 503, { error: "The OMS needs a database. Set DATABASE_URL (Neon) in Render → Environment." }), start: async () => {}, enabled: false };
-  pool = pool || new Pool({ connectionString: env.DATABASE_URL, ssl: /@(localhost|127\.0\.0\.1)[:/]/.test(env.DATABASE_URL) ? false : { rejectUnauthorized: true }, max: 4 });
+  pool = pool || new Pool({ connectionString: env.DATABASE_URL, ssl: require("../pg-ssl")(env.DATABASE_URL), max: 4 });
   pool.on("error", () => {});
   // broker: Alpaca when its keys are set (unless OMS_BROKER=sim), otherwise the built-in paper broker on live quotes
   const useSim = !broker && (env.OMS_BROKER === "sim" || !(env.ALPACA_KEY_ID && env.ALPACA_SECRET_KEY));

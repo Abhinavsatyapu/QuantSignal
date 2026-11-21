@@ -10,7 +10,7 @@ let pool = null, ready = null, mode = "file";
 if (URL_) {
   const { Pool } = require("pg");
   const local = /@(localhost|127\.0\.0\.1)[:/]/.test(URL_);
-  pool = new Pool({ connectionString: URL_, ssl: local ? false : { rejectUnauthorized: true }, max: 3, idleTimeoutMillis: 30000, connectionTimeoutMillis: 15000 });
+  pool = new Pool({ connectionString: URL_, ssl: require("./pg-ssl")(URL_), max: 3, idleTimeoutMillis: 30000, connectionTimeoutMillis: 15000 });
   pool.on("error", () => {});                          // Neon closes idle connections; the pool reconnects on next use
   mode = "postgres";
   ready = pool.query(`
