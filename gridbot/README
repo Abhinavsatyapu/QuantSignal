@@ -1,0 +1,75 @@
+# 🤖 Grid Bot — Binance Automation
+
+A web-based grid trading bot for Binance (Spot, Futures, Coin-M).
+
+---
+
+## 📁 Files
+```
+grid-bot/
+├── server.js       ← Backend (all the trading logic lives here)
+├── index.html      ← Frontend (open this in your browser)
+├── package.json    ← Lists all npm packages needed
+├── .env.example    ← Template for your API keys
+└── README.md       ← This file
+```
+
+---
+
+## 🚀 Setup (Step by Step)
+
+### Step 1 — Install Node.js
+Download from: https://nodejs.org  (choose "LTS" version)
+
+### Step 2 — Open this folder in VS Code
+- Open VS Code → File → Open Folder → select `grid-bot`
+
+### Step 3 — Open the Terminal in VS Code
+- Top menu → Terminal → New Terminal
+
+### Step 4 — Install packages (run once)
+```bash
+npm install
+```
+Wait for it to finish downloading. You'll see a `node_modules` folder appear.
+
+### Step 5 — Add your API keys
+- Copy `.env.example` → rename the copy to `.env`
+- Open `.env` and paste your Binance API key and Secret key
+
+### Step 6 — Start the server
+```bash
+npm start
+```
+You should see:  `✅  Grid Bot Server running at http://localhost:3000`
+
+### Step 7 — Open the bot in your browser
+Go to: **http://localhost:3000**
+
+---
+
+## ⚙️ How to Use
+
+1. Select **Price Source** (Spot / Futures / Coin-M)
+2. Enter your **Symbol** — e.g. `SOL/USDT` or `ETH/USDT`
+3. Paste your **API Key** and **Secret Key**
+4. Set your grid parameters (spacing, qty, limits)
+5. Click **▶ Start Bot**
+6. Watch the Live Grid and Activity Log update in real-time
+
+---
+
+## 🔑 Getting Binance API Keys
+1. Log in to Binance → Profile icon → API Management
+2. Create API Key → Label it "GridBot"
+3. Enable **Spot Trading** (and Futures if needed)
+4. Add your IP address to the whitelist for safety
+5. Copy both keys into the `.env` file
+
+---
+
+## ⚠️ Safety Notes
+- Always set **Upper Limit** and **Lower Limit** to protect yourself
+- Start with **small quantity** to test first
+- Never share your API keys with anyone
+- Use IP whitelist on your API key in Binance settings

@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Grid Bot — Binance</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; }
+
+    /* ── Header ── */
+    .header {
+      background: #1a1a2e; color: #fff; padding: 0 28px; height: 54px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .header-logo { font-size: 17px; font-weight: 700; color: #fff; }
+    .header-logo span { color: #f0b90b; }
+    .header-symbol {
+      font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #aaa;
+      background: #2a2a40; padding: 4px 10px; border-radius: 4px;
+    }
+    .status-badge {
+      display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600;
+      padding: 5px 12px; border-radius: 20px; background: #2a2a40;
+      border: 1px solid #3a3a50; color: #888;
+    }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #555; }
+    .status-dot.live    { background: #22c55e; box-shadow: 0 0 6px #22c55e; animation: blink 1.4s infinite; }
+    .status-dot.stopped { background: #ef4444; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    /* ── Layout ── */
+    .page {
+      display: grid; grid-template-columns: 340px 1fr;
+      gap: 16px; padding: 16px 20px; max-width: 1440px; margin: 0 auto;
+    }
+
+    /* ── Card ── */
+    .card { background: #fff; border-radius: 10px; border: 1px solid #e2e8f0; box-shadow: 0 1px 4px rgba(0,0,0,0.05); overflow: hidden; }
+    .card-header {
+      padding: 11px 16px; border-bottom: 1px solid #e2e8f0; background: #fafbfc;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: #64748b;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .card-body { padding: 14px 16px; }
+
+    /* ── Form ── */
+    .section-title { font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #94a3b8; margin: 12px 0 6px; }
+    .section-title:first-child { margin-top: 0; }
+    .field { margin-bottom: 8px; }
+    .field label { display: block; font-size: 11px; font-weight: 500; color: #475569; margin-bottom: 3px; }
+    .field input, .field select {
+      width: 100%; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 6px;
+      font-family: 'Inter', sans-serif; font-size: 13px; color: #1a1a2e;
+      background: #fff; outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .field input:focus, .field select:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+    .field input[readonly] { background: #f8fafc; color: #64748b; cursor: default; }
+    .field input[readonly]:focus { border-color: #cbd5e1; box-shadow: none; }
+    .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+    /* ── Symbol dropdown ── */
+    .symbol-wrap { position: relative; }
+    .symbol-clear { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 13px; display: none; }
+    .symbol-dropdown {
+      position: absolute; top: calc(100% + 3px); left: 0; right: 0;
+      background: #fff; border: 1px solid #cbd5e1; border-radius: 6px;
+      max-height: 200px; overflow-y: auto; z-index: 300;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12); display: none;
+    }
+    .symbol-dropdown.open { display: block; }
+    .sym-item { padding: 7px 12px; font-size: 12px; font-family: 'JetBrains Mono', monospace; cursor: pointer; color: #334155; border-bottom: 1px solid #f1f5f9; }
+    .sym-item:hover { background: #eff6ff; color: #1d4ed8; }
+    .sym-item.msg { color: #94a3b8; font-family: 'Inter', sans-serif; cursor: default; }
+    .sym-item.msg:hover { background: none; color: #94a3b8; }
+
+    /* ── Buttons ── */
+    .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+    .btn { padding: 9px 14px; font-size: 13px; font-weight: 600; font-family: 'Inter', sans-serif; border: none; border-radius: 7px; cursor: pointer; transition: all 0.15s; }
+    .btn-start { background: #16a34a; color: #fff; }
+    .btn-start:hover:not(:disabled) { background: #15803d; }
+    .btn-stop  { background: #dc2626; color: #fff; }
+    .btn-stop:hover:not(:disabled)  { background: #b91c1c; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .note { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 6px; padding: 7px 10px; font-size: 11px; color: #92400e; margin-bottom: 10px; }
+    .auto-badge { font-size: 10px; background: #dbeafe; color: #1d4ed8; padding: 1px 5px; border-radius: 3px; font-weight: 600; }
+
+    /* ── Stats grid ── */
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+    .stat-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; }
+    .stat-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: #94a3b8; margin-bottom: 4px; }
+    .stat-value { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 500; color: #1a1a2e; }
+    .stat-value.green  { color: #16a34a; }
+    .stat-value.red    { color: #dc2626; }
+    .stat-value.blue   { color: #2563eb; }
+    .stat-value.orange { color: #d97706; }
+
+    /* ── PnL Stats row ── */
+    .pnl-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+    .pnl-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; }
+    .pnl-positive { border-top: 3px solid #16a34a; }
+    .pnl-negative { border-top: 3px solid #dc2626; }
+    .pnl-neutral  { border-top: 3px solid #2563eb; }
+
+    /* ── Grid visual ── */
+    .grid-levels { display: flex; flex-direction: column; gap: 3px; }
+    .level-row { display: flex; align-items: center; gap: 8px; }
+    .level-label { width: 58px; text-align: right; font-size: 10px; font-weight: 600; text-transform: uppercase; flex-shrink: 0; }
+    .level-bar { flex: 1; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+    .sell-bar  { background: #fef2f2; border-left: 3px solid #ef4444; color: #dc2626; }
+    .price-bar { background: #eff6ff; border-left: 3px solid #3b82f6; color: #1d4ed8; font-weight: 600; }
+    .buy-bar   { background: #f0fdf4; border-left: 3px solid #22c55e; color: #16a34a; }
+    .level-tag { font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 700; letter-spacing: 0.4px; }
+    .tag-grid   { background: #dbeafe; color: #1d4ed8; }
+    .tag-target { background: #fef3c7; color: #92400e; }
+
+    /* ── Report Panel ── */
+    .report-tabs { display: flex; gap: 4px; }
+    .tab-btn {
+      padding: 4px 10px; font-size: 11px; font-weight: 600; font-family: 'Inter', sans-serif;
+      border: 1px solid #cbd5e1; border-radius: 5px; cursor: pointer;
+      background: #fff; color: #64748b; transition: all 0.15s;
+    }
+    .tab-btn.active { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
+    .custom-date-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end; margin-top: 10px; display: none; }
+    .custom-date-row.visible { display: grid; }
+    .custom-date-row input[type="date"] { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; font-family: 'Inter', sans-serif; outline: none; }
+    .btn-apply { padding: 6px 12px; font-size: 12px; font-weight: 600; background: #1a1a2e; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+
+    /* Report summary cards */
+    .report-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 12px 0; }
+    .rep-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 7px; padding: 10px 12px; }
+    .rep-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: #94a3b8; margin-bottom: 3px; }
+    .rep-value { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 500; }
+    .rep-value.pos { color: #16a34a; }
+    .rep-value.neg { color: #dc2626; }
+
+    /* ── Tables ── */
+    .table-wrap { overflow-x: auto; max-height: 200px; overflow-y: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    thead th { background: #f8fafc; padding: 7px 10px; text-align: left; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; position: sticky; top: 0; border-bottom: 1px solid #e2e8f0; }
+    tbody tr { border-bottom: 1px solid #f1f5f9; }
+    tbody tr:hover { background: #f8fafc; }
+    tbody td { padding: 6px 10px; font-family: 'JetBrains Mono', monospace; color: #334155; }
+    .sell-text { color: #dc2626; font-weight: 600; }
+    .buy-text  { color: #16a34a; font-weight: 600; }
+    .pos-text  { color: #16a34a; }
+    .neg-text  { color: #dc2626; }
+    .empty-td  { text-align: center; color: #94a3b8; font-family: 'Inter', sans-serif; padding: 16px; }
+
+    /* ── Log feed ── */
+    .log-feed { max-height: 160px; overflow-y: auto; padding: 2px 0; }
+    .log-line { display: flex; gap: 10px; padding: 3px 0; border-bottom: 1px solid #f1f5f9; }
+    .log-time { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #94a3b8; flex-shrink: 0; }
+    .log-text { font-size: 12px; color: #475569; }
+    .log-text.success { color: #16a34a; }
+    .log-text.error   { color: #dc2626; }
+    .log-text.warn    { color: #d97706; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────────── -->
+<div class="header">
+  <div class="header-logo">Grid<span>Bot</span></div>
+  <div class="header-symbol" id="headerSymbol">No symbol</div>
+  <div class="status-badge">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText">OFFLINE</span>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- ══ LEFT: Config ══════════════════════════════════════════ -->
+  <div style="display:flex;flex-direction:column;gap:12px;">
+    <div class="card">
+      <div class="card-header">Bot Configuration</div>
+      <div class="card-body">
+        <div class="note">⚠ API keys are read from your .env file — not entered here.</div>
+
+        <div class="section-title">Exchange</div>
+        <div class="field">
+          <label>Price Source</label>
+          <select id="priceSource" onchange="onSourceChange()">
+            <option value="binance_spot">Binance Spot</option>
+            <option value="binance_futures">Binance Futures (USDT-M)</option>
+            <option value="binance_coinm">Binance Coin-M</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Exchange (auto)</label>
+          <input type="text" id="exchangeName" value="Binance Spot" readonly/>
+        </div>
+        <div class="field">
+          <label>Symbol</label>
+          <div class="symbol-wrap" id="symbolWrap">
+            <input type="text" id="symbolInput" placeholder="Type to search..." autocomplete="off"
+                   oninput="filterSymbols()" onfocus="openDropdown()"/>
+            <button class="symbol-clear" id="symbolClear" onclick="clearSymbol()">✕</button>
+            <div class="symbol-dropdown" id="symbolDropdown">
+              <div class="sym-item msg">Select a price source first...</div>
+            </div>
+          </div>
+        </div>
+
+
+        <div class="section-title">Grid Parameters</div>
+        <div class="field">
+          <label>Distance ($)</label>
+          <input type="number" id="distance" placeholder="e.g. 10" step="0.01" oninput="previewLimits()"/>
+        </div>
+        <div class="row-2">
+          <div class="field"><label>Sell Spacing ($)</label><input type="number" id="avgSellSpacing" placeholder="e.g. 1" step="0.01"/></div>
+          <div class="field"><label>Buy Spacing ($)</label><input type="number" id="avgBuySpacing" placeholder="e.g. 1" step="0.01"/></div>
+        </div>
+        <div class="field"><label>Target Spread ($)</label><input type="number" id="targetSpread" placeholder="e.g. 0.5" step="0.01"/></div>
+        <div class="field"><label>Quantity Per Step</label><input type="number" id="qtyPerStep" placeholder="e.g. 0.1" step="0.001"/></div>
+
+        <div class="section-title">Futures Hedge <span style="font-size:9px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:3px;font-weight:700;margin-left:4px;">OPTIONAL</span></div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;font-weight:600;color:#374151;">
+            <div id="hedgeToggleWrap" onclick="toggleHedge()" style="width:40px;height:22px;border-radius:11px;background:#e2e8f0;cursor:pointer;position:relative;transition:background .2s;">
+              <div id="hedgeToggleThumb" style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.2);"></div>
+            </div>
+            Enable Futures Hedge
+          </label>
+        </div>
+        <div id="hedgeFields" style="display:none;">
+          <div class="field">
+            <label>Hedge % of Spot Inventory</label>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input type="range" id="hedgePct" min="50" max="100" step="5" value="80"
+                style="flex:1;" oninput="document.getElementById('hedgePctVal').textContent=this.value+'%'"/>
+              <span id="hedgePctVal" style="font-weight:700;color:#2563eb;min-width:36px;">80%</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;margin-top:2px;">
+              <span>50%</span><span>60%</span><span>70%</span><span>80%</span><span>90%</span><span>100%</span>
+            </div>
+          </div>
+          <div class="field" style="margin-top:6px;">
+            <label>Rebalance Threshold (SOL)</label>
+            <input type="number" id="hedgeThreshold" value="1" min="0.5" step="0.5"
+              placeholder="e.g. 1" style="width:100%;"/>
+            <div style="font-size:10px;color:#94a3b8;margin-top:2px;">
+              Only rebalance futures when diff ≥ this value. Higher = fewer trades & fees.
+            </div>
+          </div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:-4px;margin-bottom:8px;">
+            ⚡ Requires FUTURES_API_KEY in .env
+          </div>
+        </div>
+
+        <div class="section-title">Safety Limits <span class="auto-badge">AUTO</span></div>
+        <div class="row-2">
+          <div class="field"><label>Upper Limit</label><input type="text" id="upperLimitPreview" readonly placeholder="Entry + Distance"/></div>
+          <div class="field"><label>Lower Limit</label><input type="text" id="lowerLimitPreview" readonly placeholder="Entry − Distance"/></div>
+        </div>
+        <div style="font-size:10px;color:#94a3b8;margin-top:-4px;margin-bottom:8px;">Auto-set from live price ± distance on start.</div>
+
+        <div class="btn-row">
+          <button class="btn btn-start" id="startBtn" onclick="startBot()">▶ Start Bot</button>
+          <button class="btn btn-stop"  id="stopBtn"  onclick="stopBot()" disabled>■ Stop Bot</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ RIGHT: Live Data ══════════════════════════════════════ -->
+  <div style="display:flex;flex-direction:column;gap:12px;">
+
+    <!-- Account Overview -->
+    <div class="card" style="padding:0;">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>📊 Account Overview</span>
+        <button onclick="refreshAccountPnl()" id="acctRefreshBtn"
+          style="font-size:10px;padding:2px 10px;border-radius:4px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;color:#374151;">
+          ↻ Refresh
+        </button>
+      </div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;">
+          <div class="pnl-card pnl-neutral">
+            <div class="stat-label">Spot Balance (FDUSD)</div>
+            <div class="stat-value blue" id="acctSpotUsdt">—</div>
+          </div>
+          <div class="pnl-card pnl-neutral">
+            <div class="stat-label">Spot SOL Value</div>
+            <div class="stat-value" id="acctSpotSol">—</div>
+          </div>
+          <div class="pnl-card pnl-neutral">
+            <div class="stat-label">Futures Balance</div>
+            <div class="stat-value" id="acctFutBal">—</div>
+          </div>
+          <div class="pnl-card pnl-neutral">
+            <div class="stat-label">Futures Unrealized PnL</div>
+            <div class="stat-value" id="acctFutPnl">—</div>
+          </div>
+          <div class="pnl-card pnl-neutral" style="border-top:3px solid #2563eb;">
+            <div class="stat-label">Total Portfolio ($)</div>
+            <div class="stat-value blue" id="acctTotal" style="font-size:1.3em;font-weight:800;">—</div>
+          </div>
+        </div>
+        <div style="font-size:10px;color:#94a3b8;margin-top:6px;" id="acctLastUpdated">Not loaded yet — click Refresh</div>
+      </div>
+    </div>
+
+    <!-- Price / Limit Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Live Price</div>
+        <div class="stat-value green" id="livePrice">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Entry Price</div>
+        <div class="stat-value blue" id="entryPriceStat">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Upper Limit</div>
+        <div class="stat-value red" id="upperLimitStat">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Lower Limit</div>
+        <div class="stat-value green" id="lowerLimitStat">—</div>
+      </div>
+    </div>
+
+    <!-- PnL / Avg Stats -->
+    <div class="pnl-grid" style="grid-template-columns:repeat(6,1fr)">
+      <div class="pnl-card pnl-neutral">
+        <div class="stat-label">Live PnL (USDT)</div>
+        <div class="stat-value" id="livePnl">—</div>
+      </div>
+      <div class="pnl-card pnl-neutral">
+        <div class="stat-label">Round Trips</div>
+        <div class="stat-value" id="roundTripsCount">0</div>
+      </div>
+      <div class="pnl-card pnl-neutral">
+        <div class="stat-label">Total Buys Filled</div>
+        <div class="stat-value buy-text" id="totalBuys">0</div>
+      </div>
+      <div class="pnl-card pnl-neutral">
+        <div class="stat-label">Total Sells Filled</div>
+        <div class="stat-value sell-text" id="totalSells">0</div>
+      </div>
+      <div class="pnl-card pnl-neutral">
+        <div class="stat-label">Buy Average</div>
+        <div class="stat-value blue" id="buyAvg">—</div>
+      </div>
+      <div class="pnl-card pnl-neutral">
+        <div class="stat-label">Sell Average</div>
+        <div class="stat-value orange" id="sellAvg">—</div>
+      </div>
+    </div>
+
+    <!-- Grid Visual + Orders (side by side) -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+
+      <div class="card">
+        <div class="card-header">Live Order Grid</div>
+        <div class="card-body">
+          <div class="grid-levels" id="gridVisual">
+            <div style="color:#94a3b8;font-size:12px;padding:4px 0;">Start bot to see grid...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          Open Orders
+          <div style="display:flex;gap:6px;align-items:center;">
+            <span style="font-size:10px;background:#dcfce7;color:#16a34a;padding:1px 6px;border-radius:3px;font-weight:700;">E=Entry</span>
+            <span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:3px;font-weight:700;">T=Target</span>
+            <span id="orderBadge" style="background:#dbeafe;color:#1d4ed8;font-size:10px;padding:1px 7px;border-radius:10px;font-weight:700;">0</span>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Type</th><th>Side</th><th>Price</th><th>Qty</th></tr></thead>
+            <tbody id="ordersBody"><tr><td colspan="4" class="empty-td">No open orders</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── REPORT PANEL ── -->
+    <div class="card">
+      <div class="card-header">
+        PnL Report
+        <div class="report-tabs">
+          <button class="tab-btn active" onclick="setReportPeriod('24h',this)">24H</button>
+          <button class="tab-btn" onclick="setReportPeriod('7d',this)">7 Days</button>
+          <button class="tab-btn" onclick="setReportPeriod('30d',this)">30 Days</button>
+          <button class="tab-btn" onclick="setReportPeriod('custom',this)">Custom</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <!-- Custom date range row -->
+        <div class="custom-date-row" id="customDateRow">
+          <div class="field" style="margin:0"><label>From</label><input type="date" id="fromDate"/></div>
+          <div class="field" style="margin:0"><label>To</label><input type="date" id="toDate"/></div>
+          <button class="btn-apply" onclick="loadReport()">Apply</button>
+        </div>
+
+        <!-- Summary cards -->
+        <div class="report-summary" id="reportSummary" style="grid-template-columns:repeat(6,1fr)">
+          <div class="rep-card"><div class="rep-label">Total PnL</div><div class="rep-value" id="rPnl">—</div></div>
+          <div class="rep-card"><div class="rep-label">Round Trips</div><div class="rep-value" id="rCount">—</div></div>
+          <div class="rep-card"><div class="rep-label">PnL per RT</div><div class="rep-value" id="rPerRt" style="color:#16a34a">—</div></div>
+          <div class="rep-card"><div class="rep-label">Buys Filled</div><div class="rep-value buy-text" id="rBuys">—</div></div>
+          <div class="rep-card"><div class="rep-label">Sells Filled</div><div class="rep-value sell-text" id="rSells">—</div></div>
+          <div class="rep-card"><div class="rep-label">Win Rate</div><div class="rep-value" id="rWinRate">—</div></div>
+        </div>
+
+        <!-- Round trip table -->
+        <div class="table-wrap" style="max-height:180px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Open Side</th>
+                <th>Buy Price</th>
+                <th>Sell Price</th>
+                <th>Qty</th>
+                <th>PnL (USDT)</th>
+                <th>Duration</th>
+                <th>Closed At</th>
+              </tr>
+            </thead>
+            <tbody id="rtBody"><tr><td colspan="7" class="empty-td">No round trips yet</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hedge Panel -->
+    <div class="card" id="hedgeCard" style="display:none;">
+      <div class="card-header">
+        🛡 Futures Hedge
+        <span id="hedgeStatusBadge" style="font-size:10px;padding:2px 8px;border-radius:4px;background:#dcfce7;color:#16a34a;font-weight:700;">ACTIVE</span>
+      </div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px;">
+          <div class="pnl-card pnl-neutral">
+            <div class="stat-label">Spot Inventory</div>
+            <div class="stat-value blue" id="hSpot">—</div>
+          </div>
+          <div class="pnl-card pnl-neutral">
+            <div class="stat-label">Current Short</div>
+            <div class="stat-value sell-text" id="hShort">—</div>
+          </div>
+          <div class="pnl-card pnl-neutral">
+            <div class="stat-label">Target Short (80%)</div>
+            <div class="stat-value orange" id="hTarget">—</div>
+          </div>
+          <div class="pnl-card pnl-neutral">
+            <div class="stat-label">Difference</div>
+            <div class="stat-value" id="hDiff">—</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:#64748b;padding:4px 0 2px;">
+          <span style="margin-right:16px;">⚡ Rebalances when diff ≥ 1 SOL only</span>
+          <span id="hLastCheck">Last check: —</span>
+          <span id="hLastRebalance" style="margin-left:16px;">Last rebalance: —</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Activity Log -->
+    <div class="card">
+      <div class="card-header">Activity Log</div>
+      <div class="card-body" style="padding:8px 14px;">
+        <div class="log-feed" id="logFeed">
+          <div class="log-line"><span class="log-time">--:--:--</span><span class="log-text">Waiting for bot...</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end right -->
+</div><!-- end page -->
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════════════
+let allSymbols     = [];
+let selectedSymbol = "";
+let symbolsLoaded  = false;
+let currentPeriod  = "24h";
+
+// ══════════════════════════════════════════════════════════════
+//  WEBSOCKET
+// ══════════════════════════════════════════════════════════════
+// Auto-use wss:// on Railway (HTTPS) and ws:// on localhost (HTTP)
+const wsProtocol = location.protocol === "https:" ? "wss:" : "ws:";
+const ws = new WebSocket(`${wsProtocol}//${location.host}`);
+ws.onmessage = (e) => {
+  const msg = JSON.parse(e.data);
+  if (msg.type === "state") renderState(msg.data);
+  if (msg.type === "log")   prependLog(msg.data);
+};
+
+// ══════════════════════════════════════════════════════════════
+//  SYMBOL DROPDOWN
+// ══════════════════════════════════════════════════════════════
+async function onSourceChange() {
+  const source = document.getElementById("priceSource").value;
+  const names  = { binance_spot: "Binance Spot", binance_futures: "Binance USDT-M Futures", binance_coinm: "Binance Coin-M Futures" };
+  document.getElementById("exchangeName").value = names[source];
+  selectedSymbol = "";
+  document.getElementById("symbolInput").value = "";
+  document.getElementById("symbolClear").style.display = "none";
+  document.getElementById("headerSymbol").textContent = "No symbol";
+  await loadSymbols(source);
+}
+
+async function loadSymbols(source) {
+  symbolsLoaded = false; allSymbols = [];
+  const dd = document.getElementById("symbolDropdown");
+  dd.innerHTML = `<div class="sym-item msg">Loading symbols from Binance...</div>`;
+
+  try {
+    // ── Fetch directly from Binance in the browser ──────────────
+    // This uses YOUR device's IP (UAE) — not Railway's US server
+    // So Binance 451 geo-block does NOT apply here
+    let url, parseFunc;
+
+    if (source === "binance_futures") {
+      // USDT-M Futures
+      url = "https://fapi.binance.com/fapi/v1/exchangeInfo";
+      parseFunc = (data) => data.symbols
+        .filter(s => s.status === "TRADING")
+        .map(s => ({ ccxt: s.baseAsset + "/" + s.quoteAsset + ":" + s.quoteAsset, native: s.symbol }))
+        .sort((a,b) => a.native.localeCompare(b.native));
+
+    } else if (source === "binance_coinm") {
+      // Coin-M Futures
+      url = "https://dapi.binance.com/dapi/v1/exchangeInfo";
+      parseFunc = (data) => data.symbols
+        .filter(s => s.contractStatus === "TRADING")
+        .map(s => ({ ccxt: s.baseAsset + "/USD:" + s.baseAsset, native: s.symbol }))
+        .sort((a,b) => a.native.localeCompare(b.native));
+
+    } else {
+      // Spot
+      url = "https://api.binance.com/api/v3/exchangeInfo";
+      parseFunc = (data) => data.symbols
+        .filter(s => s.status === "TRADING")
+        .map(s => ({ ccxt: s.baseAsset + "/" + s.quoteAsset, native: s.symbol }))
+        .sort((a,b) => a.native.localeCompare(b.native));
+    }
+
+    const res  = await fetch(url);
+    if (!res.ok) throw new Error(`Binance returned ${res.status}`);
+    const data = await res.json();
+
+    allSymbols    = parseFunc(data);
+    symbolsLoaded = true;
+    renderDropdown(allSymbols.slice(0, 80));
+    document.getElementById("symbolInput").placeholder = `Search ${allSymbols.length} symbols...`;
+
+  } catch(err) {
+    dd.innerHTML = `<div class="sym-item msg">Error loading symbols: ${err.message}</div>`;
+    console.error("Symbol load error:", err);
+  }
+}
+
+function filterSymbols() {
+  const q = document.getElementById("symbolInput").value.toUpperCase().trim();
+  document.getElementById("symbolClear").style.display = q ? "block" : "none";
+  if (!symbolsLoaded) return;
+  openDropdown();
+  const f = q ? allSymbols.filter(s => s.ccxt.toUpperCase().includes(q) || s.native.toUpperCase().includes(q)).slice(0,100) : allSymbols.slice(0,80);
+  renderDropdown(f);
+}
+
+function renderDropdown(symbols) {
+  const dd = document.getElementById("symbolDropdown");
+  if (!symbols.length) { dd.innerHTML = `<div class="sym-item msg">No symbols found</div>`; return; }
+  dd.innerHTML = symbols.map(s => {
+    const safe = s.ccxt.replace(/'/g,"\\'");
+    const extra = s.native !== s.ccxt ? `<span style="color:#94a3b8;margin-left:6px;font-size:10px">${s.native}</span>` : "";
+    return `<div class="sym-item" onclick="selectSymbol('${safe}','${s.native}')">${s.ccxt}${extra}</div>`;
+  }).join("");
+}
+
+function selectSymbol(ccxt, native) {
+  selectedSymbol = ccxt;
+  const display  = native && native !== ccxt ? `${native}  (${ccxt})` : ccxt;
+  document.getElementById("symbolInput").value = display;
+  document.getElementById("symbolClear").style.display = "block";
+  document.getElementById("headerSymbol").textContent  = native || ccxt;
+  closeDropdown();
+}
+
+function clearSymbol() {
+  selectedSymbol = "";
+  document.getElementById("symbolInput").value = "";
+  document.getElementById("symbolClear").style.display = "none";
+  document.getElementById("headerSymbol").textContent  = "No symbol";
+  renderDropdown(allSymbols.slice(0,80));
+  openDropdown();
+}
+
+function openDropdown()  { document.getElementById("symbolDropdown").classList.add("open"); }
+function closeDropdown() { document.getElementById("symbolDropdown").classList.remove("open"); }
+document.addEventListener("click", e => { if (!document.getElementById("symbolWrap").contains(e.target)) closeDropdown(); });
+
+function previewLimits() {
+  const d = parseFloat(document.getElementById("distance").value);
+  if (isNaN(d)) { document.getElementById("upperLimitPreview").value = ""; document.getElementById("lowerLimitPreview").value = ""; return; }
+  document.getElementById("upperLimitPreview").value = `Live Price + $${d}`;
+  document.getElementById("lowerLimitPreview").value = `Live Price − $${d}`;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  START / STOP
+// ══════════════════════════════════════════════════════════════
+// ── Hedge toggle ─────────────────────────────────────────────────────────────
+let hedgeEnabled = false;
+function toggleHedge() {
+  hedgeEnabled = !hedgeEnabled;
+  const wrap  = document.getElementById("hedgeToggleWrap");
+  const thumb = document.getElementById("hedgeToggleThumb");
+  const fields = document.getElementById("hedgeFields");
+  wrap.style.background  = hedgeEnabled ? "#2563eb" : "#e2e8f0";
+  thumb.style.left       = hedgeEnabled ? "20px"    : "2px";
+  fields.style.display   = hedgeEnabled ? ""        : "none";
+}
+
+// ── Account PnL fetch ─────────────────────────────────────────────────────────
+async function refreshAccountPnl() {
+  const btn = document.getElementById("acctRefreshBtn");
+  btn.textContent = "Loading..."; btn.disabled = true;
+  try {
+    const res  = await fetch("/api/account");
+    const data = await res.json();
+    if (!res.ok) { document.getElementById("acctLastUpdated").textContent = "Error: " + data.error; return; }
+
+    const setEl = (id, val, cls) => {
+      const el = document.getElementById(id);
+      el.textContent = val;
+      if (cls) el.className = "stat-value " + cls;
+    };
+
+    setEl("acctSpotUsdt", data.spotFdusd    != null ? "$" + data.spotFdusd.toFixed(2)    : "—");
+    setEl("acctSpotSol",  data.spotSolValue != null ? "$" + data.spotSolValue.toFixed(2) : "—");
+    setEl("acctFutBal",   data.futuresBalance != null ? "$" + data.futuresBalance.toFixed(2) : "—");
+
+    const futPnl = data.futuresUnrealizedPnl;
+    const futPnlEl = document.getElementById("acctFutPnl");
+    futPnlEl.textContent = futPnl != null ? (futPnl >= 0 ? "+" : "") + "$" + futPnl.toFixed(2) : "—";
+    futPnlEl.className   = "stat-value " + (futPnl > 0 ? "green" : futPnl < 0 ? "red" : "");
+
+    const total = data.totalUsd;
+    const totalEl = document.getElementById("acctTotal");
+    totalEl.textContent = total != null ? "$" + total.toFixed(2) : "—";
+    totalEl.className   = "stat-value blue";
+
+    document.getElementById("acctLastUpdated").textContent = "Updated: " + new Date().toLocaleTimeString();
+  } catch(err) {
+    document.getElementById("acctLastUpdated").textContent = "Fetch error: " + err.message;
+  } finally {
+    btn.textContent = "↻ Refresh"; btn.disabled = false;
+  }
+}
+
+async function startBot() {
+  if (!selectedSymbol) { alert("Please select a symbol."); return; }
+  const distance = document.getElementById("distance").value;
+  if (!distance) { alert("Please enter Distance."); return; }
+
+  const btn = document.getElementById("startBtn");
+  btn.disabled = true; btn.textContent = "Connecting...";
+
+  try {
+    const res  = await fetch("/api/start", {
+      method:"POST", headers:{"Content-Type":"application/json","X-GB":"1"},
+      body: JSON.stringify({
+        priceSource   : document.getElementById("priceSource").value,
+        symbol        : selectedSymbol,
+        distance,
+        avgSellSpacing: document.getElementById("avgSellSpacing").value,
+        avgBuySpacing : document.getElementById("avgBuySpacing").value,
+        targetSpread  : document.getElementById("targetSpread").value,
+        qtyPerStep    : document.getElementById("qtyPerStep").value,
+        hedgeEnabled      : hedgeEnabled,
+        hedgePct          : hedgeEnabled ? parseFloat(document.getElementById("hedgePct").value) : 0,
+        hedgeThreshold    : hedgeEnabled ? parseFloat(document.getElementById("hedgeThreshold").value) || 1 : 1,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert("Error: " + data.error);
+      btn.disabled = false; btn.textContent = "▶ Start Bot";
+    } else {
+      document.getElementById("upperLimitPreview").value = "$" + data.upperLimit;
+      document.getElementById("lowerLimitPreview").value = "$" + data.lowerLimit;
+      document.getElementById("stopBtn").disabled = false;
+      loadReport();
+    }
+  } catch(err) {
+    alert("Network error: " + err.message);
+    btn.disabled = false; btn.textContent = "▶ Start Bot";
+  }
+}
+
+async function stopBot() {
+  document.getElementById("stopBtn").disabled = true;
+  try {
+    await fetch("/api/stop", { method:"POST", headers:{"X-GB":"1"} });
+    document.getElementById("startBtn").disabled = false;
+    document.getElementById("startBtn").textContent = "▶ Start Bot";
+  } catch(err) { alert(err.message); }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RENDER STATE (WebSocket updates)
+// ══════════════════════════════════════════════════════════════
+function renderState(state) {
+  // Status
+  const dot = document.getElementById("statusDot");
+  const txt = document.getElementById("statusText");
+  if (state.running) {
+    dot.className = "status-dot live"; txt.textContent = "LIVE"; txt.style.color = "#22c55e";
+    document.getElementById("startBtn").disabled = true; document.getElementById("startBtn").textContent = "▶ Start Bot";
+    document.getElementById("stopBtn").disabled = false;
+  } else {
+    dot.className = "status-dot stopped"; txt.textContent = "STOPPED"; txt.style.color = "#ef4444";
+    document.getElementById("startBtn").disabled = false; document.getElementById("startBtn").textContent = "▶ Start Bot";
+    document.getElementById("stopBtn").disabled = true;
+  }
+
+  // Price stats
+  if (state.lastPrice)  document.getElementById("livePrice").textContent      = "$" + state.lastPrice.toFixed(4);
+  if (state.entryPrice) document.getElementById("entryPriceStat").textContent = "$" + state.entryPrice.toFixed(4);
+  if (state.upperLimit) { document.getElementById("upperLimitStat").textContent = "$" + state.upperLimit.toFixed(4); document.getElementById("upperLimitPreview").value = "$" + state.upperLimit.toFixed(4); }
+  if (state.lowerLimit) { document.getElementById("lowerLimitStat").textContent = "$" + state.lowerLimit.toFixed(4); document.getElementById("lowerLimitPreview").value = "$" + state.lowerLimit.toFixed(4); }
+
+  // PnL stats
+  if (state.stats) {
+    const s  = state.stats;
+    const rt = s.totalRoundTrips ?? 0;   // min(buys, sells)
+    const pnl = s.totalPnl ?? 0;         // rt × targetSpread × qty
+
+    // Live PnL
+    const el = document.getElementById("livePnl");
+    el.textContent = (pnl >= 0 ? "+" : "") + pnl.toFixed(4);
+    el.className   = "stat-value " + (pnl > 0 ? "green" : pnl < 0 ? "red" : "");
+
+    // Round trips — tooltip shows the formula
+    const rtEl = document.getElementById("roundTripsCount");
+    rtEl.textContent = rt;
+    rtEl.title = `min(buys ${s.totalBuys}, sells ${s.totalSells}) = ${rt}  ×  $${s.perRtPnl} per RT = $${pnl.toFixed(4)}`;
+
+    document.getElementById("totalBuys").textContent  = s.totalBuys  ?? 0;
+    document.getElementById("totalSells").textContent = s.totalSells ?? 0;
+    document.getElementById("buyAvg").textContent     = s.buyAvg  ? "$" + s.buyAvg.toFixed(4)  : "—";
+    document.getElementById("sellAvg").textContent    = s.sellAvg ? "$" + s.sellAvg.toFixed(4) : "—";
+  }
+
+  // Order badge + table
+  document.getElementById("orderBadge").textContent = state.openOrders.length;
+  renderOrdersTable(state.openOrders);
+
+  // Grid visual
+  renderGridVisual(state.openOrders, state.lastPrice);
+
+  // Hedge panel
+  if (state.hedge) {
+    const h = state.hedge;
+    const card = document.getElementById("hedgeCard");
+    if (h.enabled) {
+      card.style.display = "";
+      const diff    = parseFloat((h.targetShortQty - h.currentShortQty).toFixed(4));
+      const absDiff = Math.abs(diff);
+      const diffEl  = document.getElementById("hDiff");
+
+      document.getElementById("hSpot").textContent   = h.spotInventory.toFixed(4) + " SOL";
+      document.getElementById("hShort").textContent  = h.currentShortQty.toFixed(4) + " SOL";
+      document.getElementById("hTarget").textContent = h.targetShortQty.toFixed(4) + " SOL";
+      diffEl.textContent  = (diff >= 0 ? "+" : "") + diff.toFixed(4) + " SOL";
+      diffEl.className    = "stat-value " + (absDiff >= 1 ? (diff > 0 ? "sell-text" : "buy-text") : "");
+      diffEl.style.fontWeight = absDiff >= 1 ? "700" : "400";
+
+      if (h.lastCheckTs)     document.getElementById("hLastCheck").textContent     = "Last check: " + new Date(h.lastCheckTs).toLocaleTimeString();
+      if (h.lastRebalanceTs) document.getElementById("hLastRebalance").textContent = "Last rebalance: " + new Date(h.lastRebalanceTs).toLocaleTimeString();
+    } else {
+      card.style.display = "none";
+    }
+  }
+
+  // Refresh report on each state update
+  loadReport();
+
+  // Logs (initial load only)
+  if (state.logsRecent?.length) {
+    const feed = document.getElementById("logFeed");
+    if (feed.children.length <= 1 && feed.children[0]?.textContent.includes("Waiting")) {
+      feed.innerHTML = "";
+      state.logsRecent.forEach(e => feed.appendChild(makeLogEl(e)));
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  GRID VISUAL
+// ══════════════════════════════════════════════════════════════
+function renderGridVisual(orders, price) {
+  const el = document.getElementById("gridVisual");
+  if (!price) { el.innerHTML = `<div style="color:#94a3b8;font-size:12px">Start bot to see grid...</div>`; return; }
+  const sells = [...orders.filter(o=>o.side==="sell")].sort((a,b)=>b.price-a.price);
+  const buys  = [...orders.filter(o=>o.side==="buy") ].sort((a,b)=>b.price-a.price);
+  let html = "";
+  sells.slice(0,3).forEach((o,i) => {
+    const badge = o.type === "entry"
+      ? `<span style="font-size:9px;background:#fee2e2;color:#dc2626;padding:1px 5px;border-radius:3px;font-weight:700;">ENTRY</span>`
+      : `<span style="font-size:9px;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;font-weight:700;">TARGET</span>`;
+    html += `<div class="level-row"><span class="level-label" style="color:#ef4444">${["SELL 3","SELL 2","SELL 1"][i]}</span>
+    <div class="level-bar sell-bar"><span>SELL $${o.price.toFixed(4)} ×${o.qty}</span>${badge}</div></div>`;
+  });
+  html += `<div class="level-row"><span class="level-label" style="color:#2563eb">PRICE</span>
+  <div class="level-bar price-bar"><span>▶ $${price.toFixed(4)}</span><span style="font-size:10px;opacity:.5">LIVE</span></div></div>`;
+  buys.slice(0,3).forEach((o,i) => {
+    const badge = o.type === "entry"
+      ? `<span style="font-size:9px;background:#dcfce7;color:#16a34a;padding:1px 5px;border-radius:3px;font-weight:700;">ENTRY</span>`
+      : `<span style="font-size:9px;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;font-weight:700;">TARGET</span>`;
+    html += `<div class="level-row"><span class="level-label" style="color:#16a34a">${["BUY 1","BUY 2","BUY 3"][i]}</span>
+    <div class="level-bar buy-bar"><span>BUY $${o.price.toFixed(4)} ×${o.qty}</span>${badge}</div></div>`;
+  });
+  el.innerHTML = html;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  ORDERS TABLE
+// ══════════════════════════════════════════════════════════════
+function renderOrdersTable(orders) {
+  const tbody = document.getElementById("ordersBody");
+  if (!orders?.length) { tbody.innerHTML = `<tr><td colspan="4" class="empty-td">No open orders</td></tr>`; return; }
+
+  const sorted = [...orders].sort((a,b) => b.price - a.price);
+
+  tbody.innerHTML = sorted.map(o => {
+    const isEntry = o.type === "entry";
+    const isSell  = o.side === "sell";
+
+    // Apply background on every <td> — guarantees color even if CSS overrides <tr>
+    const cellBg  = isSell
+      ? "background:#fff0f0;"    // light red  for sell rows
+      : "background:#f0fff4;";   // light green for buy  rows
+
+    const typeBadge = isEntry
+      ? `<span style="display:inline-block;font-size:10px;background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:.4px;">ENTRY</span>`
+      : `<span style="display:inline-block;font-size:10px;background:#fef9c3;color:#854d0e;padding:2px 8px;border-radius:4px;font-weight:700;letter-spacing:.4px;">TARGET</span>`;
+
+    const sideText = isSell
+      ? `<b style="color:#dc2626;">SELL</b>`
+      : `<b style="color:#16a34a;">BUY</b>`;
+
+    return `<tr>
+      <td style="${cellBg}padding:6px 8px;">${typeBadge}</td>
+      <td style="${cellBg}padding:6px 8px;">${sideText}</td>
+      <td style="${cellBg}padding:6px 8px;font-weight:600;">$${o.price.toFixed(4)}</td>
+      <td style="${cellBg}padding:6px 8px;">${o.qty}</td>
+    </tr>`;
+  }).join("");
+}
+
+// ══════════════════════════════════════════════════════════════
+//  REPORT PANEL
+// ══════════════════════════════════════════════════════════════
+function setReportPeriod(period, btn) {
+  currentPeriod = period;
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  document.getElementById("customDateRow").className =
+    period === "custom" ? "custom-date-row visible" : "custom-date-row";
+  if (period !== "custom") loadReport();
+}
+
+async function loadReport() {
+  let url = `/api/report?period=${currentPeriod}`;
+
+  if (currentPeriod === "custom") {
+    const from = document.getElementById("fromDate").value;
+    const to   = document.getElementById("toDate").value;
+    if (!from || !to) return;
+    url += `&from=${new Date(from).getTime()}&to=${new Date(to).getTime() + 86400000}`;
+  }
+
+  try {
+    const res  = await fetch(url);
+    const data = await res.json();
+    renderReport(data);
+  } catch(err) { console.error("Report error:", err); }
+}
+
+function renderReport(data) {
+  const pnl      = data.pnl      || 0;
+  const rt       = data.count    || 0;
+  const perRtPnl = data.perRtPnl || 0;
+
+  // Total PnL
+  const pnlEl = document.getElementById("rPnl");
+  pnlEl.textContent = (pnl >= 0 ? "+" : "") + pnl.toFixed(4) + " USDT";
+  pnlEl.className   = "rep-value " + (pnl > 0 ? "pos" : pnl < 0 ? "neg" : "");
+
+  // Round trips = min(buys, sells) in period
+  const rtEl = document.getElementById("rCount");
+  rtEl.textContent = rt;
+  rtEl.title = `min(${data.periodBuys} buys, ${data.periodSells} sells) = ${rt}`;
+
+  document.getElementById("rPerRt").textContent  = perRtPnl ? `+$${perRtPnl.toFixed(4)}` : "—";
+  document.getElementById("rBuys").textContent   = data.periodBuys  ?? "—";
+  document.getElementById("rSells").textContent  = data.periodSells ?? "—";
+  document.getElementById("rWinRate").textContent = (data.winRate || 0) + "%";
+
+  // Round trip rows table
+  const tbody = document.getElementById("rtBody");
+  if (!data.roundTrips?.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-td">No round trips in this period</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = data.roundTrips.map((rt, i) => {
+    const dur       = formatDuration(rt.durationMs);
+    const closeTime = new Date(rt.closeTs).toLocaleTimeString();
+    const rowBg     = i % 2 === 0 ? "" : "background:#f8fafc;";
+    return `<tr style="${rowBg}">
+      <td class="${rt.openSide==="BUY"?"buy-text":"sell-text"}" style="font-weight:600">${rt.openSide}</td>
+      <td class="buy-text" style="font-weight:600">$${rt.buyPrice.toFixed(4)}</td>
+      <td class="sell-text" style="font-weight:600">$${rt.sellPrice.toFixed(4)}</td>
+      <td>${rt.qty}</td>
+      <td class="pos-text" style="font-weight:600">+${rt.pnl.toFixed(4)}</td>
+      <td style="color:#64748b">${dur}</td>
+      <td style="color:#64748b">${closeTime}</td>
+    </tr>`;
+  }).join("");
+}
+
+function formatDuration(ms) {
+  if (!ms || ms < 1000) return "<1s";
+  const s = Math.floor(ms/1000), m = Math.floor(s/60), h = Math.floor(m/60);
+  if (h > 0) return `${h}h ${m%60}m`;
+  if (m > 0) return `${m}m ${s%60}s`;
+  return `${s}s`;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  LOGS
+// ══════════════════════════════════════════════════════════════
+function prependLog(entry) {
+  const feed = document.getElementById("logFeed");
+  if (feed.children.length === 1 && feed.children[0].textContent.includes("Waiting")) feed.innerHTML = "";
+  feed.insertBefore(makeLogEl(entry), feed.firstChild);
+  if (feed.children.length > 100) feed.removeChild(feed.lastChild);
+}
+
+function makeLogEl(entry) {
+  const el = document.createElement("div");
+  el.className = "log-line";
+  el.innerHTML = `<span class="log-time">${new Date(entry.ts).toLocaleTimeString()}</span><span class="log-text ${entry.level}">${entry.msg}</span>`;
+  return el;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════════
+loadSymbols("binance_spot");
+loadReport();
+</script>
+</body>
+</html>
