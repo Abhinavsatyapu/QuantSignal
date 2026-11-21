@@ -110,7 +110,9 @@ async function load(which, into) {
   if (d.pending) { el.innerHTML = `<div class="card">${esc(d.message || "Loading…")}</div>`; return; }
   if (d.error && !views[which]) { el.innerHTML = `<div class="card">${esc(d.error)}</div>`; return; }
   el.innerHTML = views[which](d);
-  const lv = document.getElementById("src"); if (lv && into === "#app") { let t = document.getElementById("liveAt"); if (!t) { t = document.createElement("span"); t.id = "liveAt"; t.style.cssText = "margin-left:8px;color:#2fc27a;font-size:12px"; lv.after(t); } t.textContent = "● live · updated " + new Date().toLocaleTimeString(); }
+  const lv = document.getElementById("src"); if (lv && into === "#app") { let t = document.getElementById("liveAt"); if (!t) { t = document.createElement("span"); t.id = "liveAt"; t.style.cssText = "margin-left:8px;color:#2fc27a;font-size:12px"; lv.after(t); } const at = d.updatedAt ? Date.parse(d.updatedAt) : null, age = at ? (Date.now() - at) / 1000 : null;
+    t.style.color = age != null && age < 180 ? "#2fc27a" : "#e3a33d";
+    t.textContent = at ? `● ${age < 180 ? "live" : "delayed"} · data from ${new Date(at).toLocaleTimeString()} · page refreshes every 30 s` : "● no data time from the server"; }
   if (which === "swing") bindTabs();
 }
 function bindTabs() {
