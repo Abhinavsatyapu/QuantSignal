@@ -27,7 +27,7 @@ const okChart = c => c && Array.isArray(c.bars) && c.bars.length;
 const okOpt = o => o && o.spot > 0 && (o.calls || o.puts);
 
 async function refresh() {
-  if (state.data && Date.now() - state.at < 5 * 60e3) return state.data;
+  if (state.data && Date.now() - state.at < 60e3) return state.data;     // live: prices re-read every minute
   if (state.running) return state.running;
   state.running = (async () => {
     const [charts, opts, fear, curve, fredHy] = await Promise.all([

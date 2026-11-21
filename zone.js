@@ -311,7 +311,7 @@ function swing(b, g) {
 }
 
 // ---------- cache + scheduling ----------
-const cache = { credit: null, breadth: null, gamma: null, at: {}, err: {} }, TTL = { credit: 6 * 3600e3, breadth: 15 * 60e3, gamma: (hasAlpaca() ? 15 : 60) * 60e3 };
+const cache = { credit: null, breadth: null, gamma: null, at: {}, err: {} }, TTL = { credit: 6 * 3600e3, breadth: 15 * 60e3, gamma: 15 * 60e3 };
 const HOLD_MS = 10 * 60e3;
 const holdUntil = {};
 let booting = false, scheduled = false;

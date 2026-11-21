@@ -26,3 +26,9 @@ async function refreshActiveLegs(){if(optionState.refreshBusy||optionState.busy)
 $('#optionUnderlying').addEventListener('input',renderUnderlyingSuggestions);$('#loadOptionUniverse').onclick=loadAlpacaUnderlyings;$('#loadMoreOptionChain').onclick=()=>fetchOptionChain(true);loadPublicUnderlyings();
 
 async function refreshOptionData(){if(optionState.refreshCycleBusy)return;optionState.refreshCycleBusy=true;try{await fetchOptionChain();await refreshActiveLegs();}finally{optionState.refreshCycleBusy=false;optionState.nextFetch=Date.now()+30000;}}
+
+// Live data from this server (Alpaca keys on the server, or Nasdaq / Yahoo): nothing to enter in the page.
+(async function connectServerData(){try{const r=await fetch('/api/options/status',{cache:'no-store'}),s=await r.json();if(!s.live)return;optionState.key='server';optionState.secret='server';optionState.feed='indicative';optionState.stockFeed='iex';optionState.account='paper';
+$('#scenarioMode').value='live';$('#connectionStatus').textContent='Connected · '+s.source+' · refreshed every 30 s · no keys in the browser, no order access.';loadAlpacaUnderlyings();
+const go=()=>{if(!optionState.contracts.length&&!optionState.busy)fetchOptionChain();};if(location.pathname==='/options')go();document.querySelectorAll('[data-view="options"]').forEach(b=>b.addEventListener('click',()=>setTimeout(go,50)));
+$('#optionUnderlying').addEventListener('change',()=>{optionState.contracts=[];fetchOptionChain();});}catch(e){$('#connectionStatus').textContent='Live options data unavailable: '+e.message;}})();

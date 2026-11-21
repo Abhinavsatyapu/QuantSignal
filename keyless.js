@@ -155,7 +155,20 @@ async function yahooChart(symbol, range, interval) {
   throw last || new Error("Yahoo chart failed");
 }
 
+// Daily history is cached 15 min; the last price is overlaid from a live quote (cached 45 s) on every call.
 async function chart(symbol, range = "2y", interval = "1d") {
+  const base = await chartBase(symbol, range, interval);
+  if (interval !== "1d" || !base || !Array.isArray(base.bars) || !base.bars.length) return base;
+  try {
+    const q = await nasdaqInfo(symbol);
+    if (!(q.last > 0)) return base;
+    const bars = base.bars.slice(), lb = bars.at(-1);
+    if (q.day && q.day > lb.d) bars.push({ d: q.day, o: q.last, h: q.last, l: q.last, c: q.last, v: 0 });
+    else if (!q.day || q.day === lb.d) bars[bars.length - 1] = { ...lb, c: q.last, h: Math.max(lb.h ?? q.last, q.last), l: Math.min(lb.l ?? q.last, q.last) };
+    return { ...base, price: q.last, bars, quoteAt: new Date().toISOString() };
+  } catch { return base; }
+}
+async function chartBase(symbol, range, interval) {
   return cached("chart:" + symbol + ":" + range + ":" + interval, 15 * 60e3, async () => {
     const t0 = Date.now();
     try {
@@ -231,7 +244,7 @@ async function yahooOptions(symbol) {
   return { symbol, spot, expiry: block.expirationDate ? block.expirationDate * 1000 : null, calls: (block.calls || []).map(map).filter(x => x.strike > 0), puts: (block.puts || []).map(map).filter(x => x.strike > 0), source: "Yahoo options v7" };
 }
 async function options(symbol) {
-  return cached("opt:" + symbol, 15 * 60e3, async () => {
+  return cached("opt:" + symbol, 3 * 60e3, async () => {
     const t0 = Date.now();
     try {
       const o = await nasdaqOptions(symbol);
@@ -253,7 +266,7 @@ async function options(symbol) {
 }
 
 async function nasdaqInfo(symbol) {
-  return cached("nq:" + symbol, 5 * 60e3, async () => {
+  return cached("nq:" + symbol, 45e3, async () => {
     const t0 = Date.now();
     const classes = assetClasses(symbol);
     let last;

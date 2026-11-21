@@ -110,6 +110,7 @@ async function load(which, into) {
   if (d.pending) { el.innerHTML = `<div class="card">${esc(d.message || "Loading…")}</div>`; return; }
   if (d.error && !views[which]) { el.innerHTML = `<div class="card">${esc(d.error)}</div>`; return; }
   el.innerHTML = views[which](d);
+  const lv = document.getElementById("src"); if (lv && into === "#app") { let t = document.getElementById("liveAt"); if (!t) { t = document.createElement("span"); t.id = "liveAt"; t.style.cssText = "margin-left:8px;color:#2fc27a;font-size:12px"; lv.after(t); } t.textContent = "● live · updated " + new Date().toLocaleTimeString(); }
   if (which === "swing") bindTabs();
 }
 function bindTabs() {
@@ -124,11 +125,12 @@ function bindTabs() {
 if (page) {
   const tick = () => load(page, "#app").catch(e => { const el = document.getElementById("app"); if (el) el.innerHTML = `<div class="card">${esc(e.message)}</div>`; });
   tick();
-  setInterval(tick, 60000);
+  setInterval(() => { if (!document.hidden) tick(); }, 30000);           // live: re-read every 30 s
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
 }
 const stallEl = document.getElementById("stall");
 if (stallEl) {
   const tick = () => load("stall", "#stall").catch(e => { stallEl.innerHTML = `<div class="card">${esc(e.message)}</div>`; });
   tick();
-  setInterval(tick, 60000);
+  setInterval(() => { if (!document.hidden) tick(); }, 30000);
 }

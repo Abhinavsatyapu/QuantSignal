@@ -1,7 +1,7 @@
 // QuantSignal Terminal (ChatGPT version) behind a password.
 // ./site holds the ChatGPT site's own files, unchanged. Every /api/* request is passed through, unchanged, to the
 // ChatGPT backend (UPSTREAM), so pages behave exactly as on ChatGPT. Password: OWNER_PASSWORD (Render env var).
-const http = require("http"), { Readable } = require("stream"), zone = require("./zone"), books = require("./books"), dte = require("./dte-run"), portal = require("./portal-live"), keyless = require("./keyless"), omsMod = require("./oms/routes"), plannerChain = require("./planner-chain"), plannerMath = require("./site/planner-math.js"), fs = require("fs"), path = require("path"), crypto = require("crypto");
+const http = require("http"), { Readable } = require("stream"), zone = require("./zone"), books = require("./books"), dte = require("./dte-run"), portal = require("./portal-live"), keyless = require("./keyless"), omsMod = require("./oms/routes"), plannerChain = require("./planner-chain"), optionsLocal = require("./options-local"), plannerMath = require("./site/planner-math.js"), fs = require("fs"), path = require("path"), crypto = require("crypto");
 const oms = omsMod.create({ log: m => console.log(new Date().toISOString(), m) });
 const PORT = process.env.PORT || 3000, SITE = path.join(__dirname, "site");
 const PASSWORD = process.env.OWNER_PASSWORD || process.env.APP_PASSWORD || "";
@@ -259,6 +259,15 @@ http.createServer((req, res) => {
     if (url.searchParams.get("refresh") === "1") books.kick();
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     return res.end(JSON.stringify(books.snapshot()));
+  }
+  if (url.pathname === "/api/options/status") { res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }); return res.end(JSON.stringify(optionsLocal.status())); }
+  if (url.pathname === "/api/options" && req.method === "POST") {     // live chains for the Options Studio; browser keys are ignored
+    let body = ""; req.on("data", c => { body += c; if (body.length > 2e5) req.destroy(); });
+    return req.on("end", async () => {
+      try { const b = JSON.parse(body || "{}"); delete b.key; delete b.secret; const out = await optionsLocal.handle(b);
+        if (!out) { res.writeHead(400, { "Content-Type": "application/json" }); return res.end(JSON.stringify({ error: "This tool needs an OPRA options feed, which the server-side live data does not provide." })); }
+        res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }); res.end(JSON.stringify(out)); }
+      catch (e) { res.writeHead(502, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: e.message })); } });
   }
   if (url.pathname === "/api/planner/chain") {
     return plannerChain.chain(url.searchParams.get("symbol"), url.searchParams.get("expiry"))
