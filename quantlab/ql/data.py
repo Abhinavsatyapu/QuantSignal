@@ -179,14 +179,21 @@ class Universe:
         r = self.c.get(url, headers={"User-Agent": WIKI_UA}, timeout=25)
         r.raise_for_status()
         for t in pd.read_html(io.StringIO(r.text)):
-            cols = [str(c) for c in t.columns]
-            sc = next((c for c in sym_cols if c in cols), None)
+            if isinstance(t.columns, pd.MultiIndex):
+                t.columns = [" ".join(str(x) for x in c) for c in t.columns]
+            t.columns = [str(c).strip() for c in t.columns]
+            cols = list(t.columns)
+            low = {c.lower(): c for c in cols}
+            sc = next((low[k] for k in low if any(w.lower() in k for w in sym_cols)), None)
             if sc and len(t) > 80:
                 out = pd.DataFrame({"symbol": t[sc].astype(str).str.replace(".", "-", regex=False).str.strip()})
-                out["sector"] = t[sector_col].astype(str) if sector_col and sector_col in cols else None
-                name_col = next((c for c in ("Security", "Company") if c in cols), None)
-                out["name"] = t[name_col].astype(str) if name_col else ""
-                return out
+                out = out[out["symbol"].str.match(r"^[A-Z][A-Z0-9-]{0,6}$")]
+                secc = next((low[k] for k in low if "sector" in k and "sub" not in k), None)
+                out["sector"] = t.loc[out.index, secc].astype(str) if secc else None
+                name_col = next((low[k] for k in low if k in ("security", "company")), None)
+                out["name"] = t.loc[out.index, name_col].astype(str) if name_col else ""
+                if len(out) > 80:
+                    return out
         raise RuntimeError("constituent table not found")
 
     def refresh(self, nasdaq: Nasdaq, top_liquid: int = 100) -> dict:

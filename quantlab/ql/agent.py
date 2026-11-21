@@ -95,8 +95,8 @@ class Agent:
             stale = self._stale(syms, target)
             if stale:
                 self.state["phase"] = "data"
-                batch = stale[:40]
-                r = self.data.ensure(batch)
+                batch = stale[:60]
+                r = self.data.ensure(batch, workers=6)
                 ok = sum(1 for v in r.values() if v["status"] == "ok"); bad = len(r) - ok
                 self.log(f"daily bars: updated {ok}, failed {bad}, {max(len(stale) - len(batch), 0)} still to check (target session {target})")
                 return
