@@ -316,7 +316,9 @@ async function treasury() {
   return cached("ust", 6 * 3600e3, async () => {
     const t0 = Date.now();
     try {
-      const body = await fetchText("https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/202611?type=daily_treasury_yield_curve&field_tdr_date_value=2026&page&_format=csv", 20000, { Accept: "text/csv" });
+      const ym = d => d.toISOString().slice(0, 7).replace("-", ""), url = d => `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/all/${ym(d)}?type=daily_treasury_yield_curve&field_tdr_date_value_month=${ym(d)}&page&_format=csv`;
+      let body = await fetchText(url(new Date()));                          // current month; early in a month it can be empty
+      if (body.trim().split(/\r?\n/).filter(Boolean).length < 2) body = await fetchText(url(new Date(Date.now() - 20 * 864e5)));
       const lines = body.trim().split(/\r?\n/).filter(Boolean);
       const head = lines[0].split(",").map(s => s.replace(/^"|"$/g, ""));
       const last = lines[1].split(",").map(s => s.replace(/^"|"$/g, ""));
