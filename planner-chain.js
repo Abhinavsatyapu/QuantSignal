@@ -48,18 +48,26 @@ function nasdaqRows(sym, j) {
 async function fromNasdaq(sym, want) {
   let last;
   for (const a of K._assetClasses(sym)) {
-    try {
-      const base = `https://api.nasdaq.com/api/quote/${encodeURIComponent(sym)}/option-chain?assetclass=${a}`;
-      const j = await K._fetchJson(`${base}&limit=500&offset=0&fromdate=all&todate=undefined&excode=oprac&callput=callput&money=all&type=all`, 25000, { Accept: "application/json" });
-      let { spot, by } = nasdaqRows(sym, j);
-      const expiries = [...by.keys()].filter(d => d >= iso(Date.now() - 864e5)).sort(); if (!(spot > 0) || !expiries.length) { last = new Error(a + " chain empty"); continue; }
-      let expiry = want && by.has(want) ? want : expiries[0];
-      if (want && !by.has(want)) { const j2 = await K._fetchJson(`${base}&limit=500&offset=0&fromdate=${want}&todate=${want}&excode=oprac&callput=callput&money=all&type=all`, 25000, { Accept: "application/json" });
-        const r2 = nasdaqRows(sym, j2); if (r2.by.has(want)) { by = r2.by; expiry = want; } }
-      const b = by.get(expiry), T = Math.max((closeMs(expiry) - Date.now()) / 365 / 864e5, 1 / 365);
-      const fix = cp => r => K._withIv(r, spot, closeMs(expiry), cp);
-      return { symbol: sym, spot, expiry, expiries, calls: b.calls.filter(r => r.bid || r.ask || r.last).map(fix("C")), puts: b.puts.filter(r => r.bid || r.ask || r.last).map(fix("P")), source: "Nasdaq option chain", T };
-    } catch (e) { last = e; }
+    const base = `https://api.nasdaq.com/api/quote/${encodeURIComponent(sym)}/option-chain?assetclass=${a}`;
+    // the near-the-money request is the one Render can reach (same as the Zone Monitor); the wider ones are tried after
+    const urls = [0, 200, 400, 600].map(o => `${base}&limit=200&offset=${o}&money=at`).concat(`${base}&limit=500&offset=0&fromdate=all&todate=undefined&excode=oprac&callput=callput&money=all&type=all`);
+    let spot = null, by = new Map();
+    for (const u of urls) {
+      try { const r = nasdaqRows(sym, await K._fetchJson(u, 25000, { Accept: "application/json" })); if (r.spot > 0) spot = spot || r.spot;
+        for (const [d, v] of r.by) if (!by.has(d) || by.get(d).calls.length < v.calls.length) by.set(d, v);
+        const fresh = [...r.by.keys()].length; if (!fresh && spot > 0) break;                    // past the last page
+        if (spot > 0 && by.size >= 6 && (!want || by.has(want))) break; }
+      catch (e) { last = e; if (spot > 0) break; }
+    }
+    const expiries = [...by.keys()].filter(d => d >= iso(Date.now() - 864e5)).sort();
+    if (!(spot > 0) || !expiries.length) { last = last || new Error(a + " chain empty"); continue; }
+    let expiry = want && by.has(want) ? want : expiries[0];
+    if (want && !by.has(want)) {
+      try { const r2 = nasdaqRows(sym, await K._fetchJson(`${base}&limit=500&offset=0&fromdate=${want}&todate=${want}&excode=oprac&callput=callput&money=all&type=all`, 25000, { Accept: "application/json" }));
+        if (r2.by.has(want)) { by.set(want, r2.by.get(want)); expiry = want; if (!expiries.includes(want)) expiries.push(want); } } catch (e) { last = e; }
+    }
+    const bag = by.get(expiry), fix = cp => r => K._withIv(r, spot, closeMs(expiry), cp);
+    return { symbol: sym, spot, expiry, expiries: expiries.sort(), calls: bag.calls.filter(r => r.bid || r.ask || r.last).map(fix("C")), puts: bag.puts.filter(r => r.bid || r.ask || r.last).map(fix("P")), source: "Nasdaq option chain" };
   }
   throw last || new Error("Nasdaq chain empty");
 }
@@ -75,7 +83,7 @@ async function fromYahoo(sym, want) {
 async function chain(symbol, expiry) {
   const sym = String(symbol || "").trim().toUpperCase(); if (!/^[A-Z.]{1,6}$/.test(sym)) throw new Error("Enter a ticker like HOOD");
   const want = /^\d{4}-\d{2}-\d{2}$/.test(expiry || "") ? expiry : null, key = sym + "|" + (want || ""), hit = cache.get(key);
-  if (hit && Date.now() - hit.at < 60e3) return hit.v;
+  if (hit && Date.now() - hit.at < 20e3) return hit.v;     // 20 s: the page refreshes every 30 s
   const errs = [];
   for (const [name, fn] of [["alpaca", ALP.key && ALP.secret ? fromAlpaca : null], ["nasdaq", fromNasdaq], ["yahoo", fromYahoo]]) {
     if (!fn) continue;

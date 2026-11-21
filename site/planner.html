@@ -52,6 +52,11 @@ tr.pick{cursor:pointer}tr.pick:hover td{background:#f7f9fc}tr.on td{background:#
 .pill{display:inline-block;border:1px solid var(--line2);border-radius:6px;padding:1px 7px;font:600 12px var(--m);background:#f7f8fa;cursor:pointer}
 .status{font-size:13px;color:var(--ink2)}
 .err{color:var(--red)}
+table.chain td{cursor:default}table.chain td.q{cursor:pointer;color:var(--ink)}table.chain td.q:hover{background:#e7efff;outline:1px solid #b9cdf7}
+table.chain td.itm{background:#f6f8fb}table.chain td.k{font-weight:700;text-align:center;background:#eef1f5}table.chain tr.atm td.k{background:#ffe9c7}
+table.chain th.c{text-align:center;color:var(--green)}table.chain th.p{text-align:center;color:var(--red)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}.tabs button{border:1px solid var(--line2);background:#fff;border-radius:999px;padding:4px 11px;font:12.5px var(--m);cursor:pointer}.tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#aab1bd;margin-right:5px}.dot.on{background:var(--green);box-shadow:0 0 0 3px rgba(27,154,98,.18)}
 dialog{border:1px solid var(--line2);border-radius:12px;padding:18px;max-width:420px}dialog::backdrop{background:rgba(20,24,30,.35)}
 @media (max-width:1050px){.wrap{grid-template-columns:1fr}}
 @media (max-width:520px){.stats{grid-template-columns:1fr 1fr}.wrap{padding:12px}}
@@ -120,6 +125,14 @@ dialog{border:1px solid var(--line2);border-radius:12px;padding:18px;max-width:4
       <div class="tw" style="margin-top:8px"><table><thead><tr><th>Date</th><th class="n">DTE</th><th class="n">Mark at spot</th><th class="n">$/sh at spot</th><th>Profitable between</th><th class="n">Bleeds below</th><th class="n">Bleeds above</th><th class="n">Room down</th><th class="n">Room up</th><th class="n">Target reached at</th><th class="n">Best</th><th class="n" id="worstHead">Worst in ±2σ</th></tr></thead><tbody id="be"></tbody></table></div></section>
     <section><h3>Price movement</h3> <span class="note" id="mvNote"></span>
       <div class="tw" style="margin-top:8px"><table><thead><tr><th>Move</th><th class="n">Price</th><th class="n">Options</th><th class="n">Core hedge</th><th class="n">Options + hedge</th><th class="n">Grid inventory</th><th class="n">Adjustment</th><th class="n">Spread cost</th><th class="n">Net</th><th class="n">Shares</th></tr></thead><tbody id="mv"></tbody></table></div></section>
+    <section class="card" id="chainCard">
+      <div style="display:flex;gap:10px 16px;align-items:center;flex-wrap:wrap"><h3>Option chain</h3><span class="status" id="liveStat"><span class="dot"></span>not loaded</span><span style="flex:1"></span>
+        <label class="chk"><input type="checkbox" id="auto" checked> live · refresh every 30 s</label><label class="chk"><input type="checkbox" id="allK"> all strikes</label></div>
+      <div class="tabs" id="expTabs" role="tablist" aria-label="Expirations"></div>
+      <div class="tw" style="max-height:520px"><table class="chain"><thead><tr><th class="c" colspan="4">CALLS</th><th></th><th class="p" colspan="4">PUTS</th></tr>
+        <tr><th class="n">OI</th><th class="n">IV</th><th class="n">Bid</th><th class="n">Ask</th><th style="text-align:center">Strike</th><th class="n">Bid</th><th class="n">Ask</th><th class="n">IV</th><th class="n">OI</th></tr></thead><tbody id="chainBody"><tr><td colspan="9" class="dim">Load a chain.</td></tr></tbody></table></div>
+      <small class="dim" style="display:block;margin-top:6px">tap a <b>Bid</b> to sell (short leg) or an <b>Ask</b> to buy (long leg) on that expiry · legs are priced at the mid, like the rest of the planner · shaded = in the money</small>
+    </section>
     <section>
       <div class="tw legs"><table><thead><tr><th>Strike</th><th>Type</th><th>Expiration</th><th>S/L</th><th>Size</th><th>Price</th><th class="n">IV</th><th class="n">P&amp;L</th><th class="n">Delta</th><th class="n">Theor</th><th class="n">Bid</th><th class="n">Ask</th><th></th></tr></thead><tbody id="legs"></tbody></table></div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px"><button class="btn" id="add" type="button">＋ Add position</button><span class="pill" id="sname" style="cursor:default;font-family:var(--f);font-weight:500;padding:5px 10px">—</span></div>
@@ -135,7 +148,7 @@ const f2 = v => v == null || !Number.isFinite(v) ? '—' : (v < 0 ? '−' : '') 
 const sg = v => v == null || !Number.isFinite(v) ? '—' : (v > 0 ? '+' : '') + f2(v), cl = v => v > 0.005 ? 'pos' : v < -0.005 ? 'neg' : '';
 const store = { get(k, d) { try { const v = localStorage.getItem('planner.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } }, set(k, v) { try { localStorage.setItem('planner.' + k, JSON.stringify(v)); } catch {} } };
 const todayET = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
-let chain = null, chains = {}, legs = [], dir = 'bullish', M = null, markDate = null, pending = false, lines = { exp: true, mark: true, opt: false, grid: false, adj: false };
+let viewExp = null, lastRefresh = null, chain = null, chains = {}, legs = [], dir = 'bullish', M = null, markDate = null, pending = false, lines = { exp: true, mark: true, opt: false, grid: false, adj: false };
 
 async function getChain(sym, exp) {
   const k = sym + '|' + (exp || ''); if (chains[k]) return chains[k];
@@ -159,7 +172,7 @@ async function load() {
     $('#status').innerHTML = `<b>${esc(sym)}</b> spot <b>${f2(c.spot)}</b> · ${c.expiry} · ${PM.dayDiff(todayET(), c.expiry)} d · <span class="dim">${esc(c.source)}</span>`;
     if (changedSym || !legs.length) legs = example(); else legs = legs.map(l => ({ ...l, exp: l.exp === c.expiry || chains[sym + '|' + l.exp] ? l.exp : c.expiry }));
     for (const l of legs) { const q = quote(l.exp, l.cp, l.K); if (q) { l.bid = q.bid; l.ask = q.ask; if (!l.iv) l.iv = q.iv; } }
-    calc();
+    viewExp = c.expiry; lastRefresh = Date.now(); calc(); chainView();
   } catch (e) { $('#status').innerHTML = `<span class="err">${esc(e.message)}</span>`; }
   finally { $('#load').disabled = false; }
 }
@@ -216,7 +229,7 @@ function render() {
   // price movement for the chosen date
   $('#mvNote').textContent = `${markDate === m.today ? 'today' : markDate} · the mark split into its parts: options to model, core N × move from entry ${f2(m.entry)}, the ladder's inventory as rungs fill (no round trips), the adjustment, net of the spread cost · pick another date in the chart or the table above`;
   $('#mv').innerHTML = PM.moves(m, markDate).map(x => `<tr class="${x.spot ? 'spot' : ''}"><td>${esc(x.label)}</td><td class="n">${f2(x.price)}</td><td class="n ${cl(x.options)}">${f2(x.options)}</td><td class="n">${f2(x.core)}</td><td class="n ${cl(x.optHedge)}">${f2(x.optHedge)}</td><td class="n ${cl(x.grid)}">${f2(x.grid)}</td><td class="n">${f2(x.adj)}</td><td class="n neg">${f2(x.spread)}</td><td class="n ${cl(x.net)}"><b>${f2(x.net)}</b></td><td class="n">${x.shares > 0 ? '+' : ''}${x.shares}</td></tr>`).join('');
-  legsTable(); chart();
+  legsTable(); chart(); if (chain && $('#chainBody')) chainView();
 }
 function legsTable() {
   const S = M.spot, today = M.today, exps = chain.expiries;
@@ -286,6 +299,39 @@ function chart() {
     $('#hover').textContent = `price ${P.toFixed(2)} (${((P / m.spot - 1) * 100).toFixed(1)}%) · net at expiry ${f2(m.atExpiry(P))} · mark ${markDate === m.today ? 'now' : markDate} ${f2(m.mark(P, markDate))}`; };
   hit.onpointerleave = () => { cross.setAttribute('visibility', 'hidden'); $('#hover').textContent = ''; };
 }
+// ---- live chain table, one expiry at a time ----
+function chainView() {
+  if (!chain) return; const sym = chain.symbol, c = chains[sym + '|' + viewExp], S = M ? M.spot : chain.spot, today = todayET();
+  $('#expTabs').innerHTML = chain.expiries.map(d => `<button type="button" role="tab" aria-selected="${d === viewExp}" class="${d === viewExp ? 'on' : ''}" data-e="${d}">${d.slice(5)} · ${PM.dayDiff(today, d)}d</button>`).join('');
+  if (!c) { $('#chainBody').innerHTML = '<tr><td colspan="9" class="dim">Loading…</td></tr>'; return; }
+  const ks = [...new Set([...c.calls, ...c.puts].map(x => x.strike))].sort((a, b) => a - b), atm = ks.reduce((b, k) => Math.abs(k - S) < Math.abs(b - S) ? k : b, ks[0]);
+  const i0 = ks.indexOf(atm), shown = $('#allK').checked ? ks : ks.slice(Math.max(0, i0 - 12), i0 + 13);
+  const cell = (q, cp, side) => { const v = q && q[side]; return `<td class="n q${(cp === 'C' ? q && q.strike < S : q && q.strike > S) ? ' itm' : ''}" data-cp="${cp}" data-k="${q ? q.strike : ''}" data-side="${side === 'bid' ? -1 : 1}" title="${side === 'bid' ? 'sell' : 'buy'} ${cp === 'C' ? 'call' : 'put'}">${v > 0 ? v.toFixed(2) : '—'}</td>`; };
+  const iv = q => q && q.iv ? (q.iv * 100).toFixed(1) + '%' : '—', oi = q => q && q.oi != null ? q.oi.toLocaleString() : '—', itm = (q, cp) => q && (cp === 'C' ? q.strike < S : q.strike > S) ? ' itm' : '';
+  $('#chainBody').innerHTML = shown.map(k => { const C = c.calls.find(x => x.strike === k), P = c.puts.find(x => x.strike === k);
+    return `<tr class="${k === atm ? 'atm' : ''}"><td class="n${itm(C, 'C')}">${oi(C)}</td><td class="n${itm(C, 'C')}">${iv(C)}</td>${cell(C, 'C', 'bid')}${cell(C, 'C', 'ask')}<td class="k">${k}</td>${cell(P, 'P', 'bid')}${cell(P, 'P', 'ask')}<td class="n${itm(P, 'P')}">${iv(P)}</td><td class="n${itm(P, 'P')}">${oi(P)}</td></tr>`; }).join('') || '<tr><td colspan="9" class="dim">No strikes for this expiry.</td></tr>';
+  liveStat();
+}
+function liveStat() { const on = $('#auto').checked; $('#liveStat').innerHTML = `<span class="dot ${on ? 'on' : ''}"></span>${chain ? `${esc(chain.symbol)} spot <b>${f2(chain.spot)}</b> · updated ${lastRefresh ? new Date(lastRefresh).toLocaleTimeString() : '—'}${on ? '' : ' · paused'}` : 'not loaded'}`; }
+$('#expTabs').onclick = async e => { const b = e.target.closest('button[data-e]'); if (!b) return; viewExp = b.dataset.e; chainView();
+  try { await getChain(chain.symbol, viewExp); } catch (err) { $('#chainBody').innerHTML = `<tr><td colspan="9" class="err">${esc(err.message)}</td></tr>`; return; } chainView(); };
+$('#chainBody').onclick = e => { const td = e.target.closest('td.q'); if (!td || !td.dataset.k) return; const l = legFrom(td.dataset.cp, +td.dataset.k, +td.dataset.side, 1, viewExp); if (!l.price) return; legs.push(l); calc(); chainView(); };
+$('#allK').onchange = chainView; $('#auto').checked = store.get('auto', true); $('#auto').onchange = () => { store.set('auto', $('#auto').checked); liveStat(); };
+async function refreshLive() {
+  if (!chain || !$('#auto').checked || document.hidden) return;
+  const sym = chain.symbol, exps = [...new Set([chain.expiry, viewExp, ...legs.map(l => l.exp)])];
+  try {
+    for (const d of exps) delete chains[sym + '|' + d];
+    const got = await Promise.all(exps.map(d => getChain(sym, d).catch(() => null))), base = got[0];
+    if (base) chain = { ...chain, spot: base.spot, calls: base.calls, puts: base.puts, expiries: [...new Set([...chain.expiries, ...base.expiries])].sort(), source: base.source };
+    for (const l of legs) { const q = quote(l.exp, l.cp, l.K); if (q) { l.bid = q.bid; l.ask = q.ask; if (q.iv) l.iv = q.iv; } }
+    lastRefresh = Date.now();
+    $('#status').innerHTML = `<b>${esc(sym)}</b> spot <b>${f2(chain.spot)}</b> · ${chain.expiry} · ${PM.dayDiff(todayET(), chain.expiry)} d · <span class="dim">${esc(chain.source)}</span>`;
+    if ($('#live').checked || !pending) calc(); else legsTable();
+    chainView();
+  } catch {}
+}
+setInterval(refreshLive, 30000); document.addEventListener('visibilitychange', () => { if (!document.hidden && lastRefresh && Date.now() - lastRefresh > 30000) refreshLive(); });
 // controls
 $('#load').onclick = load; $('#sym').addEventListener('keydown', e => { if (e.key === 'Enter') { $('#exp').innerHTML = '<option value="">nearest</option>'; load(); } });
 $('#sym').addEventListener('change', () => { $('#exp').innerHTML = '<option value="">nearest</option>'; });
