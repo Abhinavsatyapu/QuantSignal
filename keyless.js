@@ -328,4 +328,4 @@ async function probe() {
 }
 function sources() { return { at: new Date().toISOString(), feeds: Object.values(feeds) }; }
 
-module.exports = { chart, options, nasdaqInfo, fearGreed, treasury, fred, probe, sources, _parseHist: parseHistRows, _parseExpiry: parseExpiryLabel, _cache: cache };
+module.exports = { _fetchJson: fetchJson, _yahooCrumb: yahooCrumb, _withIv: withIv, _num: num, _assetClasses: assetClasses, chart, options, nasdaqInfo, fearGreed, treasury, fred, probe, sources, _parseHist: parseHistRows, _parseExpiry: parseExpiryLabel, _cache: cache };

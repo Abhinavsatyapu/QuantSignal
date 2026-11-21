@@ -1,9 +1,304 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Structure Planner — paper</title><link rel="stylesheet" href="/live.css"></head>
-<body data-live="planner">
-<header class="top"><a href="/">Portal</a><h1>Structure Planner — paper</h1><span class="src" id="src"></span><span class="spacer"></span><a href="/zone">Gex</a><a href="/logout">Sign out</a></header>
-<main id="app"><div class="card">Reading Yahoo, Treasury, and CNN…</div></main>
-<p class="note" style="padding:0 16px 24px">Paper / read only. This page does not send an order.</p>
-<script src="/live.js"></script>
-</body></html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Structure Planner</title><meta name="theme-color" content="#f6f7f9">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Zilla+Slab:wght@600;700&display=swap" rel="stylesheet">
+<style>
+/* Structure Planner — the print's light layout: controls on the left, chart and tables on the right (one column on small screens). */
+:root{--bg:#f4f5f7;--card:#fff;--line:#dde1e7;--line2:#c9cfd8;--ink:#1d222b;--ink2:#4a5261;--muted:#7a8291;--brand:#b5650f;--red:#d6245a;--green:#1b9a62;--blue:#2f6fe0;--amber:#c98612;
+  --f:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;--m:"IBM Plex Mono",ui-monospace,Menlo,monospace;--h:"Zilla Slab",Georgia,serif;color-scheme:light}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 var(--f);-webkit-font-smoothing:antialiased}
+a{color:var(--blue);text-decoration:none}
+.top{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid var(--line);padding:10px 18px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+.top h1{margin:0;font:700 17px var(--h)}.top .sub{font:12px var(--m);color:var(--muted)}.top .sp{flex:1}
+button,select,input{font:14px var(--f);color:var(--ink)}
+.btn{border:1px solid var(--line2);background:#fff;border-radius:8px;padding:7px 12px;cursor:pointer;font-weight:600}
+.btn.pri{background:var(--brand);border-color:#8f4e0a;color:#fff}.btn.pri.pending{box-shadow:0 0 0 3px rgba(181,101,15,.3)}
+.btn.pub{border-color:var(--red);color:var(--red)}.btn.sm{font:12px var(--m);padding:3px 9px;font-weight:500}
+.chk{display:inline-flex;gap:6px;align-items:flex-start;font-size:13px;color:var(--ink2)}.field .chk{font:500 12px var(--m);letter-spacing:.06em;color:var(--ink)}.field .chk input{width:auto;margin-top:2px}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.wrap{display:grid;grid-template-columns:380px minmax(0,1fr);gap:22px;padding:18px;max-width:1500px;margin:0 auto;align-items:start}
+.col{display:grid;gap:16px;min-width:0}.col>*{min-width:0}
+h2{margin:0;font:700 21px var(--h)}h3{margin:0;font:700 16px var(--h);display:inline}
+.intro{color:var(--ink2);margin:6px 0 0}
+.lbl{display:block;font:500 11px var(--m);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.field input,.field select{width:100%;border:1px solid var(--line2);border-radius:8px;padding:8px 10px;background:#fff}
+.field small{display:block;color:var(--muted);font-size:12px;line-height:1.4;margin-top:5px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.verdict{border:1.5px solid var(--red)}.verdict.green{border-color:var(--green)}.verdict.amber{border-color:var(--amber)}
+.vtag{display:inline-block;font:700 15px var(--m);color:#fff;background:var(--red);padding:3px 9px;border-radius:4px}
+.verdict.green .vtag{background:var(--green)}.verdict.amber .vtag{background:var(--amber)}
+.verdict p{margin:6px 0 0;font-size:13.5px;color:var(--ink2)}.verdict .ml{color:var(--red)}.verdict small{display:block;margin-top:6px;color:var(--muted);font-size:12px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 14px}.stats .w{grid-column:1/-1}
+.stats>div>span{display:block;font-size:12px;color:var(--muted)}.stats b{font:500 16px var(--m)}.stats b span{font:inherit}
+.neg{color:var(--red)}.pos{color:var(--green)}.dim{color:var(--muted)}
+.legend{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:13px;margin-bottom:8px}.legend label{display:flex;gap:6px;align-items:center}
+.legend i{display:inline-block;width:16px;height:3px;border-radius:2px}
+svg text{font:10.5px var(--m);fill:#6b7381}
+.tw{overflow:auto;background:#fff;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font:13px var(--m);font-variant-numeric:tabular-nums}
+th{background:#eef1f5;color:var(--muted);font:500 10.5px var(--m);letter-spacing:.08em;text-transform:uppercase;text-align:left;padding:8px 9px;vertical-align:bottom}
+td{padding:7px 9px;border-top:1px solid #e9ecf0;white-space:nowrap}th.n,td.n{text-align:right}
+tr.pick{cursor:pointer}tr.pick:hover td{background:#f7f9fc}tr.on td{background:#eef3ff}tr.spot td{background:#eef1f5;font-weight:700}
+.note{color:var(--ink2);font-size:13px}.note b{color:var(--ink)}
+.legs select,.legs input{border:1px solid var(--line2);border-radius:7px;padding:6px 8px;background:#fff;font:13px var(--m)}
+.legs input{width:82px}.legs .tg{border:1px solid var(--line2);border-radius:7px;padding:6px 10px;font:600 13px var(--f);cursor:pointer;background:#f2f4f7;min-width:58px}
+.tg.long{background:var(--blue);border-color:var(--blue);color:#fff}.tg.short{background:#e5384f;border-color:#e5384f;color:#fff}
+.del{border:0;background:none;cursor:pointer;font-size:17px;color:#8a93a1}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden}.seg button{border:0;background:#fff;padding:7px 12px;font-weight:600;cursor:pointer}.seg .on{background:var(--brand);color:#fff}
+.pill{display:inline-block;border:1px solid var(--line2);border-radius:6px;padding:1px 7px;font:600 12px var(--m);background:#f7f8fa;cursor:pointer}
+.status{font-size:13px;color:var(--ink2)}
+.err{color:var(--red)}
+dialog{border:1px solid var(--line2);border-radius:12px;padding:18px;max-width:420px}dialog::backdrop{background:rgba(20,24,30,.35)}
+@media (max-width:1050px){.wrap{grid-template-columns:1fr}}
+@media (max-width:520px){.stats{grid-template-columns:1fr 1fr}.wrap{padding:12px}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div><h1>📐 Structure Planner</h1><div class="sub">grid + structure · never trades</div></div>
+  <button class="btn pri" id="recalc" type="button">Recalculate</button>
+  <label class="chk"><input type="checkbox" id="live"> recalc as I type</label>
+  <button class="btn pub" id="publish" type="button">Publish…</button>
+  <span class="sp"></span><a class="btn sm" href="/zone">zone</a><a class="btn sm" href="/">back</a>
+</header>
+<div class="wrap">
+  <div class="col">
+    <section>
+      <h2>Plan the whole position</h2>
+      <p class="intro">The option legs, the grid, and the Advantage Adjustment — and the payoff at expiry of all three together, with the mark curve by date. The dotted mark is the smaller model that matters before expiry: the option legs marked to model on the chosen date, the shares held from the start (core N + adjustment) and the ladder's inventory as rungs fill against the move, the ladder's round trips left out. Bold red = where that mark turns negative, bold green = the NET target and the price that reaches it. The Breakeven-by-date table says where that curve turns negative on each date to expiry, and the verdict whether today's spot has room to move. The grid line is the grid walked straight to each price; a chopping path's round trips are on top of it and not drawn.</p>
+    </section>
+    <section class="grid2">
+      <div class="field"><span class="lbl">Ticker</span><input id="sym" value="HOOD" autocomplete="off" style="text-transform:uppercase"></div>
+      <div class="field"><span class="lbl">Expiration (default)</span><select id="exp"><option value="">nearest</option></select></div>
+      <div style="grid-column:1/-1;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="btn pri" id="load" type="button">Load chain</button><span class="status" id="status">Load a chain to start.</span></div>
+    </section>
+    <section class="card verdict" id="verdict"><span class="dim">Load a chain to see the verdict.</span></section>
+    <section class="card stats" id="stats"></section>
+    <section class="card">
+      <h3 style="font:600 14px var(--f)">Spot &amp; shares</h3>
+      <div class="grid2" style="margin-top:10px">
+        <div class="field"><span class="lbl">Spot (underlying price)</span><input id="spot" type="number" step="any" placeholder="chain spot"><small id="spotNote">every curve, the breakevens, the verdict and the delta-neutral core re-price at this spot · blank = the chain's spot</small></div>
+        <div class="field"><span class="lbl">Net shares held (delta hedge + AA)</span><input id="netsh" type="number" step="1" placeholder="core N + AA"><small id="netNote">one number, signed + long / − short: the options' delta hedge plus the Advantage Adjustment · sets Core N to delta-neutral and the adjustment to the rest</small></div>
+      </div>
+    </section>
+    <section>
+      <h3>Grid structure</h3> <span class="dim">as on the config port</span>
+      <div class="card grid2" style="margin-top:8px">
+        <div class="field"><span class="lbl">Launch grid</span><label class="chk"><input type="checkbox" id="g_launch" checked> LAY THE LADDER</label><small>unchecked = the structure and the core shares only: no rung is ever placed</small></div>
+        <div class="field"><span class="lbl">Direction</span><div class="seg" id="g_dir"><button type="button" data-d="bullish" class="on">Bullish</button><button type="button" data-d="bearish">Bearish</button></div><small id="dirNote">buys below the LTP, sells above</small></div>
+        <div class="field"><span class="lbl">Spacing ($)</span><input id="g_spacing" type="number" step="any" min="0" value="1"></div>
+        <div class="field"><span class="lbl">Target ($)</span><input id="g_target" type="number" step="any" min="0" value="1"><small>the reverse one target away</small></div>
+        <div class="field"><span class="lbl">Rungs per side</span><input id="g_rungs" type="number" step="1" min="0" value="10"></div>
+        <div class="field"><span class="lbl">Qty per rung</span><input id="g_qty" type="number" step="1" min="0" value="10"></div>
+        <div class="field"><span class="lbl">Core N (shares)</span><input id="g_core" type="number" step="1" value="0"><small><span class="pill" id="dn">delta-neutral N = —</span> · 0 = hedge off</small></div>
+        <div class="field"><span class="lbl">Advantage adjustment</span><input id="g_adj" type="number" step="1" value="0"><small>signed shares, + long / − short</small></div>
+        <div class="field"><span class="lbl">Share entry</span><input id="g_entry" type="number" step="any" placeholder="= spot"><small>fill price of the held shares only; the model's spot is the Spot box</small></div>
+        <div class="field"><span class="lbl">Target NET ($)</span><input id="g_tnet" type="number" step="any" value="0"><small>green line; the table says where each date's mark reaches it · 0 = off</small></div>
+        <div class="field"><span class="lbl">Max loss band (σ)</span><input id="g_band" type="number" step="0.5" min="0.5" value="2"><small>worst mark within ± this many σ of spot, on every date</small></div>
+        <div class="field"><span class="lbl">Spread cost</span><label class="chk"><input type="checkbox" id="g_spread" checked> NET AFTER CROSSING THE SPREADS IN AND OUT</label><small>every curve, breakeven and the verdict net of it</small></div>
+      </div>
+      <p class="note" id="gridLine" style="margin:10px 2px 0"></p>
+    </section>
+  </div>
+  <div class="col">
+    <section class="card">
+      <div class="legend">
+        <label><i style="background:#1b9a62"></i><input type="checkbox" data-l="exp" checked> Net at expiry</label>
+        <label><i style="background:#2f6fe0"></i><input type="checkbox" data-l="mark" checked> Mark at <select id="markDate" style="border:1px solid var(--line2);border-radius:6px;padding:2px 6px"></select></label>
+        <label><i style="background:#9b51e0"></i><input type="checkbox" data-l="opt"> Options only</label>
+        <label><i style="background:#f08a24"></i><input type="checkbox" data-l="grid"> Grid only</label>
+        <label><i style="background:#14a3a3"></i><input type="checkbox" data-l="adj"> Adjustment only</label>
+      </div>
+      <svg id="chart" viewBox="0 0 900 430" style="width:100%;height:auto;display:block" role="img" aria-label="Payoff chart"></svg>
+      <div class="dim" id="hover" style="font:12px var(--m);min-height:18px"></div>
+    </section>
+    <section><h3>Breakeven by date</h3> <span class="note" id="beNote"></span>
+      <div class="tw" style="margin-top:8px"><table><thead><tr><th>Date</th><th class="n">DTE</th><th class="n">Mark at spot</th><th class="n">$/sh at spot</th><th>Profitable between</th><th class="n">Bleeds below</th><th class="n">Bleeds above</th><th class="n">Room down</th><th class="n">Room up</th><th class="n">Target reached at</th><th class="n">Best</th><th class="n" id="worstHead">Worst in ±2σ</th></tr></thead><tbody id="be"></tbody></table></div></section>
+    <section><h3>Price movement</h3> <span class="note" id="mvNote"></span>
+      <div class="tw" style="margin-top:8px"><table><thead><tr><th>Move</th><th class="n">Price</th><th class="n">Options</th><th class="n">Core hedge</th><th class="n">Options + hedge</th><th class="n">Grid inventory</th><th class="n">Adjustment</th><th class="n">Spread cost</th><th class="n">Net</th><th class="n">Shares</th></tr></thead><tbody id="mv"></tbody></table></div></section>
+    <section>
+      <div class="tw legs"><table><thead><tr><th>Strike</th><th>Type</th><th>Expiration</th><th>S/L</th><th>Size</th><th>Price</th><th class="n">IV</th><th class="n">P&amp;L</th><th class="n">Delta</th><th class="n">Theor</th><th class="n">Bid</th><th class="n">Ask</th><th></th></tr></thead><tbody id="legs"></tbody></table></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px"><button class="btn" id="add" type="button">＋ Add position</button><span class="pill" id="sname" style="cursor:default;font-family:var(--f);font-weight:500;padding:5px 10px">—</span></div>
+    </section>
+    <section class="note" id="method">Standalone: reads no bot state and places no orders. Legs are priced at the mid of the live chain (editable) — Alpaca when your keys are set, otherwise Nasdaq / Yahoo. The mark curve and the Greeks are Black-Scholes at each leg's IV, rate 4 %; the mark carries the options, the held shares (core + adjustment) and the ladder's inventory as rungs fill against it, no ladder round trips. Bold red verticals: where the chosen date's mark turns negative. Bold green: the NET target and where that date's mark reaches it. Verdict: viable = spot inside a profitable zone with ≥ 1 one-day σ (spot × mean IV / √252) of room to the nearest bleed level both ways; tight = under that on a side; not viable = under 0.5 σ, or marked to lose at spot. Max loss (±Nσ, default 2) = the worst of that same mark, net of the spread cost, for any price within ± N one-σ moves of spot over each date's horizon (σ = mean leg IV × √(days/365), lognormal) on every date to expiry; past the band the loss keeps growing at the "per $1" rate shown (no stop-loss by rule). Win rate = probability of a profit at expiry under a lognormal at the legs' mean IV. <b>Recalculate</b> recomputes from the legs, grid and adjustment as they stand; with "recalc as I type" off (the default, remembered in this browser) edits only mark the button pending until you click it. The same figures as JSON: POST /api/payoff.</section>
+  </div>
+</div>
+<dialog id="pubDlg"><h3>Publish…</h3><p class="note">Publishing builds the position on a broker account. That isn't connected here: this planner never places orders. Use it to plan, then enter orders yourself (stock orders can go through the OMS on paper).</p><div style="text-align:right"><button class="btn" type="button" onclick="this.closest('dialog').close()">OK</button></div></dialog>
+<script src="/planner-math.js"></script>
+<script>
+const PM = window.PlannerMath, $ = s => document.querySelector(s), esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const f2 = v => v == null || !Number.isFinite(v) ? '—' : (v < 0 ? '−' : '') + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const sg = v => v == null || !Number.isFinite(v) ? '—' : (v > 0 ? '+' : '') + f2(v), cl = v => v > 0.005 ? 'pos' : v < -0.005 ? 'neg' : '';
+const store = { get(k, d) { try { const v = localStorage.getItem('planner.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } }, set(k, v) { try { localStorage.setItem('planner.' + k, JSON.stringify(v)); } catch {} } };
+const todayET = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+let chain = null, chains = {}, legs = [], dir = 'bullish', M = null, markDate = null, pending = false, lines = { exp: true, mark: true, opt: false, grid: false, adj: false };
+
+async function getChain(sym, exp) {
+  const k = sym + '|' + (exp || ''); if (chains[k]) return chains[k];
+  const r = await fetch(`/api/planner/chain?symbol=${encodeURIComponent(sym)}${exp ? '&expiry=' + exp : ''}`); if (r.status === 401) { location.assign('/'); throw new Error('signed out'); }
+  const j = await r.json(); if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status); chains[k] = j; chains[sym + '|' + j.expiry] = j; return j;
+}
+const mid = q => q && q.bid > 0 && q.ask >= q.bid ? (q.bid + q.ask) / 2 : q && q.last > 0 ? q.last : null;
+const quote = (exp, cp, K) => { const c = chains[chain.symbol + '|' + exp]; return c && (cp === 'C' ? c.calls : c.puts).find(x => Math.abs(x.strike - K) < 1e-6); };
+const near = (list, x) => list.reduce((b, q) => !b || Math.abs(q.strike - x) < Math.abs(b.strike - x) ? q : b, null);
+function legFrom(cp, K, side, size, exp) { const q = quote(exp, cp, K) || {}; return { cp, K, side, size, exp, price: +(mid(q) || 0).toFixed(2), iv: q.iv || null, bid: q.bid, ask: q.ask }; }
+function example() {     // a starting structure like the print: put credit spread + call debit spread around spot
+  const S = chain.spot, P = chain.puts.filter(x => mid(x)), C = chain.calls.filter(x => mid(x)); if (!P.length || !C.length) return [];
+  const sp = near(P, S * 0.965), lp = near(P.filter(x => x.strike < sp.strike), S * 0.935) || P[0], lc = near(C.filter(x => x.strike >= S), S * 1.01) || near(C, S), scs = C.filter(x => x.strike > lc.strike), sc = near(scs, S * 1.075) || C.at(-1);
+  return [legFrom('P', lp.strike, 1, 4, chain.expiry), legFrom('P', sp.strike, -1, 4, chain.expiry), legFrom('C', lc.strike, 1, 2, chain.expiry), legFrom('C', sc.strike, -1, 2, chain.expiry)];
+}
+async function load() {
+  const sym = $('#sym').value.trim().toUpperCase(), exp = $('#exp').value; $('#status').textContent = 'Loading ' + sym + '…'; $('#load').disabled = true;
+  try {
+    const c = await getChain(sym, exp), changedSym = !chain || chain.symbol !== sym; chain = c; store.set('sym', sym);
+    $('#exp').innerHTML = c.expiries.map(d => `<option ${d === c.expiry ? 'selected' : ''}>${d}</option>`).join('');
+    $('#status').innerHTML = `<b>${esc(sym)}</b> spot <b>${f2(c.spot)}</b> · ${c.expiry} · ${PM.dayDiff(todayET(), c.expiry)} d · <span class="dim">${esc(c.source)}</span>`;
+    if (changedSym || !legs.length) legs = example(); else legs = legs.map(l => ({ ...l, exp: l.exp === c.expiry || chains[sym + '|' + l.exp] ? l.exp : c.expiry }));
+    for (const l of legs) { const q = quote(l.exp, l.cp, l.K); if (q) { l.bid = q.bid; l.ask = q.ask; if (!l.iv) l.iv = q.iv; } }
+    calc();
+  } catch (e) { $('#status').innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+  finally { $('#load').disabled = false; }
+}
+function input() {
+  const v = id => { const x = parseFloat($(id).value); return Number.isFinite(x) ? x : null; };
+  return { spot: v('#spot') || chain.spot, today: todayET(), legs,
+    grid: { launch: $('#g_launch').checked, direction: dir, spacing: v('#g_spacing') || 0, target: v('#g_target') || 0, rungs: v('#g_rungs') || 0, qty: v('#g_qty') || 0,
+            coreN: v('#g_core') || 0, adj: v('#g_adj') || 0, entry: v('#g_entry'), targetNet: v('#g_tnet') || 0, band: v('#g_band') || 2, spread: $('#g_spread').checked } };
+}
+function calc() {
+  if (!chain) return; pending = false; $('#recalc').classList.remove('pending');
+  M = PM.build(input()); if (!markDate || !M.dates.includes(markDate)) markDate = M.today;
+  render();
+}
+function dirty() { if ($('#live').checked) calc(); else { pending = true; $('#recalc').classList.add('pending'); } }
+
+function render() {
+  const m = M, S = m.spot, ml = m.maxLoss, g = m.grid, held = m.held;
+  // verdict
+  const v = $('#verdict'); v.className = 'card verdict ' + m.verdict.level;
+  v.innerHTML = `<span class="vtag">${esc(m.verdict.text)}</span>
+    <p>${m.now < 0 ? `marked to lose ${Math.round(-m.now).toLocaleString()} at today's spot ${f2(S)}` : `marked ${sg(m.now)} at today's spot ${f2(S)}`}</p>
+    <p>shares held ${held} · 1-day σ ${f2(m.sigma1)}</p>
+    ${ml ? `<p><b class="ml">Max loss ≈ ${f2(ml.value)}</b> if spot reaches ${f2(ml.price)} by ${ml.date} (±${g.band}σ), then ${f2(ml.perDollar)} per $1 further · up: ${f2(ml.up.value)} @ ${f2(ml.up.price)} (${ml.up.pct.toFixed(1)}%) · down: ${f2(ml.down.value)} @ ${f2(ml.down.price)} (${ml.down.pct.toFixed(1)}%)</p>` : ''}
+    <small>green: ≥ 1σ of room both ways · amber: less on a side · red: &lt; 0.5σ or marked to lose at spot · mark = options + held shares + ladder inventory</small>`;
+  // stats
+  const G = m.greeks, seedLo = g.launch ? (g.direction === 'bearish' ? -2 * g.rungs * g.qty : 0) : 0, seedHi = g.launch ? (g.direction === 'bearish' ? 0 : 2 * g.rungs * g.qty) : 0;
+  $('#stats').innerHTML = [
+    ['Net cost', `${f2(Math.abs(m.netCost))} ${m.netCost < 0 ? 'cr' : 'dr'}`, 'w'],
+    ['Spread cost in+out', `${f2(m.spreadCost)} · ${m.maxProfitGross > 0 ? Math.round(m.spreadCost / m.maxProfitGross * 100) : '—'}% of the max profit`, 'w'],
+    ['Max loss (±' + g.band + 'σ)', ml ? `<span class="neg">${f2(ml.value)}</span> @ ${f2(ml.price)} (${ml.pct.toFixed(1)}%) · ${ml.date} <span class="neg">then ${f2(ml.perDollar)} per $1</span>` : '—', 'w'],
+    ['Max profit', `<span class="pos">${f2(m.maxProfit)}</span>`], ['Win rate', (m.winRate * 100).toFixed(2) + '%'], ['Breakeven', m.breakevens.length ? m.breakevens.map(f2).join(', ') : '—'],
+    ['Lot size', '100'], ['Underlying price', f2(S) + ' USD'], ['Delta', f2(G.delta)], ['Gamma', f2(G.gamma)], ['Theta', f2(G.theta)], ['Vega', f2(G.vega)], ['Rho', f2(G.rho)],
+    ['Shares at start', `${m.seedShares > 0 ? '+' : ''}${m.seedShares} <span class="dim">${seedLo} … ${seedHi}</span>`], ['Net delta w/ shares', f2(m.netDelta)], ['Now (T+0)', `<span class="${cl(m.now)}">${f2(m.now)}</span>`],
+  ].map(([k, val, w]) => `<div class="${w || ''}"><span>${k}</span><b>${val}</b></div>`).join('');
+  // delta-neutral helper and notes
+  const dn = Math.round(-G.delta); $('#dn').textContent = `delta-neutral N = ${dn}`; $('#dn').onclick = () => { $('#g_core').value = dn; dirty(); };
+  $('#spotNote').textContent = `chain ${f2(chain.spot)} · every curve, the breakevens, the verdict and the delta-neutral core re-price at this spot · blank = the chain's spot`;
+  $('#netNote').textContent = `one number, signed + long / − short: the options' delta hedge plus the Advantage Adjustment · sets Core N to delta-neutral (−Δ = ${dn} sh) and the adjustment to the rest`;
+  $('#dirNote').textContent = dir === 'bearish' ? 'sells above the LTP, buys below' : 'buys below the LTP, sells above';
+  $('#gridLine').textContent = g.launch ? `Grid: ${g.direction} · ladder ${g.rungs * g.qty} sh (${g.rungs} × ${g.qty}) seeded at entry ${f2(m.entry)} · inventory ${seedLo} … ${seedHi} · one round trip = $${f2(g.qty * g.target)} · core ${g.coreN}` : `Grid off · core ${g.coreN} · adjustment ${g.adj}`;
+  // mark-date selector
+  $('#markDate').innerHTML = m.dates.map(d => `<option value="${d}" ${d === markDate ? 'selected' : ''}>${d === m.today ? 'T+0 (now)' : d === m.expiry ? d + ' (expiry)' : d}</option>`).join('');
+  // breakeven by date
+  $('#worstHead').textContent = `Worst in ±${g.band}σ`;
+  $('#beNote').textContent = `options marked to model on each date + ${held} shares from entry ${f2(m.entry)} + the ladder's inventory as it fills${g.launch ? ` (up to ${g.direction === 'bearish' ? '−' : '+'}${g.rungs * g.qty})` : ''} · 1-day σ = ${f2(m.sigma1)} · click a row to draw it`;
+  const zoneTxt = (r) => { const z = r.zones, fmt = ([a, b]) => !Number.isFinite(a) ? `below ${f2(b)}` : !Number.isFinite(b) ? `above ${f2(a)}` : `${f2(a)} – ${f2(b)}`;
+    if (!z.length) return '<span class="neg">no profit in range</span>';
+    return r.profitableAtSpot ? z.map(fmt).join(' · ') : `<span class="neg">losing at spot</span> · profit ${z.map(fmt).join(' · ')}`; };
+  $('#be').innerHTML = m.rows.map(r => `<tr class="pick ${r.date === markDate ? 'on' : ''}" data-d="${r.date}"><td>${r.date === m.today ? '<b>today</b> ' : ''}${r.date}</td><td class="n">${r.dte}</td><td class="n ${cl(r.markAtSpot)}">${f2(r.markAtSpot)}</td><td class="n ${cl(r.perShare)}">${sg(r.perShare)}</td>
+    <td>${zoneTxt(r)}</td><td class="n">${f2(r.bleedsBelow)}</td><td class="n">${f2(r.bleedsAbove)}</td><td class="n">${PM.fmtRoom(r.roomDown)}</td><td class="n">${PM.fmtRoom(r.roomUp)}</td><td class="n">${f2(r.targetAt)}</td>
+    <td class="n">${f2(r.best.v)} @ ${f2(r.best.x)}</td><td class="n"><span class="${cl(r.worst.v)}">${f2(r.worst.v)}</span> @ ${f2(r.worst.x)}</td></tr>`).join('');
+  document.querySelectorAll('#be tr').forEach(tr => tr.onclick = () => { markDate = tr.dataset.d; render(); });
+  // price movement for the chosen date
+  $('#mvNote').textContent = `${markDate === m.today ? 'today' : markDate} · the mark split into its parts: options to model, core N × move from entry ${f2(m.entry)}, the ladder's inventory as rungs fill (no round trips), the adjustment, net of the spread cost · pick another date in the chart or the table above`;
+  $('#mv').innerHTML = PM.moves(m, markDate).map(x => `<tr class="${x.spot ? 'spot' : ''}"><td>${esc(x.label)}</td><td class="n">${f2(x.price)}</td><td class="n ${cl(x.options)}">${f2(x.options)}</td><td class="n">${f2(x.core)}</td><td class="n ${cl(x.optHedge)}">${f2(x.optHedge)}</td><td class="n ${cl(x.grid)}">${f2(x.grid)}</td><td class="n">${f2(x.adj)}</td><td class="n neg">${f2(x.spread)}</td><td class="n ${cl(x.net)}"><b>${f2(x.net)}</b></td><td class="n">${x.shares > 0 ? '+' : ''}${x.shares}</td></tr>`).join('');
+  legsTable(); chart();
+}
+function legsTable() {
+  const S = M.spot, today = M.today, exps = chain.expiries;
+  $('#legs').innerHTML = legs.map((l, i) => {
+    const c = chains[chain.symbol + '|' + l.exp], strikes = c ? (l.cp === 'C' ? c.calls : c.puts).map(x => x.strike) : [l.K];
+    const T = Math.max(PM.dayDiff(today, l.exp), 0) / 365, iv = l.iv || (M.legs[i] && M.legs[i].iv), x = PM.bs(l.cp, S, l.K, T, iv || 0.5), pnl = l.side * l.size * 100 * (x.price - l.price);
+    return `<tr data-i="${i}"><td><select data-k="K">${strikes.map(k => `<option ${Math.abs(k - l.K) < 1e-6 ? 'selected' : ''}>${k}</option>`).join('')}</select></td>
+      <td><button type="button" class="tg" data-k="cp">${l.cp === 'C' ? 'Call' : 'Put'}</button></td>
+      <td><select data-k="exp">${exps.map(d => `<option ${d === l.exp ? 'selected' : ''}>${d}</option>`).join('')}</select></td>
+      <td><button type="button" class="tg ${l.side > 0 ? 'long' : 'short'}" data-k="side">${l.side > 0 ? 'Long' : 'Short'}</button></td>
+      <td><input data-k="size" type="number" min="1" step="1" value="${l.size}" style="width:60px"></td><td><input data-k="price" type="number" step="0.01" value="${l.price}"></td>
+      <td class="n">${iv ? (iv * 100).toFixed(2) + '%' : '—'}</td><td class="n ${cl(pnl)}">${f2(pnl)}</td><td class="n">${x.delta.toFixed(3)}</td><td class="n">${f2(x.price)}</td><td class="n">${f2(l.bid)}</td><td class="n">${f2(l.ask)}</td>
+      <td><button class="del" type="button" data-k="del" aria-label="Remove leg">🗑</button></td></tr>`; }).join('') || '<tr><td colspan="13" class="dim">No legs — add a position.</td></tr>';
+  $('#sname').textContent = PM.name(legs);
+}
+async function editLeg(i, k, val) {
+  const l = legs[i];
+  if (k === 'del') legs.splice(i, 1);
+  else if (k === 'side') l.side = -l.side;
+  else if (k === 'size') l.size = Math.max(1, parseInt(val) || 1);
+  else if (k === 'price') { l.price = parseFloat(val) || 0; l.iv = null; }
+  else {
+    if (k === 'cp') l.cp = l.cp === 'C' ? 'P' : 'C';
+    if (k === 'K') l.K = parseFloat(val);
+    if (k === 'exp') { l.exp = val; try { await getChain(chain.symbol, val); } catch (e) { $('#status').innerHTML = `<span class="err">${esc(e.message)}</span>`; } }
+    const c = chains[chain.symbol + '|' + l.exp]; if (c && k !== 'K') { const q = near(l.cp === 'C' ? c.calls : c.puts, l.K); if (q) l.K = q.strike; }
+    const q = quote(l.exp, l.cp, l.K) || {}; l.price = +(mid(q) || 0).toFixed(2); l.iv = q.iv || null; l.bid = q.bid; l.ask = q.ask;
+  }
+  if ($('#live').checked || k === 'del' || k === 'side' || k === 'cp' || k === 'K' || k === 'exp') calc(); else { legsTable(); dirty(); }
+}
+$('#legs').addEventListener('click', e => { const b = e.target.closest('button[data-k]'); if (b) editLeg(+b.closest('tr').dataset.i, b.dataset.k); });
+$('#legs').addEventListener('change', e => { const t = e.target.closest('[data-k]'); if (t && t.tagName !== 'BUTTON') editLeg(+t.closest('tr').dataset.i, t.dataset.k, t.value); });
+$('#add').onclick = () => { if (!chain) return; const q = near(chain.calls, chain.spot); if (q) { legs.push(legFrom('C', q.strike, 1, 1, chain.expiry)); calc(); } };
+
+function chart() {
+  const m = M, svg = $('#chart'), W = 900, H = 430, L = 62, Rr = 14, T = 14, B = 32, [x0, x1] = m.range, n = 260;
+  const xs = Array.from({ length: n + 1 }, (_, i) => x0 + (x1 - x0) * i / n);
+  const ser = {}; if (lines.exp) ser.exp = xs.map(m.atExpiry); if (lines.mark) ser.mark = xs.map(x => m.mark(x, markDate));
+  if (lines.opt) ser.opt = xs.map(m.optExp); if (lines.grid) ser.grid = xs.map(m.gridLine); if (lines.adj) ser.adj = xs.map(m.adjLine);
+  const all = Object.values(ser).flat().filter(Number.isFinite); let y0 = Math.min(0, ...all), y1 = Math.max(0, ...all); if (y1 - y0 < 1) { y0 -= 1; y1 += 1; } const pad = (y1 - y0) * 0.06; y0 -= pad; y1 += pad;
+  const X = x => L + (x - x0) / (x1 - x0) * (W - L - Rr), Y = y => T + (y1 - y) / (y1 - y0) * (H - T - B);
+  const step = (() => { const r = (y1 - y0) / 8, p = 10 ** Math.floor(Math.log10(r)); return [1, 2, 2.5, 5, 10].map(k => k * p).find(k => k >= r); })();
+  let s = '';
+  for (let v = Math.ceil(y0 / step) * step; v <= y1; v += step) s += `<line x1="${L}" x2="${W - Rr}" y1="${Y(v)}" y2="${Y(v)}" stroke="${Math.abs(v) < 1e-9 ? '#333' : '#e6e9ee'}" stroke-width="${Math.abs(v) < 1e-9 ? 1.2 : 1}"/><text x="${L - 6}" y="${Y(v) + 3.5}" text-anchor="end">${v.toFixed(0)}</text>`;
+  const xstep = (() => { const r = (x1 - x0) / 12, p = 10 ** Math.floor(Math.log10(r)); return [1, 2, 2.5, 5, 10].map(k => k * p).find(k => k >= r); })();
+  for (let v = Math.ceil(x0 / xstep) * xstep; v <= x1; v += xstep) s += `<line x1="${X(v)}" x2="${X(v)}" y1="${T}" y2="${H - B}" stroke="#eef0f4"/><text x="${X(v)}" y="${H - B + 16}" text-anchor="middle">${v.toFixed(xstep < 1 ? 1 : 0)}</text>`;
+  const path = (arr, attrs) => `<path d="${arr.map((y, i) => (i ? 'L' : 'M') + X(xs[i]).toFixed(1) + ' ' + Y(Math.max(y0, Math.min(y1, y))).toFixed(1)).join('')}" fill="none" ${attrs}/>`;
+  if (ser.exp) {       // filled profit (green) / loss (red) areas and the two-colour expiry line
+    const pos = ser.exp.map(v => Math.max(v, 0)), neg = ser.exp.map(v => Math.min(v, 0)), area = (a, c) => `<path d="M${X(x0)} ${Y(0)} ${a.map((y, i) => 'L' + X(xs[i]).toFixed(1) + ' ' + Y(y).toFixed(1)).join(' ')} L${X(x1)} ${Y(0)}Z" fill="${c}"/>`;
+    s += area(pos, 'rgba(27,154,98,.12)') + area(neg, 'rgba(214,36,90,.10)');
+    for (let i = 1; i <= n; i++) { const a = ser.exp[i - 1], b = ser.exp[i]; s += `<line x1="${X(xs[i - 1])}" y1="${Y(a)}" x2="${X(xs[i])}" y2="${Y(b)}" stroke="${(a + b) / 2 >= 0 ? '#1b9a62' : '#d6245a'}" stroke-width="2.2"/>`; }
+  }
+  if (ser.opt) s += path(ser.opt, 'stroke="#9b51e0" stroke-width="1.6"'); if (ser.grid) s += path(ser.grid, 'stroke="#f08a24" stroke-width="1.6"'); if (ser.adj) s += path(ser.adj, 'stroke="#14a3a3" stroke-width="1.6"');
+  if (ser.mark) {
+    s += path(ser.mark, 'stroke="#2f6fe0" stroke-width="1.8" stroke-dasharray="3 3"');
+    const row = m.rows.find(r => r.date === markDate);
+    for (const [a, b] of row.zones) for (const z of [a, b]) if (Number.isFinite(z) && z > x0 && z < x1) s += `<line x1="${X(z)}" x2="${X(z)}" y1="${T}" y2="${H - B}" stroke="#d6245a" stroke-width="2.4"/><text x="${X(z) + 4}" y="${H - B - 6}" fill="#d6245a" style="fill:#d6245a;font-weight:700">${z.toFixed(2)}</text>`;
+    if (m.grid.targetNet > 0) { s += `<line x1="${L}" x2="${W - Rr}" y1="${Y(m.grid.targetNet)}" y2="${Y(m.grid.targetNet)}" stroke="#1b9a62" stroke-width="2.2"/>`;
+      if (row.targetAt != null) s += `<line x1="${X(row.targetAt)}" x2="${X(row.targetAt)}" y1="${T}" y2="${H - B}" stroke="#1b9a62" stroke-width="2.4"/>`; }
+  }
+  s += `<line x1="${X(m.spot)}" x2="${X(m.spot)}" y1="${T}" y2="${H - B}" stroke="#1d222b" stroke-width="1.3"/><text x="${X(m.spot) + 4}" y="${T + 12}" style="fill:#1d222b">spot ${m.spot.toFixed(2)}</text>`;
+  s += `<rect id="hit" x="${L}" y="${T}" width="${W - L - Rr}" height="${H - T - B}" fill="transparent"/><line id="cross" y1="${T}" y2="${H - B}" stroke="#9aa3b2" stroke-dasharray="2 3" visibility="hidden"/>`;
+  svg.innerHTML = s;
+  const hit = svg.querySelector('#hit'), cross = svg.querySelector('#cross');
+  hit.onpointermove = e => { const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) / r.width * W, P = x0 + (px - L) / (W - L - Rr) * (x1 - x0);
+    cross.setAttribute('x1', px); cross.setAttribute('x2', px); cross.setAttribute('visibility', 'visible');
+    $('#hover').textContent = `price ${P.toFixed(2)} (${((P / m.spot - 1) * 100).toFixed(1)}%) · net at expiry ${f2(m.atExpiry(P))} · mark ${markDate === m.today ? 'now' : markDate} ${f2(m.mark(P, markDate))}`; };
+  hit.onpointerleave = () => { cross.setAttribute('visibility', 'hidden'); $('#hover').textContent = ''; };
+}
+// controls
+$('#load').onclick = load; $('#sym').addEventListener('keydown', e => { if (e.key === 'Enter') { $('#exp').innerHTML = '<option value="">nearest</option>'; load(); } });
+$('#sym').addEventListener('change', () => { $('#exp').innerHTML = '<option value="">nearest</option>'; });
+$('#exp').onchange = async () => { if (!chain) return load(); try { const c = await getChain(chain.symbol, $('#exp').value); for (const l of legs) if (l.exp === chain.expiry) { l.exp = c.expiry; const q = quote(l.exp, l.cp, l.K) || near(l.cp === 'C' ? c.calls : c.puts, l.K) || {}; l.K = q.strike || l.K; l.price = +(mid(q) || 0).toFixed(2); l.iv = q.iv; l.bid = q.bid; l.ask = q.ask; } chain = { ...chain, ...c }; $('#status').innerHTML = `<b>${esc(c.symbol)}</b> spot <b>${f2(c.spot)}</b> · ${c.expiry} · ${PM.dayDiff(todayET(), c.expiry)} d · <span class="dim">${esc(c.source)}</span>`; calc(); } catch (e) { $('#status').innerHTML = `<span class="err">${esc(e.message)}</span>`; } };
+$('#recalc').onclick = calc; $('#live').checked = store.get('live', false); $('#live').onchange = () => { store.set('live', $('#live').checked); if ($('#live').checked && pending) calc(); };
+$('#publish').onclick = () => $('#pubDlg').showModal();
+$('#markDate').onchange = e => { markDate = e.target.value; render(); };
+document.querySelectorAll('.legend input[data-l]').forEach(c => c.onchange = () => { lines[c.dataset.l] = c.checked; if (M) chart(); });
+document.querySelectorAll('#g_dir button').forEach(b => b.onclick = () => { dir = b.dataset.d; document.querySelectorAll('#g_dir button').forEach(x => x.classList.toggle('on', x === b)); dirty(); });
+['#spot', '#g_spacing', '#g_target', '#g_rungs', '#g_qty', '#g_core', '#g_adj', '#g_entry', '#g_tnet', '#g_band'].forEach(id => $(id).addEventListener('input', dirty));
+['#g_launch', '#g_spread'].forEach(id => $(id).addEventListener('change', dirty));
+$('#netsh').addEventListener('change', () => { if (!M) return; const v = parseInt($('#netsh').value); if (!Number.isFinite(v)) return; const dn = Math.round(-M.greeks.delta); $('#g_core').value = dn; $('#g_adj').value = v - dn; dirty(); });
+$('#sym').value = store.get('sym', 'HOOD'); load();
+</script>
+</body>
+</html>

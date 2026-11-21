@@ -1,7 +1,7 @@
 // QuantSignal Terminal (ChatGPT version) behind a password.
 // ./site holds the ChatGPT site's own files, unchanged. Every /api/* request is passed through, unchanged, to the
 // ChatGPT backend (UPSTREAM), so pages behave exactly as on ChatGPT. Password: OWNER_PASSWORD (Render env var).
-const http = require("http"), { Readable } = require("stream"), zone = require("./zone"), books = require("./books"), dte = require("./dte-run"), portal = require("./portal-live"), keyless = require("./keyless"), omsMod = require("./oms/routes"), fs = require("fs"), path = require("path"), crypto = require("crypto");
+const http = require("http"), { Readable } = require("stream"), zone = require("./zone"), books = require("./books"), dte = require("./dte-run"), portal = require("./portal-live"), keyless = require("./keyless"), omsMod = require("./oms/routes"), plannerChain = require("./planner-chain"), plannerMath = require("./site/planner-math.js"), fs = require("fs"), path = require("path"), crypto = require("crypto");
 const oms = omsMod.create({ log: m => console.log(new Date().toISOString(), m) });
 const PORT = process.env.PORT || 3000, SITE = path.join(__dirname, "site");
 const PASSWORD = process.env.OWNER_PASSWORD || process.env.APP_PASSWORD || "";
@@ -234,6 +234,16 @@ http.createServer((req, res) => {
     if (url.searchParams.get("refresh") === "1") books.kick();
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     return res.end(JSON.stringify(books.snapshot()));
+  }
+  if (url.pathname === "/api/planner/chain") {
+    return plannerChain.chain(url.searchParams.get("symbol"), url.searchParams.get("expiry"))
+      .then(v => { res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }); res.end(JSON.stringify(v)); })
+      .catch(e => { res.writeHead(502, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: e.message })); });
+  }
+  if (url.pathname === "/api/payoff" && req.method === "POST") {         // same figures as the Structure Planner page, as JSON
+    let body = ""; req.on("data", c => { body += c; if (body.length > 2e5) req.destroy(); });
+    return req.on("end", () => { try { const out = plannerMath.summary(JSON.parse(body || "{}")); res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify(out)); }
+      catch (e) { res.writeHead(400, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: e.message })); } });
   }
   if (url.pathname === "/api/hl/assets") return hlAssets(req, res);
   if (url.pathname === "/api/av/quotes") return avQuotes(req, res, url);
