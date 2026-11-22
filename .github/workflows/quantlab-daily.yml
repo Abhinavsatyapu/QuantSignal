@@ -1,0 +1,37 @@
+name: quantlab-daily
+# Runs the Quant Lab research agent once after each US market close (and once more
+# mid-day IST to continue the research queue), so the Quant Lab keeps working while
+# its free Render server is asleep. Code comes from the chatgpt-version branch.
+# Needs the repository secret QL_DATABASE_URL = the database's EXTERNAL connection URL.
+on:
+  schedule:
+    - cron: '35 22 * * 1-5'   # 04:05 IST Tue–Sat, after the US close
+    - cron: '35 4 * * *'      # 10:05 IST daily, continue research
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: quantlab-daily
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt-version
+          sparse-checkout: quantlab
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: quantlab/requirements.txt
+      - run: pip install -r quantlab/requirements.txt
+      - name: Run research agent
+        working-directory: quantlab
+        env:
+          DATABASE_URL: ${{ secrets.QL_DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "::error::Add the repository secret QL_DATABASE_URL (Settings → Secrets and variables → Actions)"; exit 1; fi
+          python -m ql.daily --minutes 45
