@@ -171,6 +171,40 @@ class Yahoo:
         return []
 
 
+class Hyperliquid:
+    """Real-time mid prices of Hyperliquid's US-stock perpetuals (builder dex "xyz").
+    Used only as a fallback when Nasdaq has no quote or only a delayed one. A perp
+    can trade at a small premium/discount to the stock (funding, thin books), so
+    fills priced from it are labelled as perp prices."""
+    name = "Hyperliquid perp"
+
+    def __init__(self, client: httpx.Client):
+        self.c = client
+        self.mids: dict = {}
+        self.at = 0.0
+        self.error = None
+
+    def refresh(self):
+        if time.time() - self.at < 10:
+            return
+        try:
+            r = self.c.post("https://api.hyperliquid.xyz/info", json={"type": "allMids", "dex": "xyz"}, timeout=10)
+            r.raise_for_status()
+            self.mids = {k.split(":", 1)[-1].upper(): float(v) for k, v in (r.json() or {}).items() if v not in (None, "")}
+            self.error = None
+        except Exception as e:
+            self.error = str(e)[:160]
+        self.at = time.time()
+
+    def quote(self, symbol: str) -> dict | None:
+        self.refresh()
+        px = self.mids.get(symbol.upper().replace("-", "."))
+        if not px or px <= 0:
+            return None
+        return {"symbol": symbol, "price": px, "bid": float("nan"), "ask": float("nan"), "status": "live",
+                "provider_time": dt.datetime.now(NY).strftime("%H:%M:%S ET"), "source": "Hyperliquid perp (xyz)", "fetched_at": time.time()}
+
+
 class Universe:
     def __init__(self, db: DB, client: httpx.Client):
         self.db, self.c = db, client
@@ -276,6 +310,7 @@ class Data:
         self.providers = providers if providers is not None else [Nasdaq(self.client), Yahoo(self.client)]
         self.universe = Universe(db, self.client)
         self._quotes: dict[str, dict] = {}
+        self.hl = Hyperliquid(self.client) if providers is None else None
 
     @property
     def nasdaq(self):
@@ -441,7 +476,14 @@ class Data:
         try:
             q = nq.quote(symbol)
         except Exception as e:
-            return {"symbol": symbol, "status": "unavailable", "error": str(e)[:160]}
+            q = {"symbol": symbol, "status": "unavailable", "error": str(e)[:160]}
+        if q.get("status") in ("unavailable", "delayed") and self.hl and market_open():
+            h = self.hl.quote(symbol)
+            if h:
+                h["nasdaq_status"] = q.get("status"); h["nasdaq_price"] = q.get("price")
+                q = h
+        if q.get("status") == "unavailable":
+            return q
         self._quotes[symbol] = q
         return q
 

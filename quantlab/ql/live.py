@@ -154,7 +154,8 @@ class LiveEngine:
         def log_trade(kind, p, prices, note, extra=None):
             e = {"time": now_ny(), "ts": time.time(), "kind": kind, "pair": f"{p['y']}/{p['x']}", "side": "long spread" if p["side"] > 0 else "short spread",
                  "y": p["y"], "x": p["x"], "qty_y": _r(p["qty_y"], 4), "qty_x": _r(p["qty_x"], 4), "px_y": _r(prices[0], 4), "px_x": _r(prices[1], 4),
-                 "fill_y": prices[2], "fill_x": prices[3], "quote_status": prices[4], "z": _r(p.get("z_live"), 3), "note": note, **(extra or {})}
+                 "fill_y": prices[2], "fill_x": prices[3], "quote_status": prices[4], "source": f"{(Q.get(p['y']) or {}).get('source', '')} / {(Q.get(p['x']) or {}).get('source', '')}",
+                 "z": _r(p.get("z_live"), 3), "note": note, **(extra or {})}
             book["trade_log"] = (book["trade_log"] + [e])[-500:]
             self.log(f"live paper {kind}: {e['pair']} {e['side']} · {note}")
 
@@ -214,7 +215,8 @@ class LiveEngine:
             row = {"pair": f"{y}/{x}", "y": y, "x": x, "beta": _r(c["beta"]), "half_life": _r(c["half_life"], 2), "coint_p": _r(c["coint_p"]),
                    "adf_p": _r(c["adf_p"]), "band": _r(c["band"], 3), "gate": bool(c["gate"]), "close_date": c["close_date"],
                    "py": _r((qy or {}).get("price")), "px": _r((qx or {}).get("price")), "status_y": (qy or {}).get("status"), "status_x": (qx or {}).get("status"),
-                   "time_y": (qy or {}).get("provider_time"), "time_x": (qx or {}).get("provider_time")}
+                   "time_y": (qy or {}).get("provider_time"), "time_x": (qx or {}).get("provider_time"),
+                   "src_y": (qy or {}).get("source"), "src_x": (qx or {}).get("source")}
             if ok_quote(qy) and ok_quote(qx):
                 z = self.z_live(c, qy["price"], qx["price"]); row["z"] = _r(z, 3)
             else:
@@ -271,7 +273,7 @@ class LiveEngine:
             if p["status"] == "open":
                 p["unrealized_live"] = _r(p["qty_y"] * (mark(p["y"]) - p["entry_y"]) + p["qty_x"] * (mark(p["x"]) - p["entry_x"]), 4)
         self.db.kv_set("sa_paper", book)
-        snap.update(equity=round(eq, 4), positions=len(book["positions"]), quotes={s: {k: Q[s].get(k) for k in ("price", "bid", "ask", "status", "provider_time", "error")} for s in syms})
+        snap.update(equity=round(eq, 4), positions=len(book["positions"]), quotes={s: {k: Q[s].get(k) for k in ("price", "bid", "ask", "status", "provider_time", "error", "source")} for s in syms})
         statuses = [q.get("status") for q in Q.values()]
         snap["data_status"] = "live" if statuses and all(s == "live" for s in statuses) else "delayed" if any(s in ("live", "delayed") for s in statuses) else "unavailable"
         self.db.kv_set("sa_live", snap)
