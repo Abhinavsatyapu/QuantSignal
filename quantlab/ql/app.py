@@ -21,11 +21,11 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from . import backtest as bt
-from . import engine, portfolio, scanner, stats
+from . import engine, portfolio, salab, scanner, stats
 from .agent import Agent, leaderboard
 from .data import Data, last_session, market_open
 from .db import DB
-from .strategies import LIBRARY
+from .strategies import LIBRARY, run as run_strategy
 
 WEB = Path(__file__).resolve().parent.parent / "web"
 PASSWORD = os.environ.get("QL_PASSWORD", "")
@@ -450,6 +450,126 @@ def create_app(db: DB | None = None, data: Data | None = None, start_agent: bool
                     if q and q.get("price"):
                         marks[s].update(quote=q["price"], quote_status=q["status"], quote_time=q.get("provider_time"))
         return clean({**book, "marks": marks, "risk": settings()["risk"]})
+
+    # ------------------------------------------------------------ Statistical Arbitrage Lab
+    @app.get("/api/sa/summary")
+    def sa_summary():
+        studies = db.runs("sa_study", 50)
+        return clean({"summary": db.kv_get("sa_summary"), "studies": [r["summary"] for r in studies],
+                      "labels": salab.LABELS, "compare": salab.COMPARE, "horizons": list(salab.HORIZONS)})
+
+    @app.get("/api/sa/study")
+    def sa_study(y: str, x: str):
+        r = db.run(f"sa-{y.upper()}-{x.upper()}")
+        if not r:
+            raise HTTPException(404, "no study for this pair yet — run one")
+        return r["payload"]
+
+    @app.post("/api/sa/study")
+    async def sa_study_run(req: Request):
+        b = await req.json()
+        y, x = b["y"].upper(), b["x"].upper()
+
+        def fn():
+            p = load_panel([y, x])
+            st = salab.pair_study(p, [y, x], float(b.get("capital", 1000)), costs_from(b))
+            st["scan"] = "manual"; st["data"] = data_meta(p)
+            db.save_run(f"sa-{y}-{x}", "sa_study", f"Stat-arb study {y}/{x}", {"pair": f"{y}/{x}", "scan": "manual", "end": st["end"]}, st)
+            st["summary"] = {"pair": f"{y}/{x}", "end": st["end"]}
+            return st
+        return submit("sa_study_job", f"Stat-arb study {y}/{x}", fn)
+
+    @app.get("/api/sa/config")
+    def sa_config():
+        return {**salab.DEFAULT_CONFIG, **(db.kv_get("sa_config") or {})}
+
+    @app.post("/api/sa/config")
+    async def sa_config_set(req: Request):
+        b = await req.json()
+        cur = sa_config()
+        for k, v in b.items():
+            if k not in salab.DEFAULT_CONFIG or v in (None, ""):
+                continue
+            if k == "strategy":
+                if v not in ("I", "V", "A", "K"):
+                    raise HTTPException(400, "strategy must be I, V, A or K")
+                cur[k] = v
+            else:
+                v = float(v)
+                if v < 0 or (k == "leverage" and v > 4):
+                    raise HTTPException(400, f"{k}: out of range (leverage 0–4, others ≥ 0)")
+                cur[k] = v
+        db.kv_set("sa_config", cur)
+        return cur
+
+    @app.post("/api/sa/paper/reset")
+    async def sa_paper_reset(req: Request):
+        b = await req.json()
+        cap = float(b.get("capital") or sa_config()["capital"])
+        if cap <= 0:
+            raise HTTPException(400, "capital must be positive")
+        db.kv_set("sa_paper", {"cash": cap, "start_cash": cap, "positions": [], "closed": [], "equity": [], "halted": None,
+                               "events": [f"reset to {cap:,.2f} USD"], "fees": 0.0, "slippage": 0.0, "borrow": 0.0})
+        return {"ok": True}
+
+    @app.get("/api/sa/paper")
+    def sa_paper():
+        book = db.kv_get("sa_paper") or {"cash": sa_config()["capital"], "start_cash": sa_config()["capital"], "positions": [], "closed": [],
+                                         "equity": [], "events": [], "fees": 0.0, "slippage": 0.0, "borrow": 0.0}
+        marks, upnl = {}, []
+        for p in book.get("positions", []):
+            for s in (p["y"], p["x"]):
+                if s not in marks:
+                    b = data.bars(s)
+                    marks[s] = {"close": float(b["c"].iloc[-1]) if len(b) else None, "date": str(b.index[-1].date()) if len(b) else None, "status": "historical"}
+                    if market_open():
+                        q = data.quote(s)
+                        if q.get("price"):
+                            marks[s].update(price=q["price"], status=q["status"], provider_time=q.get("provider_time"))
+            if p["status"] in ("open", "pending_exit"):
+                py = marks[p["y"]].get("price") or marks[p["y"]]["close"]; px = marks[p["x"]].get("price") or marks[p["x"]]["close"]
+                if py and px:
+                    p["unrealized"] = round(p["qty_y"] * (py - p["entry_y"]) + p["qty_x"] * (px - p["entry_x"]), 4)
+                    upnl.append(p["unrealized"])
+        realized = sum(c.get("net_pnl", 0) for c in book.get("closed", []))
+        return clean({**book, "marks": marks, "realized": realized, "unrealized": sum(upnl), "config": sa_config()})
+
+    @app.get("/api/sa/monitor")
+    def sa_monitor(y: str, x: str, strategy: str = "I"):
+        y, x = y.upper(), x.upper()
+        if strategy not in ("I", "V", "A", "K"):
+            raise HTTPException(400, "strategy must be I, V, A or K")
+        p = load_panel([y, x])
+        C = p["close"][[y, x]]
+        cfg = sa_config()
+        out = run_strategy(strategy, C, p["open"][[y, x]], {"entry": cfg["entry"], "exit": cfg["exit"], "stop": cfg["stop"]} if strategy == "I" else None)
+        n = min(252, len(C))
+        sl = slice(len(C) - n, None)
+        f = lambda s: [None if s is None or not np.isfinite(v) else round(float(v), 5) for v in s.to_numpy(float)[sl]] if s is not None else None
+        d = out.diag
+        side = out.weights[y].apply(np.sign)
+        live = {"status": "historical", "z": None}
+        if strategy == "I" and market_open():
+            qy, qx = data.quote(y), data.quote(x)
+            if qy.get("price") and qx.get("price"):
+                b = float(d["beta"].iloc[-1]); hl = d["half_life"].iloc[-1]
+                L = int(np.clip(round(float(LIBRARY["I"].defaults["lb_mult"]) * hl), 20, 90)) if np.isfinite(hl) else 40
+                spread = np.log(C[y]) - d["beta"] * np.log(C[x])
+                w = spread.iloc[-L:]
+                s_now = np.log(qy["price"]) - b * np.log(qx["price"])
+                live = {"z": (s_now - w.mean()) / w.std(ddof=1), "status": "live" if qy["status"] == qx["status"] == "live" else "delayed",
+                        "quotes": {y: qy, x: qx}}
+        trades = [t for t in run_trades(out, p, y, x)]
+        return clean({"y": y, "x": x, "strategy": strategy, "dates": [str(t.date()) for t in C.index[sl]], "z": f(d.get("z")),
+                      "entry_band": f(d.get("entry_band")) if "entry_band" in d else None, "entry": cfg["entry"] if strategy == "I" else LIBRARY[strategy].defaults["entry"],
+                      "exit": cfg["exit"] if strategy == "I" else LIBRARY[strategy].defaults["exit"], "stop": cfg["stop"] if strategy == "I" else LIBRARY[strategy].defaults.get("stop"),
+                      "beta": f(d.get("beta")), "coint_p": f(d.get("coint_p")), "adf_p": f(d.get("adf_p")), "half_life": f(d.get("half_life")),
+                      "position": [int(v) for v in side.to_numpy()[sl]], "norm_y": f(C[y] / C[y].iloc[len(C) - n]), "norm_x": f(C[x] / C[x].iloc[len(C) - n]),
+                      "live": live, "trades": trades[-30:], "data": data_meta(p)})
+
+    def run_trades(out, p, y, x):
+        res = bt.run(out.weights, p["open"][[y, x]], p["close"][[y, x]], out.units, 1000.0, costs_from({}), out.reason)
+        return res.trades
 
     @app.post("/api/agent/tick")
     def agent_tick():

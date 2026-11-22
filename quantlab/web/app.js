@@ -42,7 +42,7 @@
     ['', 'Executive Overview', 'Overview'], ['library', 'Strategy Library', 'Research'], ['scanner', 'Statistical Arbitrage Scanner'], ['zscore', 'Z-Score Scanner'],
     ['pairs', 'Pairs Discovery'], ['compare', 'Strategy A vs B', 'Testing'], ['optimize', 'Parameter Optimization'], ['backtest', 'Historical Backtesting'],
     ['walkforward', 'Walk-Forward Analysis'], ['portfolio', 'Portfolio Construction', 'Portfolio & risk'], ['risk', 'Risk Monitor'], ['trades', 'Trade History'],
-    ['performance', 'Performance Analytics'], ['settings', 'Data Connections & Settings', 'System']];
+    ['performance', 'Performance Analytics'], ['settings', 'Data Connections & Settings', 'System'], ['statarb', 'Statistical Arbitrage Lab', 'Stat-Arb Lab']];
   $('#nav').innerHTML = PAGES.map((p, i) => (p[2] ? `<div class="grp">${p[2]}</div>` : '') + `<a href="#/${p[0]}" data-p="${p[0]}"><span class="n">${String(i + 1).padStart(2, '0')}</span>${p[1]}</a>`).join('');
   $('#menu').onclick = () => $('#nav').classList.toggle('open');
 
@@ -449,6 +449,167 @@
     $('#cf').onsubmit = async e => { e.preventDefault(); const o = Object.fromEntries(new FormData(e.target)); const ag = o.agent === '1'; delete o.agent; await api('/api/settings', { method: 'POST', body: { costs: o, agent_enabled: ag } }); SETTINGS = null; $('#cs').textContent = ' saved'; };
     $('#errs').innerHTML = d.errors.length ? `<table><tbody>${d.errors.map(e => `<tr><td><b>${esc(e.symbol)}</b></td><td class="small">${esc(e.error)}</td><td class="small dim">${ago(e.at)}</td></tr>`).join('')}</tbody></table>` : '<div class="muted small">None.</div>';
     $('#log').textContent = (s.agent.log || []).slice().reverse().join('\n') || '—';
+  };
+
+  // ------------------------------------------------------------------ Statistical Arbitrage Lab
+  const SA_TABS = [['overview', 'Strategy Overview'], ['scanner', 'Live Pair Scanner'], ['coint', 'Cointegration Analysis'], ['zmon', 'Z-Score Monitor'],
+    ['opps', 'Pair Opportunities'], ['paper', 'Active Paper Positions'], ['backtest', 'Historical Backtesting'], ['perf', 'Performance Analytics'],
+    ['risk', 'Risk Management'], ['config', 'Strategy Configuration']];
+  const SA_KEYS = ['K', 'A', 'V', 'B', 'I'];
+  const saColor = k => ({ K: Charts.css('--s4'), A: Charts.css('--s3'), V: Charts.css('--s2'), B: '#8b7fd6', I: Charts.css('--s1') }[k]);
+  R.statarb = async (p) => {
+    const tab = p.tab || 'overview';
+    view.innerHTML = `<h1>Statistical Arbitrage Lab</h1><p class="sub">Pairs trading built from the Quantopian lecture "Basic Statistical Arbitrage: Understanding the Math Behind Pairs Trading" (Max Margenot), plus an improved adaptive version. US stocks and ETFs, daily Nasdaq bars; paper only — no orders are sent anywhere.</p>
+      <div class="tabs" style="flex-wrap:wrap">${SA_TABS.map(([k, l]) => `<button class="${k === tab ? 'on' : ''}" data-t="${k}">${l}</button>`).join('')}</div><div id="sa"></div>`;
+    view.querySelectorAll('.tabs button').forEach(b => b.onclick = () => location.hash = '#/statarb?tab=' + b.dataset.t);
+    const host = $('#sa');
+    await (SA[tab] || SA.overview)(host, p);
+  };
+  const SA = {};
+  SA.overview = async (h) => {
+    const s = await api('/api/sa/summary'); const sm = s.summary;
+    h.innerHTML = `<div class="grid g2"><div class="card rep"><h2>What the video teaches</h2>
+      <p class="small dim">The video is the talk version of two public Quantopian notebooks ("Integration, Cointegration and Stationarity" and "Introduction to Pairs Trading"); I could not open the video or its transcript, so the method below is taken from those notebooks, which the talk walks through.</p>
+      <ul class="small"><li><b>Stationarity.</b> A series is stationary when its mean and variance do not change over time. Prices are usually I(1) — integrated of order one — while their day-to-day changes are I(0), stationary.</li>
+      <li><b>Cointegration ≠ correlation.</b> Two I(1) prices are cointegrated if some combination Y − β·X is I(0). Correlated series can drift apart forever; cointegrated ones are pulled back. Tested with Engle-Granger (statsmodels <span class="mono">coint</span>) and the ADF test on the spread, using p &lt; 0.05.</li>
+      <li><b>Hedge ratio.</b> β from an ordinary least-squares regression of one price on the other; the lecture then uses a 30-day rolling regression so β keeps up with the market.</li>
+      <li><b>Spread and z-score.</b> Spread = Y − β·X; z = (1-day average − 30-day average) / 30-day standard deviation.</li>
+      <li><b>Rules.</b> Long the spread (buy Y, sell β·X) when z &lt; −1; short it when z &gt; +1; exit as z returns to zero.</li>
+      <li><b>Warnings from the lecture.</b> Searching many pairs creates multiple-comparison bias; z-scores assume a distribution that financial data often violates; and a pair can stop being cointegrated — the lecture's own example pair failed the test in the following year. It lists ADF, Hurst exponent, Ornstein-Uhlenbeck half-life and Kalman filters as the next steps.</li></ul></div>
+      <div class="card rep"><h2>The strategies compared</h2><ul class="small">
+      <li><b>K · Basic correlation pairs</b> — distance method, no cointegration test (the approach the lecture warns against).</li>
+      <li><b>A · Cointegration pairs</b> — log-price spread, rolling OLS hedge, trades only while rolling Engle-Granger passes.</li>
+      <li><b>V · Video z-score pairs</b> — the lecture's rules exactly: 30-day rolling β on prices, z from 1-day vs 30-day averages, ±1 entry, exit at 0, trade only while cointegrated (p &lt; 0.05). The notebook regresses S1 on S2 but builds S2 − β·S1; V uses the consistent form.</li>
+      <li><b>B · Single-stock z-score</b> — each stock against its own average.</li>
+      <li><b>I · Improved adaptive stat-arb</b> — the lecture's "further research" list implemented: Kalman hedge ratio; trades only while rolling Engle-Granger <i>and</i> ADF on the spread pass and the OU half-life is 2–30 sessions; z-score lookback = 3 × half-life; entry ±2 raised automatically when the spread is turbulent; exit ±0.5; stop ±3.5; time stop 3 × half-life; emergency exit when cointegration breaks (rolling p &gt; 0.20); 5-session cooldown.</li></ul>
+      <h3>Maths of I</h3><p class="small mono">β<sub>t</sub> : Kalman, y<sub>t</sub> = α<sub>t</sub> + β<sub>t</sub>x<sub>t</sub> + ε (log prices)<br>s<sub>t</sub> = ln Y<sub>t</sub> − β<sub>t</sub> ln X<sub>t</sub><br>z<sub>t</sub> = (s<sub>t</sub> − mean<sub>L</sub>(s)) / sd<sub>L</sub>(s), L = 3·HL<br>HL = ln2 / κ, s<sub>t+1</sub> = c + φ s<sub>t</sub> + e, κ = −ln φ<br>enter |z| ≥ 2·clip(√(σ<sub>20</sub>/σ<sub>120</sub>), 0.85, 1.5)</p></div></div>
+      <div class="card" style="margin-top:14px"><h2>Latest comparison (pooled across the scanner's top pairs, after costs)</h2><div id="ov"></div></div>`;
+    $('#ov', h).innerHTML = sm ? saTable(sm, '180') + `<div class="small dim" style="margin-top:8px">${pill('historical', 'to ' + sm.end)} Pairs: ${esc(sm.pairs.map(x => x.join('/')).join(', '))}. Full tables on <a href="#/statarb?tab=backtest">Historical Backtesting</a>.</div>` : '<div class="muted small">The agent runs the 30/60/90/180-day study after each scan; results appear here when it finishes.</div>';
+  };
+  function saTable(sm, hz) {
+    const row = sm.by_horizon[hz] || {}; const best = sm.best_by_sharpe[hz];
+    const cols = [['total_return', 'Return', pct], ['net_pnl', 'Net P&L $', v => num(v, 2)], ['gross_pnl', 'Gross P&L $', v => num(v, 2)], ['win_rate', 'Win rate', pct], ['trades', 'Trades', v => num(v, 0)],
+      ['avg_win', 'Avg win $', v => num(v, 2)], ['avg_loss', 'Avg loss $', v => num(v, 2)], ['profit_factor', 'PF', num], ['sharpe', 'Sharpe', num], ['sortino', 'Sortino', num],
+      ['max_drawdown', 'Max DD', pct], ['calmar', 'Calmar', num], ['max_consecutive_losses', 'Max consec. losses', v => num(v, 0)], ['fees', 'Fees $', v => num(v, 2)], ['slippage_costs', 'Spread+slippage $', v => num(v, 2)], ['borrow_costs', 'Borrow $', v => num(v, 2)]];
+    return `<div class="scroll"><table><thead><tr><th>Strategy</th>${cols.map(c => `<th class="n">${c[1]}</th>`).join('')}</tr></thead><tbody>${SA_KEYS.filter(k => row[k]).map(k => `<tr><td><b>${k}</b> ${esc(({ K: 'Correlation', A: 'Cointegration', V: 'Video z-score', B: 'Single-stock z', I: 'Improved' })[k])}${k === best ? ' <span class="pill good">best Sharpe</span>' : ''}</td>${cols.map(([c, , f]) => `<td class="n">${f(row[k][c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+      <div class="small dim" style="margin-top:6px">$1,000 per pair, ${row.I ? row.I.pairs : '—'} pairs, ${row.I ? row.I.sessions : '—'} sessions. Fixed default parameters (not fitted on this window). "Best Sharpe" needs a positive Sharpe and ≥ 5 trades; short windows hold few trades, so treat 30–90-day figures as anecdotal.</div>`;
+  }
+  SA.scanner = async (h) => {
+    const [sc, pb] = await Promise.all([api('/api/scan/latest'), api('/api/sa/paper')]);
+    const sig = Object.fromEntries((pb.signals || []).map(s => [s.y + '/' + s.x, s]));
+    h.innerHTML = sc.empty ? `<div class="muted">${esc(sc.note)}</div>` : `<div class="card"><div class="small dim" style="margin-bottom:8px">${pill('historical', 'closes ' + sc.asof)} ${sc.candidates} candidate pairs from ${sc.liquid_symbols} liquid stocks; ${sc.accepted.length} passed Engle-Granger, Johansen, half-life, Hurst and the cost filter. Strategy-I columns from the paper engine's last update (${esc(pb.updated || '—')}).</div><div class="scroll"><table><thead><tr><th>Pair</th><th>Sector</th><th class="n">Corr</th><th class="n">EG p</th><th class="n">ADF p (I)</th><th class="n">Hedge β (I)</th><th class="n">Half-life</th><th class="n">z (I)</th><th>Status</th></tr></thead><tbody>
+      ${sc.accepted.map(r => { const s = sig[r.y + '/' + r.x] || {}; return `<tr class="click" data-y="${r.y}" data-x="${r.x}"><td><b>${r.y}</b>/${r.x}</td><td class="small">${esc(r.sector)}</td><td class="n">${num(r.corr)}</td><td class="n">${num(r.eg_p, 4)}</td><td class="n">${num(s.adf_p, 4)}</td><td class="n">${num(s.beta, 3)}</td><td class="n">${num(s.half_life ?? r.half_life, 1)}</td><td class="n">${num(s.z)}</td><td>${s.side ? `<span class="pill warn">${s.side > 0 ? 'long' : 'short'} spread</span>` : s.coint_p != null && s.coint_p > 0.2 ? '<span class="pill bad">cointegration broken</span>' : '<span class="muted small">inside band</span>'}</td></tr>`; }).join('')}</tbody></table></div></div>`;
+    h.querySelectorAll('tr.click').forEach(tr => tr.onclick = () => location.hash = `#/statarb?tab=zmon&y=${tr.dataset.y}&x=${tr.dataset.x}`);
+  };
+  SA.coint = async (h, p) => {
+    h.innerHTML = `<form class="f card" id="cf">${pairFields(p)}<button class="b">Test pair</button></form><div id="co"></div>`;
+    const go = async () => { const o = formData($('#cf')); $('#co').innerHTML = '<div class="status spin">Testing…</div>';
+      const d = await api(`/api/pair?y=${o.y}&x=${o.x}`); const s = d.stats, j = s.johansen, ou = s.ou;
+      $('#co').innerHTML = dataLine(d.data) + `<div class="grid g2"><div class="card"><h2>Tests (last two years)</h2><table><tbody>
+        <tr><td>Return correlation</td><td class="mono small">${num(s.corr_returns)}</td><td class="small dim">correlation alone does not imply cointegration</td></tr>
+        <tr><td>Engle-Granger Y on X</td><td class="mono small">p = ${num(s.eg_p, 4)}</td><td>${okPill(s.eg_p < 0.05, s.eg_p < 0.05 ? 'cointegrated' : 'not cointegrated')}</td></tr>
+        <tr><td>Engle-Granger X on Y</td><td class="mono small">p = ${num(s.eg_p_reverse, 4)}</td><td>${okPill(s.eg_p_reverse < 0.05, s.eg_p_reverse < 0.05 ? 'pass' : 'fail')}</td></tr>
+        <tr><td>ADF on the spread</td><td class="mono small">p = ${num(s.adf_p_spread, 4)}</td><td>${okPill(s.adf_p_spread < 0.05, s.adf_p_spread < 0.05 ? 'stationary' : 'not stationary')}</td></tr>
+        <tr><td>Johansen trace</td><td class="mono small">${num(j.trace, 2)} vs 95% ${num(j.crit95, 2)}</td><td>${okPill(j.reject_conf >= 0.95, j.reject_conf >= 0.95 ? 'pass' : 'fail')}</td></tr>
+        <tr><td>Hedge ratio (OLS, log)</td><td class="mono small">β ${num(s.beta, 4)}</td><td></td></tr>
+        <tr><td>OU half-life</td><td class="mono small">${ou.ok ? num(ou.half_life, 1) + ' sessions' : esc(ou.reason)}</td><td>${okPill(ou.ok && ou.half_life >= 2 && ou.half_life <= 30, ou.ok && ou.half_life <= 30 ? 'tradeable' : 'too slow / none')}</td></tr>
+        <tr><td>Hurst (spread)</td><td class="mono small">${num(s.hurst)}</td><td>${okPill(s.hurst < 0.5, s.hurst < 0.5 ? 'mean-reverting' : 'trending')}</td></tr></tbody></table></div>
+        <div class="card"><h2>Spread (Y − β·X, log)</h2><div id="c1"></div></div></div>`;
+      Charts.line($('#c1'), { dates: d.dates, series: [{ name: 'spread', values: d.spread, color: C().a }], fmt: v => v.toFixed(3) }); };
+    $('#cf').onsubmit = e => { e.preventDefault(); go().catch(er => $('#co').innerHTML = `<div class="status err">${esc(er.message)}</div>`); };
+    if (p.y) go().catch(er => $('#co').innerHTML = `<div class="status err">${esc(er.message)}</div>`);
+  };
+  SA.zmon = async (h, p) => {
+    h.innerHTML = `<form class="f card" id="zf">${pairFields(p)}<label class="fld">Strategy<select name="strategy">${['I', 'V', 'A', 'K'].map(k => `<option ${k === (p.strategy || 'I') ? 'selected' : ''}>${k}</option>`).join('')}</select></label><button class="b">Show</button></form><div id="zo"></div>`;
+    const go = async () => { const o = Object.fromEntries(new FormData($('#zf'))); o.y = o.y.toUpperCase(); o.x = o.x.toUpperCase(); store.set('pair', { y: o.y, x: o.x });
+      $('#zo').innerHTML = '<div class="status spin">Calculating…</div>';
+      const d = await api(`/api/sa/monitor?y=${o.y}&x=${o.x}&strategy=${o.strategy}`);
+      const lz = d.live; const last = d.z ? d.z[d.z.length - 1] : null;
+      $('#zo').innerHTML = dataLine(d.data) + `<div class="grid g4">${[['z at last close', num(last), pill('historical', d.dates[d.dates.length - 1])], ['z now', num(lz.z), pill(lz.status)], ['Hedge ratio β', num(d.beta ? d.beta[d.beta.length - 1] : null, 4), ''], ['Position (signal)', ['short spread', 'flat', 'long spread'][(d.position[d.position.length - 1] || 0) + 1], '']].map(([l, v, s]) => `<div class="card kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('')}</div>
+        <div class="grid g2" style="margin-top:14px"><div class="card"><h2>Z-score with entry / exit / stop bands (${d.strategy})</h2><div id="z1"></div></div><div class="card"><h2>Normalised prices</h2><div id="z2"></div></div>
+        ${d.coint_p ? '<div class="card"><h2>Rolling cointegration p-value (≤ 0.05 = trade allowed; > 0.20 = breakdown exit for I)</h2><div id="z3"></div></div>' : ''}${d.half_life ? '<div class="card"><h2>Half-life (sessions)</h2><div id="z4"></div></div>' : ''}
+        <div class="card" style="grid-column:1/-1"><h2>Trades on this pair ($1,000, full history, default rules)</h2>${tradesTable(d.trades, 30)}</div></div>`;
+      const refs = [{ v: d.entry }, { v: -d.entry }, { v: d.exit }, { v: -d.exit }].concat(d.stop ? [{ v: d.stop }, { v: -d.stop }] : []);
+      const ser = [{ name: 'z', values: d.z, color: C().a }];
+      if (d.entry_band) { ser.push({ name: 'entry band (vol-adjusted)', values: d.entry_band, color: C().b }); ser.push({ name: '−entry band', values: d.entry_band.map(v => v == null ? null : -v), color: C().b }); }
+      Charts.line($('#z1'), { dates: d.dates, series: ser, refs, fmt: v => v.toFixed(2) });
+      Charts.line($('#z2'), { dates: d.dates, series: [{ name: d.y, values: d.norm_y, color: C().a }, { name: d.x, values: d.norm_x, color: C().b }], fmt: v => v.toFixed(3) });
+      if (d.coint_p) Charts.line($('#z3'), { dates: d.dates, series: [{ name: 'EG p', values: d.coint_p, color: C().a }], refs: [{ v: 0.05 }, { v: 0.2 }], fmt: v => v.toFixed(3) });
+      if (d.half_life) Charts.line($('#z4'), { dates: d.dates, series: [{ name: 'half-life', values: d.half_life.map(v => v != null && v < 200 ? v : null), color: C().a }], fmt: v => v.toFixed(1) }); };
+    $('#zf').onsubmit = e => { e.preventDefault(); go().catch(er => $('#zo').innerHTML = `<div class="status err">${esc(er.message)}</div>`); };
+    go().catch(er => $('#zo').innerHTML = `<div class="status err">${esc(er.message)}</div>`);
+  };
+  SA.opps = async (h) => {
+    const pb = await api('/api/sa/paper'); const cfg = pb.config; const sig = (pb.signals || []).filter(s => s.side || (s.z != null && Math.abs(s.z) >= cfg.entry * 0.75));
+    h.innerHTML = `<div class="card"><div class="small dim" style="margin-bottom:8px">Strategy ${esc(cfg.strategy)} on the scanner's pairs at the ${esc(pb.updated || '—')} close. A signal requires the z-score threshold <i>and</i> rolling cointegration, ADF and half-life checks. You review and trade manually — nothing is sent to a broker.</div>
+      ${sig.length ? `<table><thead><tr><th>Pair</th><th class="n">z</th><th>Signal</th><th>What to do (if you take it)</th><th class="n">β</th><th class="n">EG p</th><th class="n">ADF p</th><th class="n">Half-life</th></tr></thead><tbody>${sig.map(s => `<tr class="click" data-y="${s.y}" data-x="${s.x}"><td><b>${s.y}</b>/${s.x}</td><td class="n">${num(s.z)}</td><td>${s.side ? `<span class="pill warn">${s.side > 0 ? 'LONG' : 'SHORT'} spread${s.prev === 0 ? ' · new' : ''}</span>` : '<span class="muted small">near threshold</span>'}</td>
+        <td class="small">${s.side > 0 ? `buy ${s.y}, sell ${num(s.beta, 2)}× (log-hedged) ${s.x}` : s.side < 0 ? `sell ${s.y}, buy ${num(s.beta, 2)}× (log-hedged) ${s.x}` : '—'}</td><td class="n">${num(s.beta, 3)}</td><td class="n">${num(s.coint_p, 3)}</td><td class="n">${num(s.adf_p, 3)}</td><td class="n">${num(s.half_life, 1)}</td></tr>`).join('')}</tbody></table>` : '<div class="muted small">No pair is at or near its entry threshold.</div>'}</div>`;
+    h.querySelectorAll('tr.click').forEach(tr => tr.onclick = () => location.hash = `#/statarb?tab=zmon&y=${tr.dataset.y}&x=${tr.dataset.x}`);
+  };
+  SA.paper = async (h) => {
+    const pb = await api('/api/sa/paper'); const e = pb.equity || []; const eq = e.length ? e[e.length - 1][1] : pb.start_cash;
+    h.innerHTML = `<div class="grid g4">${[['Equity', '$' + num(eq + 0, 2), `started $${num(pb.start_cash, 2)}`], ['Realized net P&L', '$' + num(pb.realized, 2), `${(pb.closed || []).length} closed trades`], ['Unrealized P&L', '$' + num(pb.unrealized, 2), `${(pb.positions || []).length} open / pending`], ['Costs paid', '$' + num((pb.fees || 0) + (pb.slippage || 0) + (pb.borrow || 0), 2), `fees ${num(pb.fees, 2)} · spread+slip ${num(pb.slippage, 2)} · borrow ${num(pb.borrow, 2)}`]].map(([l, v, s]) => `<div class="card kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('')}</div>
+      ${pb.halted ? `<div class="status err">New entries halted since ${pb.halted} (drawdown limit).</div>` : ''}
+      <div class="card" style="margin-top:14px"><h2>Open and pending positions</h2>${(pb.positions || []).length ? `<table><thead><tr><th>Pair</th><th>Side</th><th>Status</th><th class="n">Qty Y / X</th><th class="n">Entry Y / X</th><th class="n">Mark Y / X</th><th class="n">Hedge β</th><th class="n">Unrealized</th><th class="n">Fees / borrow</th></tr></thead><tbody>${pb.positions.map(q => { const my = pb.marks[q.y] || {}, mx = pb.marks[q.x] || {};
+        return `<tr><td>${q.y}/${q.x}</td><td>${q.side > 0 ? 'long' : 'short'} spread</td><td>${esc(q.status)}${q.status === 'pending_entry' ? ' (next open)' : ''}</td><td class="n">${num(q.qty_y, 3)} / ${num(q.qty_x, 3)}</td><td class="n">${num(q.entry_y)} / ${num(q.entry_x)}</td>
+        <td class="n small">${num(my.price ?? my.close)} ${pill(my.status || 'historical')} / ${num(mx.price ?? mx.close)} ${pill(mx.status || 'historical')}</td><td class="n">${num(q.hedge_ratio, 3)}</td><td class="n">${num(q.unrealized, 2)}</td><td class="n">${num(q.fees, 2)} / ${num(q.borrow, 2)}</td></tr>`; }).join('')}</tbody></table>` : '<div class="muted small">No positions.</div>'}</div>
+      <div class="grid g2" style="margin-top:14px"><div class="card"><h2>Equity</h2><div id="pe"></div></div><div class="card"><h2>Event log</h2><div class="log">${esc((pb.events || []).slice().reverse().join('\n') || '—')}</div></div></div>
+      <div class="card" style="margin-top:14px"><h2>Closed trades</h2>${(pb.closed || []).length ? `<table><thead><tr><th>Pair</th><th>Entry</th><th>Exit</th><th>Reason</th><th class="n">Entry Y / X</th><th class="n">Exit Y / X</th><th class="n">Gross</th><th class="n">Fees</th><th class="n">Borrow</th><th class="n">Net</th></tr></thead><tbody>${pb.closed.slice().reverse().map(c => `<tr><td>${c.y}/${c.x} (${c.side > 0 ? 'long' : 'short'})</td><td class="mono small">${c.entry_date}</td><td class="mono small">${c.exit_date}</td><td>${esc(c.exit_reason)}</td><td class="n">${num(c.entry_y)} / ${num(c.entry_x)}</td><td class="n">${num(c.exit_y)} / ${num(c.exit_x)}</td><td class="n">${num(c.gross_pnl, 2)}</td><td class="n">${num(c.fees, 2)}</td><td class="n">${num(c.borrow, 2)}</td><td class="n">${num(c.net_pnl, 2)}</td></tr>`).join('')}</tbody></table>` : '<div class="muted small">None yet.</div>'}</div>`;
+    if (e.length > 1) Charts.line($('#pe'), { dates: e.map(x => x[0]), series: [{ name: 'Equity', values: e.map(x => x[1]), color: C().a }], fmt: v => '$' + v.toFixed(2) }); else $('#pe').innerHTML = '<div class="muted small">One point per session once the paper book runs.</div>';
+  };
+  SA.backtest = async (h, p) => {
+    const s = await api('/api/sa/summary'); const sm = s.summary; let hz = p.h || '180';
+    h.innerHTML = `<div class="card"><div class="tabs" id="hz">${s.horizons.map(x => `<button class="${String(x) === hz ? 'on' : ''}" data-h="${x}">${x} days</button>`).join('')}</div><div id="ht"></div><div id="hc" style="margin-top:12px"></div></div>
+      <div class="card" style="margin-top:14px"><h2>Per pair</h2><form class="f" id="pf"><label class="fld">Pair<select name="pair">${s.studies.map(r => `<option>${esc(r.pair)}</option>`).join('')}</select></label></form><div id="pp" style="margin-top:10px"></div></div>
+      <div class="card" style="margin-top:14px"><h2>Study another pair</h2><form class="f" id="nf">${pairFields(p)}<button class="b">Run 30/60/90/180-day study</button></form><div id="ns"></div></div>`;
+    const draw = () => { if (!sm) { $('#ht').innerHTML = '<div class="muted small">Waiting for the agent\'s first study.</div>'; return; }
+      $('#ht').innerHTML = saTable(sm, hz);
+      const row = sm.by_horizon[hz] || {}; const ks = SA_KEYS.filter(k => row[k]);
+      Charts.bars($('#hc'), { labels: ks, values: ks.map(k => row[k].total_return), colorFn: (v, i) => saColor(ks[i]), fmt: v => (v * 100).toFixed(2) + '%', yfmt: v => (v * 100).toFixed(1) + '%', name: 'return' }); };
+    $('#hz').querySelectorAll('button').forEach(b => b.onclick = () => { hz = b.dataset.h; $('#hz').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); draw(); });
+    draw();
+    const pair = async () => { const v = $('#pf [name=pair]').value; if (!v) { $('#pp').innerHTML = '<div class="muted small">No studies yet.</div>'; return; } const [y, x] = v.split('/');
+      const st = await api(`/api/sa/study?y=${y}&x=${x}`); renderStudy($('#pp'), st); };
+    $('#pf').onchange = pair; pair().catch(() => { });
+    $('#nf').onsubmit = async e => { e.preventDefault(); const o = formData($('#nf')); const r = await job('/api/sa/study', { y: o.y, x: o.x }, $('#ns')); renderStudy($('#ns'), r); };
+  };
+  function renderStudy(host, st) {
+    const hs = Object.keys(st.horizons);
+    host.innerHTML = `<table><thead><tr><th>Window</th>${SA_KEYS.map(k => `<th class="n">${k} return</th><th class="n">${k} trades</th>`).join('')}</tr></thead><tbody>${hs.map(hh => { const r = st.horizons[hh]; return `<tr><td>${hh} d (${r.sessions} sessions)</td>${SA_KEYS.map(k => `<td class="n">${pct(r[k]?.total_return, 2)}</td><td class="n">${r[k]?.trades ?? '—'}</td>`).join('')}</tr>`; }).join('')}</tbody></table><div id="sc" style="margin-top:10px"></div>`;
+    const r = st.horizons['180'] || st.horizons[hs[hs.length - 1]]; const dates = r.I.dates;
+    const cum = a => { let e = 1; return a.map(v => (e *= 1 + (v || 0))); };
+    Charts.line($('#sc', host), { dates, series: SA_KEYS.filter(k => r[k]).map(k => ({ name: k, values: cum(r[k].daily), color: saColor(k) })), fmt: v => ((v - 1) * 100).toFixed(2) + '%' });
+  }
+  SA.perf = async (h) => {
+    const rs = await api('/api/research'); const rows = rs.results.filter(r => SA_KEYS.includes(r.strategy));
+    const by = {}; rows.forEach(r => (by[r.strategy] = by[r.strategy] || []).push(r));
+    const med = a => { const v = a.filter(x => x != null).sort((p, q) => p - q); return v.length ? v[Math.floor(v.length / 2)] : null; };
+    h.innerHTML = `<div class="card"><h2>Walk-forward, out-of-sample (2-year train → 6-month unseen test, rolling; $100k per test)</h2>${Object.keys(by).length ? `<table><thead><tr><th>Strategy</th><th class="n">Pairs</th><th class="n">Qualified</th><th class="n">Median OOS return</th><th class="n">Median Sharpe</th><th class="n">Median win rate</th><th class="n">Median max DD</th><th class="n">Median Sharpe @2× costs</th></tr></thead><tbody>${SA_KEYS.filter(k => by[k]).map(k => `<tr><td><b>${k}</b> ${esc(s_name(k))}</td><td class="n">${by[k].length}</td><td class="n">${by[k].filter(r => r.qualifies).length}</td><td class="n">${pct(med(by[k].map(r => r.oos_return)))}</td><td class="n">${num(med(by[k].map(r => r.oos_sharpe)))}</td><td class="n">${pct(med(by[k].map(r => r.win_rate)))}</td><td class="n">${pct(med(by[k].map(r => r.max_drawdown)))}</td><td class="n">${num(med(by[k].map(r => r.sharpe_2x_costs)))}</td></tr>`).join('')}</tbody></table>` : '<div class="muted small">Walk-forward results appear as the agent works through its queue.</div>'}</div>
+      <div class="card" style="margin-top:14px"><h2>Each test</h2>${rows.length ? `<div class="scroll"><table><thead><tr><th>Pair</th><th>Strategy</th><th class="n">OOS return</th><th class="n">Sharpe</th><th class="n">Win rate</th><th class="n">Max DD</th><th class="n">Trades</th><th>Verdict</th></tr></thead><tbody>${rows.map(r => `<tr><td>${r.pair}</td><td>${r.strategy}</td><td class="n">${pct(r.oos_return)}</td><td class="n">${num(r.oos_sharpe)}</td><td class="n">${pct(r.win_rate)}</td><td class="n">${pct(r.max_drawdown)}</td><td class="n">${r.trades}</td><td>${r.qualifies ? okPill(true, 'qualifies') : `<span class="pill bad" title="${esc(r.reasons.join('; '))}">fails</span>`}</td></tr>`).join('')}</tbody></table></div>` : ''}</div>`;
+  };
+  const s_name = k => (STRATS.find(s => s.key === k) || {}).name || k;
+  SA.risk = async (h) => {
+    const pb = await api('/api/sa/paper'); const c = pb.config; const e = pb.equity || []; const eq = e.length ? e[e.length - 1][1] : pb.start_cash;
+    const peak = Math.max(pb.start_cash, ...e.map(x => x[1])); const dd = eq / peak - 1; const live = pb.positions || [];
+    const stale = (pb.signals || []).filter(s => s.stale_sessions > c.stale_sessions); const broken = (pb.signals || []).filter(s => s.coint_p != null && s.coint_p > 0.2);
+    const row = (l, v, lim, ok) => `<tr><td>${l}</td><td class="n">${v}</td><td class="n">${lim}</td><td>${okPill(ok, ok ? 'ok' : 'blocked')}</td></tr>`;
+    h.innerHTML = `<div class="grid g2"><div class="card"><h2>Limits (enforced before any paper entry)</h2><table><thead><tr><th>Check</th><th class="n">Now</th><th class="n">Limit</th><th></th></tr></thead><tbody>
+      ${row('Portfolio drawdown', pct(dd), '−' + pct(c.max_drawdown), !pb.halted && -dd < c.max_drawdown)}${row('Simultaneous pairs', live.length, c.max_pairs, live.length <= c.max_pairs)}
+      ${row('Capital per pair', pct(c.risk_per_pair * c.leverage, 0) + ' of equity', '', true)}${row('Leverage (gross ÷ equity)', '', num(c.leverage, 1) + '×', true)}
+      ${row('Pairs per sector', Math.max(0, ...Object.values(live.reduce((a, q) => (a[q.sector] = (a[q.sector] || 0) + 1, a), {}))), c.max_per_sector, true)}
+      ${row('Correlated exposure', 'no stock in two pairs', '', true)}${row('Stale data', stale.length ? stale.map(s => s.y + '/' + s.x).join(', ') : 'none', `> ${c.stale_sessions} sessions`, !stale.length)}
+      ${row('Liquidity', 'per leg', usd(c.min_dollar_volume) + ' / day', true)}</tbody></table>${pb.halted ? `<div class="status err">Halted since ${pb.halted}.</div>` : ''}</div>
+      <div class="card"><h2>Cointegration breakdown watch</h2>${broken.length ? `<table><tbody>${broken.map(s => `<tr><td>${s.y}/${s.x}</td><td class="n">EG p ${num(s.coint_p, 3)}</td><td>${okPill(false, 'breakdown — I exits / will not enter')}</td></tr>`).join('')}</tbody></table>` : '<div class="muted small">No monitored pair has a rolling cointegration p-value above 0.20.</div>'}
+      <h2 style="margin-top:14px">Emergency exits &amp; execution handling</h2><ul class="small"><li>Strategy I exits on its stop (|z| ≥ ${c.stop}), time stop (${c.hold_mult} × half-life) or cointegration breakdown.</li><li>Fills use the next session's official open for both legs; if either leg has no bar, the order waits and is cancelled after 3 sessions.</li><li>No live orders: this engine never contacts a broker.</li></ul></div></div>`;
+  };
+  SA.config = async (h) => {
+    const c = await api('/api/sa/config');
+    const lab = { capital: 'Starting capital (USD)', max_pairs: 'Max simultaneous pairs', risk_per_pair: 'Capital per pair (share of equity)', leverage: 'Leverage (0–4)', entry: 'Entry |z|', exit: 'Exit |z|', stop: 'Stop |z|', hold_mult: 'Max hold (× half-life)', max_drawdown: 'Max portfolio drawdown', max_per_sector: 'Max pairs per sector', stale_sessions: 'Stale after (sessions)', min_dollar_volume: 'Min $ volume per leg' };
+    h.innerHTML = `<div class="card"><form class="f" id="cfg">${Object.entries(lab).map(([k, l]) => `<label class="fld">${l}<input type="number" step="any" name="${k}" value="${c[k]}"></label>`).join('')}<label class="fld">Strategy<select name="strategy">${['I', 'V', 'A', 'K'].map(k => `<option ${k === c.strategy ? 'selected' : ''}>${k}</option>`).join('')}</select></label><button class="b">Save</button><span id="cs" class="small dim"></span></form>
+      <div style="margin-top:14px;display:flex;gap:10px;align-items:center"><button class="b2" id="rst">Reset paper account to starting capital</button><span id="rs" class="small dim"></span></div>
+      <div class="small dim" style="margin-top:10px">Entry/exit/stop/max-hold apply to strategy I in the paper engine and the Z-score Monitor. Changes take effect at the next session update. Nothing here can place a real order.</div></div>`;
+    $('#cfg').onsubmit = async e => { e.preventDefault(); try { await api('/api/sa/config', { method: 'POST', body: Object.fromEntries(new FormData(e.target)) }); $('#cs').textContent = ' saved'; } catch (er) { $('#cs').textContent = ' ' + er.message; } };
+    $('#rst').onclick = async () => { await api('/api/sa/paper/reset', { method: 'POST', body: { capital: +$('#cfg [name=capital]').value } }); $('#rs').textContent = 'reset'; };
   };
 
   // ------------------------------------------------------------------ boot

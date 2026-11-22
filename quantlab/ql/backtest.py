@@ -40,6 +40,9 @@ class Result:
     leg_pnl: pd.DataFrame
     positions: pd.DataFrame
     halted: str | None = None
+    cost_fee: pd.Series | None = None        # commissions
+    cost_slip: pd.Series | None = None       # half quoted spread + slippage
+    cost_borrow: pd.Series | None = None     # short borrow (the cash-equity analogue of perp funding)
 
 
 def run(weights: pd.DataFrame, opens: pd.DataFrame, closes: pd.DataFrame, units: list[list[str]],
@@ -61,6 +64,7 @@ def run(weights: pd.DataFrame, opens: pd.DataFrame, closes: pd.DataFrame, units:
 
     sh = np.zeros(m); cash = capital
     eq = np.full(n, np.nan); gross = np.zeros(n); net = np.zeros(n); turn = np.zeros(n); cst = np.zeros(n)
+    cf = np.zeros(n); cs = np.zeros(n); cb = np.zeros(n)
     legp = np.zeros((n, m)); pos = np.zeros((n, m))
     cum_leg = np.zeros(m)
     eq_prev = capital
@@ -92,7 +96,7 @@ def run(weights: pd.DataFrame, opens: pd.DataFrame, closes: pd.DataFrame, units:
                 f = abs(d) * fp * fee
                 cash -= d * fp + f
                 c_cost = abs(d) * px * half + f
-                cst[t] += c_cost
+                cst[t] += c_cost; cf[t] += f; cs[t] += abs(d) * px * half
                 turn[t] += abs(d) * px
                 traded[j] = d; fills[j] = fp
                 # leg P&L on the traded shares from fill to close, minus fee
@@ -101,7 +105,7 @@ def run(weights: pd.DataFrame, opens: pd.DataFrame, closes: pd.DataFrame, units:
         # borrow on shorts at today's close notional
         short_notional = sum(-sh[j] * C[t, j] for j in range(m) if sh[j] < 0 and np.isfinite(C[t, j]))
         bc = short_notional * borrow_d
-        cash -= bc; cst[t] += bc
+        cash -= bc; cst[t] += bc; cb[t] += bc
         # mark to market
         val = 0.0
         for j in range(m):
@@ -151,7 +155,8 @@ def run(weights: pd.DataFrame, opens: pd.DataFrame, closes: pd.DataFrame, units:
 
     eqs = pd.Series(eq, idx)
     return Result(eqs, eqs.pct_change().fillna(eqs.iloc[0] / capital - 1), pd.Series(gross, idx), pd.Series(net, idx),
-                  pd.Series(turn, idx), pd.Series(cst, idx), trades, pd.DataFrame(legp, idx, syms), pd.DataFrame(pos, idx, syms), halted)
+                  pd.Series(turn, idx), pd.Series(cst, idx), trades, pd.DataFrame(legp, idx, syms), pd.DataFrame(pos, idx, syms), halted,
+                  pd.Series(cf, idx), pd.Series(cs, idx), pd.Series(cb, idx))
 
 
 def _flipped(tr, sh, legs):

@@ -126,15 +126,15 @@ def _vol_alloc(ret: pd.Series, p: dict) -> np.ndarray:
 _PV_CACHE: dict = {}
 
 
-def rolling_coint_p(y: pd.Series, x: pd.Series, window: int, every: int = 21) -> np.ndarray:
+def rolling_coint_p(y: pd.Series, x: pd.Series, window: int, every: int = 21, log: bool = True) -> np.ndarray:
     """Engle-Granger p-value on the trailing window ending at t, re-estimated every
     `every` bars and carried forward. Cached per (pair, dates, window)."""
-    key = (y.name, x.name, len(y), str(y.index[0]), str(y.index[-1]), float(y.iloc[-1]), float(x.iloc[-1]), window, every)
+    key = (y.name, x.name, len(y), str(y.index[0]), str(y.index[-1]), float(y.iloc[-1]), float(x.iloc[-1]), window, every, log)
     if key in _PV_CACHE:
         return _PV_CACHE[key]
     n = len(y)
     pv = np.full(n, np.nan); last = np.nan
-    yl, xl = np.log(y.to_numpy()), np.log(x.to_numpy())
+    yl, xl = (np.log(y.to_numpy()), np.log(x.to_numpy())) if log else (y.to_numpy(float), x.to_numpy(float))
     for t in range(window - 1, n):
         if (t - (window - 1)) % every == 0:
             last = stats.eg_fast_p(yl[t - window + 1:t + 1], xl[t - window + 1:t + 1])
@@ -367,6 +367,10 @@ LIBRARY: dict[str, Strategy] = {s.key: s for s in [
              {**COMMON, "lookback": 50, "entry": 1.0, "exit": 0.0, "max_hold": 40},
              {"lookback": [20, 50, 100], "entry": [0.5, 1.0, 1.5]}, strat_m),
 ]}
+
+
+from . import statarb as _statarb  # noqa: E402  (registers V, K, I)
+LIBRARY.update(_statarb.STRATS)
 
 
 def run(key: str, closes: pd.DataFrame, opens: pd.DataFrame, params: dict | None = None) -> Output:

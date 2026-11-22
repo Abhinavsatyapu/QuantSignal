@@ -74,7 +74,21 @@ def compute(res: Result, capital: float, bench: pd.Series | None = None, reg: pd
     monthly = (1 + d).resample("ME").prod() - 1
     pos_months = (monthly > 0).mean() if len(monthly) else float("nan")
     roll = d.rolling(63).apply(lambda x: x.mean() / x.std() * math.sqrt(TD) if x.std() > 0 else np.nan, raw=True)
+    def _cs(s):
+        return _f(s.reindex(eq.index).sum()) if s is not None else None
+    net_pnl = float(eq.iloc[-1] - capital) if n else float("nan")
+    tot_cost = float(res.costs.reindex(eq.index).sum())
+    streak = mx = 0
+    for t in closed:
+        streak = streak + 1 if t["pnl"] <= 0 else 0
+        mx = max(mx, streak)
     out = {
+        "net_pnl": _f(net_pnl), "gross_pnl": _f(net_pnl + tot_cost),
+        "avg_win": _f(np.mean([t["pnl"] for t in wins])) if wins else None,
+        "avg_loss": _f(np.mean([t["pnl"] for t in losses])) if losses else None,
+        "max_consecutive_losses": mx,
+        "fees": _cs(res.cost_fee), "slippage_costs": _cs(res.cost_slip), "borrow_costs": _cs(res.cost_borrow),
+        "capital_utilization": _f(res.gross_exposure.reindex(eq.index).mean()),
         "total_return": _f(total), "ann_return": _f(d.mean() * TD), "cagr": _f(cagr),
         "win_rate": _f(len(wins) / len(closed)) if closed else None,
         "profit_factor": _f(pf) if math.isfinite(pf) else ("∞" if pf == float("inf") else None),

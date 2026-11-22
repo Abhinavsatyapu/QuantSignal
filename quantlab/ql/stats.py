@@ -73,7 +73,10 @@ def adf_p(series: np.ndarray) -> float:
     if len(s) < 30 or np.std(s) == 0:
         return float("nan")
     try:
-        return float(adfuller(s, autolag="AIC")[1])  # noqa
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return float(adfuller(s, autolag="AIC")[1])
     except Exception:
         return float("nan")
 

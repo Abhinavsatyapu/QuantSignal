@@ -22,11 +22,12 @@ import numpy as np
 import pandas as pd
 
 from . import backtest as bt
-from . import engine, scanner
+from . import engine, salab, scanner
 from .data import Data, last_session
 from .strategies import LIBRARY
 
-RESEARCH_STRATS = ["B", "A", "C", "E", "F", "D", "G", "M"]   # Z-score first
+RESEARCH_STRATS = ["B", "I", "V", "K", "A", "C", "E", "F", "D", "G", "M"]   # Z-score, improved, video, correlation first
+AGENT_VERSION = 2
 QUALIFY = {"min_oos_sharpe": 0.5, "min_trades": 10, "min_fold_positive": 0.5, "min_deflated": 0.5, "min_sharpe_2x_costs": 0.0, "max_dd": -0.20}
 
 
@@ -39,7 +40,7 @@ class Agent:
         self.stop_flag = False
         st = self.db.kv_get("agent_state") or {}
         self.state = {"enabled": st.get("enabled", True), "phase": "idle", "message": "starting", "log": st.get("log", [])[-150:],
-                      "queue": sorted(st.get("queue", []), key=lambda i: RESEARCH_STRATS.index(i["strategy"]) if i.get("strategy") in RESEARCH_STRATS else 99), "done": st.get("done", 0), "last_tick": None, "scan_asof": st.get("scan_asof")}
+                      "queue": sorted(st.get("queue", []), key=lambda i: -1 if i.get("type") == "study" else (RESEARCH_STRATS.index(i["strategy"]) if i.get("strategy") in RESEARCH_STRATS else 99)), "done": st.get("done", 0), "last_tick": None, "scan_asof": st.get("scan_asof")}
 
     # ------------------------------------------------------------ plumbing
     def log(self, msg):
@@ -113,11 +114,21 @@ class Agent:
                 self.log(f"scan {res['asof']}: {res['candidates']} candidate pairs, {len(res['accepted'])} passed every test, {res['rejected_count']} rejected")
                 self._build_queue(res)
                 self._paper_update(res)
+                try:
+                    salab.paper_update(self.data, self.db, res, self.log)
+                except Exception as e:
+                    self.log(f"stat-arb paper: error {e}")
+                return
+            if (self.db.kv_get("agent_version") or 1) < AGENT_VERSION:
+                self._migrate()
                 return
             if self.state["queue"]:
                 self.state["phase"] = "research"
                 item = self.state["queue"].pop(0)
-                self._research(item)
+                if item.get("type") == "study":
+                    self._study(item)
+                else:
+                    self._research(item)
                 self.state["done"] += 1
                 return
             self.state["phase"] = "idle"
@@ -148,8 +159,47 @@ class Agent:
     # ------------------------------------------------------------ research
     def _build_queue(self, scan_res, top=6):
         pairs = [(r["y"], r["x"]) for r in scan_res["accepted"][:top]]
-        self.state["queue"] = [{"pair": list(p), "strategy": k, "scan": scan_res["asof"]} for k in RESEARCH_STRATS for p in pairs]
+        self.state["queue"] = ([{"type": "study", "pair": list(p), "scan": scan_res["asof"]} for p in pairs]
+                               + [{"pair": list(p), "strategy": k, "scan": scan_res["asof"]} for k in RESEARCH_STRATS for p in pairs])
         self.log(f"research queue: {len(pairs)} pairs × {len(RESEARCH_STRATS)} strategies = {len(self.state['queue'])} walk-forward tests")
+
+    def _migrate(self):
+        """One-off after an upgrade: queue the stat-arb study and the new strategies for the latest scan."""
+        sc = self.db.kv_get("latest_scan")
+        if sc and sc.get("accepted"):
+            pairs = [(r["y"], r["x"]) for r in sc["accepted"][:6]]
+            done = {r["id"] for r in self.db.runs("research", 2000)}
+            new = [{"type": "study", "pair": list(p), "scan": sc["asof"]} for p in pairs]
+            new += [{"pair": list(p), "strategy": k, "scan": sc["asof"]} for k in RESEARCH_STRATS for p in pairs
+                    if f"res-{p[0]}-{p[1]}-{k}" not in done]
+            self.state["queue"] = new
+            self.log(f"upgrade: queued the stat-arb study (30/60/90/180 days) for {len(pairs)} pairs and {len(new) - len(pairs)} walk-forward tests")
+            try:
+                salab.paper_update(self.data, self.db, sc, self.log)
+            except Exception as e:
+                self.log(f"stat-arb paper: error {e}")
+        self.db.kv_set("agent_version", AGENT_VERSION)
+
+    def _study(self, item):
+        y, x = item["pair"]
+        self.state["message"] = f"stat-arb horizon study {y}/{x}"
+        panel = self.data.panel([y, x, "SPY"])
+        if not panel["ok"]:
+            self.log(f"study {y}/{x}: data missing"); return
+        st = salab.pair_study(panel, [y, x], 1000.0, bt.Costs(**self.costs()))
+        st["scan"] = item["scan"]
+        self.db.save_run(f"sa-{y}-{x}", "sa_study", f"Stat-arb study {y}/{x}", {"pair": f"{y}/{x}", "scan": item["scan"], "end": st["end"]}, st)
+        h = st["horizons"]["180"]
+        self.log(f"study {y}/{x} 180 days: " + "; ".join(f"{k} {_p(h[k]['total_return'])} ({h[k]['trades']} tr)" for k in salab.COMPARE))
+        if not any(i.get("type") == "study" for i in self.state["queue"]):
+            studies = [self.db.run(r["id"])["payload"] for r in self.db.runs("sa_study", 50) if r["summary"].get("scan") == item["scan"]]
+            pooled = salab.pooled(studies, 1000.0)
+            pooled.update(scan=item["scan"], pairs=[s["pair"] for s in studies], at=time.time(), end=st["end"])
+            self.db.kv_set("sa_summary", pooled)
+            for hz in salab.HORIZONS:
+                row = pooled["by_horizon"][str(hz)]
+                self.log(f"stat-arb {hz}d pooled ({len(studies)} pairs): " + "; ".join(
+                    f"{k} ret {_p(v['total_return'])} PnL {v['net_pnl']:+.2f} win {_p(v['win_rate'])} DD {_p(v['max_drawdown'])} tr {v['trades']}" for k, v in row.items()))
 
     def _research(self, item):
         y, x = item["pair"]
