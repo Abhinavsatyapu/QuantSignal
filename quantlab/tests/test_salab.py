@@ -85,3 +85,12 @@ def test_paper_risk_blocks(tmp_path):
     last = str(p["close"].index[-1].date())
     book = salab.paper_update(data, db, {"asof": last, "accepted": [{"y": "YYY", "x": "XXX", "sector": "T", "min_dollar_vol": 1e9}]}, lambda m: None)
     assert not [q for q in book["positions"] if q["status"] == "pending_entry"]
+
+
+def test_agent_lease_one_at_a_time(tmp_path):
+    from ql.agent import Agent
+    db = DB(str(tmp_path / "l.sqlite")); data = Data(db, providers=[])
+    a, b = Agent(data, owner="web-1"), Agent(data, owner="github-actions")
+    assert a._lease() and not b._lease()
+    a.state["queue"] = [{"pair": ["Y", "X"], "strategy": "I", "scan": "d"}]; a.save(); a.release()
+    assert b._lease() and b.state["queue"] == a.state["queue"]      # b continues a's queue

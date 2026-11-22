@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import datetime as dt
 import math
+import os
 import threading
 import time
 import traceback
@@ -32,8 +33,9 @@ QUALIFY = {"min_oos_sharpe": 0.5, "min_trades": 10, "min_fold_positive": 0.5, "m
 
 
 class Agent:
-    def __init__(self, data: Data, interval: float = 45.0, busy=None):
+    def __init__(self, data: Data, interval: float = 45.0, busy=None, owner: str | None = None):
         self.data, self.db = data, data.db
+        self.owner = owner or f"web-{os.getpid()}-{int(time.time())}"
         self.busy = busy or (lambda: False)
         self.interval = interval
         self.lock = threading.Lock()
@@ -71,7 +73,8 @@ class Agent:
                     self.log(f"error: {e}")
                     traceback.print_exc()
                 self.state["last_tick"] = time.time()
-                self.save()
+                if self.holding:
+                    self.save()
             time.sleep(self.interval if not self.busy() else 5)
 
     def risk(self):
@@ -81,7 +84,36 @@ class Agent:
         return {**scanner.DEFAULT_COSTS, **(self.db.kv_get("costs") or {})}
 
     # ------------------------------------------------------------ one unit of work
+    def _lease(self) -> bool:
+        """Only one agent (web server or scheduled job) works at a time. The lease is
+        renewed every tick and expires 10 minutes after its holder stops."""
+        cur = self.db.kv_get("agent_lease") or {}
+        now = time.time()
+        if cur.get("owner") not in (None, self.owner) and cur.get("until", 0) > now:
+            self.state["phase"] = "busy-elsewhere"
+            self.state["message"] = f"another agent is working ({cur.get('owner', '').split('-')[0]}); waiting"
+            return False
+        if cur.get("owner") != self.owner:
+            # taking over from another agent: continue from the state it saved
+            st = self.db.kv_get("agent_state") or {}
+            for k in ("queue", "done", "scan_asof", "log"):
+                if k in st:
+                    self.state[k] = st[k]
+        self.db.kv_set("agent_lease", {"owner": self.owner, "until": now + 600})
+        self.holding = True
+        return True
+
+    def release(self):
+        cur = self.db.kv_get("agent_lease") or {}
+        if cur.get("owner") == self.owner:
+            self.db.kv_set("agent_lease", {})
+
+    holding = False
+
     def tick(self):
+        self.holding = False
+        if not self._lease():
+            return
         with self.lock:
             info = self.db.kv_get("universe_info") or {}
             if not info.get("updated_at") or time.time() - info["updated_at"] > 7 * 86400:
