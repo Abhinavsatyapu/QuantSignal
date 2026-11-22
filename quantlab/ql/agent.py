@@ -179,7 +179,8 @@ class Agent:
                    "start": start, "end": end, "last_params": last_params}
         rid = f"res-{y}-{x}-{k}"
         self.db.save_run(rid, "research", f"{k} on {y}/{x}", summary, {"folds": wf["folds"], "series": wf["series"], "metrics": m, "trades": wf["trades"][-50:]})
-        self.log(f"{k} on {y}/{x}: OOS Sharpe {_n(m['sharpe'])}, {m['trades']} trades → {'QUALIFIES' if q else 'fails'}" + ("" if q else f" ({why[0]})"))
+        self.log(f"{k} on {y}/{x}: OOS P&L {_p(m['total_return'])} on 100k, Sharpe {_n(m['sharpe'])}, win rate {_p(m['win_rate'])}, max DD {_p(m['max_drawdown'])}, "
+                 f"{m['trades']} trades → {'QUALIFIES' if q else 'fails'}" + ("" if q else f" ({why[0]})"))
         rest = [i for i in self.state["queue"] if i["pair"] == [y, x]]
         if not rest:
             self._pair_report(y, x, item["scan"])

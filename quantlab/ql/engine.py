@@ -194,12 +194,12 @@ def decide(wf_a, wf_b, a, b, min_trades=10, min_days=250, alpha=0.10) -> dict:
     if not np.isfinite(p) or p >= alpha:
         why.append(f"the out-of-sample return difference is not significant (bootstrap p = {p:.2f}, need < {alpha})" if np.isfinite(p) else "too few overlapping days to test the difference")
     if (lm["sharpe"] or 0) <= 0:
-        why.append(f"the leading strategy ({lead}) has a non-positive out-of-sample Sharpe ({lm['sharpe']:.2f})")
+        why.append(f"the leading strategy ({lead}) has a non-positive out-of-sample Sharpe ({_n(lm['sharpe'])})")
     if why:
         return {"winner": None, "label": "Insufficient evidence — no winner declared", "why": why, **detail}
     name = LIBRARY[a if lead == "A" else b].name
     return {"winner": lead, "label": f"{lead} ({name}) is better out-of-sample", "why": [
-        f"higher out-of-sample Sharpe ({max(sa, sb):.2f} vs {min(sa, sb):.2f})",
+        f"higher out-of-sample Sharpe ({_n(max(sa, sb))} vs {_n(min(sa, sb))})",
         f"block-bootstrap p = {p:.3f} that the daily return advantage is due to chance",
         f"{lm['trades']} out-of-sample trades over {lm['days']} sessions"], **detail}
 

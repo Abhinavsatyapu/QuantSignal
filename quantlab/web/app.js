@@ -21,7 +21,9 @@
   }
   async function job(path, body, box) {
     box.innerHTML = '<div class="status spin">Queued…</div>';
-    const { job: id } = await api(path, { method: 'POST', body });
+    let id;
+    try { ({ job: id } = await api(path, { method: 'POST', body })); }
+    catch (e) { box.innerHTML = `<div class="status err">${esc(e.message)}</div>`; throw e; }
     const t0 = Date.now();
     for (;;) {
       await new Promise(r => setTimeout(r, 1800));
@@ -44,7 +46,9 @@
   $('#nav').innerHTML = PAGES.map((p, i) => (p[2] ? `<div class="grp">${p[2]}</div>` : '') + `<a href="#/${p[0]}" data-p="${p[0]}"><span class="n">${String(i + 1).padStart(2, '0')}</span>${p[1]}</a>`).join('');
   $('#menu').onclick = () => $('#nav').classList.toggle('open');
 
+  let GEN = 0;
   function route() {
+    const gen = ++GEN;
     const [p, q] = (location.hash.replace(/^#\/?/, '') || '').split('?');
     const params = Object.fromEntries(new URLSearchParams(q || ''));
     document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.dataset.p === p));
@@ -53,7 +57,7 @@
     const title = (PAGES.find(x => x[0] === p) || PAGES[0])[1];
     document.title = title + ' · Quant Lab';
     view.innerHTML = '';
-    fn(params).catch(e => { view.insertAdjacentHTML('beforeend', `<div class="status err">${esc(e.message)}</div>`); });
+    fn(params).catch(e => { if (gen === GEN) view.insertAdjacentHTML('beforeend', `<div class="status err">${esc(e.message)}</div>`); });
     scrollTo(0, 0);
   }
 

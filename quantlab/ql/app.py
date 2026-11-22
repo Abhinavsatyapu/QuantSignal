@@ -174,9 +174,11 @@ def create_app(db: DB | None = None, data: Data | None = None, start_agent: bool
                 res = clean(fn())
                 db.save_run(jid, kind, title, res.get("summary", {}), res)
                 jobs[jid].update(status="done", result=res)
+                print(f"job done: {title} · {res.get('summary', {})}", flush=True)
             except Exception as e:
                 traceback.print_exc()
                 jobs[jid].update(status="error", error=str(e)[:500])
+                print(f"job failed: {title} · {str(e)[:300]}", flush=True)
             jobs[jid]["finished"] = time.time()
         pool.submit(work)
         return {"job": jid}
