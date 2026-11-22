@@ -591,10 +591,25 @@ def create_app(db: DB | None = None, data: Data | None = None, start_agent: bool
         threading.Thread(target=agent.tick, daemon=True).start()
         return {"ok": True}
 
+    from .live import LiveEngine, run_loop
+    live_engine = LiveEngine(data, owner=f"web-{os.getpid()}", log=lambda m: print(m, flush=True))
+    app.state.live = live_engine
+
+    @app.get("/api/sa/live")
+    def sa_live():
+        book = db.kv_get("sa_paper") or {}
+        return clean({"snapshot": db.kv_get("sa_live"), "trade_log": (book.get("trade_log") or [])[-200:], "intraday": (book.get("intraday") or [])[-1500:],
+                      "positions": book.get("positions", []), "cash": book.get("cash"), "start_cash": book.get("start_cash"),
+                      "fees": book.get("fees"), "slippage": book.get("slippage"), "borrow": book.get("borrow"),
+                      "realized": sum(c.get("net_pnl", 0) for c in book.get("closed", [])), "closed": (book.get("closed") or [])[-100:],
+                      "halted": book.get("halted"), "lease": db.kv_get("live_lease"), "config": sa_config()})
+
     if start_agent:
         @app.on_event("startup")
         def _start():
             agent.start()
+            if os.environ.get("QL_LIVE", "1") == "1":
+                threading.Thread(target=run_loop, args=(live_engine, 1e9), daemon=True, name="live-paper").start()
     return app
 
 

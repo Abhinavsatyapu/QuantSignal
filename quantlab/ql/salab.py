@@ -26,7 +26,7 @@ LABELS = {"K": "Basic correlation pairs", "A": "Cointegration pairs", "V": "Vide
 
 DEFAULT_CONFIG = {"capital": 1000.0, "max_pairs": 3, "risk_per_pair": 0.30, "leverage": 1.0, "entry": 2.0, "exit": 0.5,
                   "stop": 3.5, "hold_mult": 3.0, "max_drawdown": 0.15, "max_per_sector": 2, "strategy": "I",
-                  "stale_sessions": 2, "min_dollar_volume": 20e6}
+                  "stale_sessions": 2, "min_dollar_volume": 20e6, "mode": "live", "watch_pairs": 12}
 
 
 def _r(x, n=4):
@@ -185,6 +185,8 @@ def paper_update(data, db, scan_res: dict, log) -> dict:
             p["last_borrow"] = today
 
     # 3) strategy signals on today's close for held pairs and candidates
+    #    (in live mode, entries and exits happen intraday in ql.live; this pass only records signals)
+    live_mode = cfg.get("mode", "live") == "live"
     params = {"entry": cfg["entry"], "exit": cfg["exit"], "stop": cfg["stop"], "hold_mult": cfg["hold_mult"]}
     key = cfg["strategy"] if cfg["strategy"] in LIBRARY else "I"
     held = {(p["y"], p["x"]): p for p in book["positions"]}
@@ -211,6 +213,8 @@ def paper_update(data, db, scan_res: dict, log) -> dict:
                         "beta": _r(out.diag["beta"].iloc[-1]) if "beta" in out.diag else None,
                         "sector": (row or {}).get("sector") or (held.get((y, x)) or {}).get("sector")})
         pos = held.get((y, x))
+        if live_mode:
+            continue
         if pos and pos["status"] == "open":
             pos["held"] = pos.get("held", 0) + 1; pos["z"] = _r(zt, 3)
             if side[-1] != pos["side"]:

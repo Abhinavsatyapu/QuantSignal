@@ -431,11 +431,11 @@ class Data:
         return {"ok": True, "close": C, "open": O, "volume": V, "warnings": warn, "info": info,
                 "status": "historical", "asof": str(idx[-1].date()) if len(idx) else None}
 
-    def quote(self, symbol: str) -> dict:
+    def quote(self, symbol: str, max_age: float = 60) -> dict:
         q = self._quotes.get(symbol)
-        if q and time.time() - q["fetched_at"] < 60:
+        if q and time.time() - q["fetched_at"] < max_age:
             return q
-        nq = self.nasdaq
+        nq = self.nasdaq or next((p for p in self.providers if hasattr(p, "quote")), None)
         if not nq:
             return {"symbol": symbol, "status": "unavailable", "error": "no quote provider"}
         try:

@@ -94,3 +94,32 @@ def test_agent_lease_one_at_a_time(tmp_path):
     assert a._lease() and not b._lease()
     a.state["queue"] = [{"pair": ["Y", "X"], "strategy": "I", "scan": "d"}]; a.save(); a.release()
     assert b._lease() and b.state["queue"] == a.state["queue"]      # b continues a's queue
+
+
+def test_live_engine_entry_and_exit(tmp_path, monkeypatch):
+    import ql.live as live
+    db, data, p = _paper_env(tmp_path)
+    db.kv_set("latest_scan", {"asof": str(p["close"].index[-1].date()), "accepted": [{"y": "YYY", "x": "XXX", "sector": "T", "min_dollar_vol": 1e9}]})
+    monkeypatch.setattr(live, "market_open", lambda: True)
+    prices = {"YYY": float(p["close"]["YYY"].iloc[-1]), "XXX": float(p["close"]["XXX"].iloc[-1])}
+    prov = data.providers[0]
+    prov.quote = lambda s: {"symbol": s, "price": prices[s], "bid": prices[s] * 0.9999, "ask": prices[s] * 1.0001, "status": "live",
+                            "provider_time": "test", "source": "test", "fetched_at": time.time()}
+    eng = live.LiveEngine(data, owner="t", log=lambda m: None)
+    eng.prepare({**salab.DEFAULT_CONFIG})
+    c = eng.ctx[("YYY", "XXX")]
+    c["gate"] = True; c["breakdown"] = False            # isolate execution logic from the statistical gate
+    prices["YYY"] *= 1.04                                 # push the spread far above its mean → short spread
+    data._quotes.clear(); eng.poll()
+    book = db.kv_get("sa_paper")
+    assert len(book["positions"]) == 1 and book["positions"][0]["side"] == -1
+    pos = book["positions"][0]
+    assert pos["entry_y"] == pytest.approx(prices["YYY"] * 0.9999)        # sold Y at the bid
+    c = eng.ctx[("YYY", "XXX")]                           # spread back to its mean → converged exit
+    prices["YYY"] = float(np.exp(c["hist"].mean() + c["beta"] * np.log(prices["XXX"])))
+    data._quotes.clear(); eng.poll()
+    book = db.kv_get("sa_paper")
+    assert not book["positions"] and book["closed"][-1]["exit_reason"].startswith("converged")
+    kinds = [t["kind"] for t in book["trade_log"]]
+    assert kinds == ["ENTRY", "EXIT"]
+    assert book["cash"] == pytest.approx(1000 + book["closed"][-1]["net_pnl"], abs=1e-3)
