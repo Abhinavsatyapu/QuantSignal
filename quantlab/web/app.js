@@ -24,9 +24,9 @@
     let id;
     try { ({ job: id } = await api(path, { method: 'POST', body })); }
     catch (e) { box.innerHTML = `<div class="status err">${esc(e.message)}</div>`; throw e; }
-    const t0 = Date.now();
+    const t0 = Date.now(); let first = true;
     for (;;) {
-      await new Promise(r => setTimeout(r, 1800));
+      await new Promise(r => setTimeout(r, first ? 150 : 1800)); first = false;
       const j = await api('/api/jobs/' + id);
       if (j.status === 'done') { box.innerHTML = ''; return j.result; }
       if (j.status === 'error') { box.innerHTML = `<div class="status err">Failed: ${esc(j.error)}</div>`; throw new Error(j.error); }
@@ -179,7 +179,7 @@
 
   R.scanner = async () => {
     view.innerHTML = `<h1>Statistical Arbitrage Scanner</h1><p class="sub">Universe → liquidity filter → return correlation (same sector, or ≥ 0.85 across sectors) → Engle-Granger and Johansen cointegration → Ornstein-Uhlenbeck half-life → Hurst exponent → expected edge vs round-trip cost. A pair is accepted only if it passes every test. Click a row for full diagnostics.</p>
-      <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px"><button class="b" id="run">Run scan now</button><span id="meta" class="small dim"></span></div><div id="st"></div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px"><button class="b" id="run">Run scan now</button><label class="small dim"><input type="checkbox" id="force"> re-scan even if no new session</label><span id="meta" class="small dim"></span></div><div id="st"></div>
       <div class="tabs"><button class="on" data-t="acc">Accepted</button><button data-t="rej">Rejected (with reasons)</button></div><div class="card"><div id="tbl" class="scroll" style="max-height:640px"></div></div>`;
     let sc = await api('/api/scan/latest'), tab = 'acc';
     const draw = () => {
@@ -192,7 +192,8 @@
       view.querySelectorAll('tr.click').forEach(tr => tr.onclick = () => location.hash = `#/pairs?y=${tr.dataset.y}&x=${tr.dataset.x}`);
     };
     view.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { tab = b.dataset.t; view.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b)); draw(); });
-    $('#run').onclick = async () => { $('#run').disabled = true; try { await job('/api/scan', {}, $('#st')); sc = await api('/api/scan/latest'); draw(); } finally { $('#run').disabled = false; } };
+    $('#run').onclick = async () => { $('#run').disabled = true; try { const r = await job('/api/scan', { force: $('#force').checked }, $('#st')); sc = await api('/api/scan/latest'); draw();
+      if (r && r.cached) $('#st').innerHTML = `<div class="status">Already up to date for the ${esc(r.asof)} close — no new session since the last scan. Tick "re-scan" to run it again anyway (takes a few minutes).</div>`; } finally { $('#run').disabled = false; } };
     draw();
   };
 

@@ -361,6 +361,40 @@ class Data:
                     df[k] = df[k] * f
         return df
 
+    def bars_bulk(self, symbols: list[str], since: str) -> dict[str, pd.DataFrame]:
+        """Adjusted close/volume for many symbols in ONE query (used by the scanner)."""
+        if not symbols:
+            return {}
+        rows = self.db.all("SELECT symbol, d, c, v FROM ql_bars WHERE d >= ? ORDER BY symbol, d", (since,))
+        df = pd.DataFrame(rows, columns=["symbol", "d", "c", "v"])
+        if df.empty:
+            return {}
+        df["d"] = pd.to_datetime(df["d"]); df["c"] = pd.to_numeric(df["c"], errors="coerce"); df["v"] = pd.to_numeric(df["v"], errors="coerce")
+        want = set(symbols)
+        divs = {r[0][4:]: r[1] for r in self.db.all("SELECT k, v FROM ql_kv WHERE k LIKE 'div:%'")}
+        import json as _json
+        out = {}
+        for s, g in df.groupby("symbol", sort=False):
+            if s not in want:
+                continue
+            g = g.set_index("d")[["c", "v"]]
+            dv = _json.loads(divs[s]) if s in divs else []
+            if dv:
+                f = pd.Series(1.0, index=g.index)
+                for day, amt in dv:
+                    day = pd.Timestamp(day)
+                    if day > g.index[-1]:
+                        continue
+                    if day <= g.index[0]:
+                        continue          # whole window is after this ex-date: a constant factor does not change returns or tests
+                    prev = g.index[g.index < day]
+                    pc = g.at[prev[-1], "c"] if len(prev) else None
+                    if pc and pc > 0 and amt < pc:
+                        f[g.index < day] *= (1 - amt / pc)
+                g = g.assign(c=g["c"] * f)
+            out[s] = g
+        return out
+
     def panel(self, symbols: list[str], start: str | None = None, end: str | None = None) -> dict:
         """Aligned adjusted panel. Days where any symbol is missing are dropped
         (never forward-filled); the count is reported as a data-quality warning."""

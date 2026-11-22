@@ -57,7 +57,8 @@ def clean(o):
 def create_app(db: DB | None = None, data: Data | None = None, start_agent: bool = True) -> FastAPI:
     db = db or DB()
     data = data or Data(db)
-    agent = Agent(data)
+    busy = {"n": 0}
+    agent = Agent(data, busy=lambda: busy["n"] > 0)
     jobs: dict[str, dict] = {}
     pool = ThreadPoolExecutor(max_workers=1)
     app = FastAPI(title="QuantSignal Quant Lab", docs_url=None, redoc_url=None, openapi_url=None)
@@ -165,6 +166,7 @@ def create_app(db: DB | None = None, data: Data | None = None, start_agent: bool
         return start, end
 
     def submit(kind, title, fn):
+        busy["n"] += 1
         jid = uuid.uuid4().hex[:12]
         jobs[jid] = {"id": jid, "kind": kind, "title": title, "status": "queued", "created": time.time()}
 
@@ -180,6 +182,7 @@ def create_app(db: DB | None = None, data: Data | None = None, start_agent: bool
                 jobs[jid].update(status="error", error=str(e)[:500])
                 print(f"job failed: {title} · {str(e)[:300]}", flush=True)
             jobs[jid]["finished"] = time.time()
+            busy["n"] -= 1
         pool.submit(work)
         return {"job": jid}
 
@@ -338,7 +341,19 @@ def create_app(db: DB | None = None, data: Data | None = None, start_agent: bool
         return submit("portfolio", f"Portfolio {k} × {len(pairs)} pairs", fn)
 
     @app.post("/api/scan")
-    def api_scan():
+    async def api_scan(req: Request):
+        try:
+            b = await req.json()
+        except Exception:
+            b = {}
+        sc = db.kv_get("latest_scan")
+        asof = (db.one("SELECT last_d FROM ql_meta WHERE symbol='SPY'") or [None])[0]
+        if sc and not b.get("force") and sc.get("asof") == asof:
+            jid = uuid.uuid4().hex[:12]
+            jobs[jid] = {"id": jid, "kind": "scan", "title": "Scan (cached)", "status": "done", "created": time.time(),
+                         "result": {**sc, "cached": True, "summary": {"asof": sc["asof"], "cached": True}}}
+            return {"job": jid, "cached": True}
+
         def fn():
             u = data.universe.list()
             if u.empty:

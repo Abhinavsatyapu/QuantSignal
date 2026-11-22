@@ -43,9 +43,11 @@ def scan(data, universe: pd.DataFrame, risk: dict, costs: dict, window: int = 50
     syms = universe.sort_values("dollar_vol", ascending=False, na_position="last")["symbol"].tolist()[:max_symbols]
     sector = dict(zip(universe.symbol, universe.sector))
     closes, dvol, missing = {}, {}, []
+    since = (pd.Timestamp.today() - pd.Timedelta(days=int(window * 1.6) + 30)).date().isoformat()
+    bulk = data.bars_bulk(syms, since)
     for s in syms:
-        b = data.bars(s)
-        if b.empty or len(b) < window * 0.9:
+        b = bulk.get(s)
+        if b is None or b.empty or len(b) < window * 0.9:
             missing.append(s)
             continue
         b = b.iloc[-window:]
@@ -90,6 +92,13 @@ def scan(data, universe: pd.DataFrame, risk: dict, costs: dict, window: int = 50
 
 
 def _test_pair(la: pd.Series, lb: pd.Series, corr: float, same: bool, sector: dict, risk: dict, rt_bps: float, dvol: dict) -> dict:
+    # quick pre-test (Engle-Granger with one lag, both directions); clearly non-cointegrated
+    # pairs are rejected here without the slower full battery of tests
+    q = min(stats.eg_fast_p(la.to_numpy(), lb.to_numpy()), stats.eg_fast_p(lb.to_numpy(), la.to_numpy()))
+    if np.isfinite(q) and q > max(0.25, 5 * risk["max_coint_p"]):
+        return {"y": la.name, "x": lb.name, "sector": sector.get(la.name) if same else f"{sector.get(la.name)} / {sector.get(lb.name)}",
+                "corr": round(float(corr), 3), "eg_p": _r(q), "half_life": None, "accepted": False, "score": 0.0, "signal": None,
+                "reasons": [f"Engle-Granger p ≈ {q:.2f} on the quick test — far from cointegrated"]}
     # choose the dependent leg that gives the stronger Engle-Granger rejection
     e1 = stats.engle_granger(la.to_numpy(), lb.to_numpy())
     e2 = stats.engle_granger(lb.to_numpy(), la.to_numpy())

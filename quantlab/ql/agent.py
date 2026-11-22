@@ -32,8 +32,9 @@ QUALIFY = {"min_oos_sharpe": 0.5, "min_trades": 10, "min_fold_positive": 0.5, "m
 
 
 class Agent:
-    def __init__(self, data: Data, interval: float = 45.0):
+    def __init__(self, data: Data, interval: float = 45.0, busy=None):
         self.data, self.db = data, data.db
+        self.busy = busy or (lambda: False)
         self.interval = interval
         self.lock = threading.Lock()
         self.thread = None
@@ -61,7 +62,9 @@ class Agent:
     def _loop(self):
         time.sleep(5)
         while not self.stop_flag:
-            if self.state.get("enabled", True):
+            if self.state.get("enabled", True) and self.busy():
+                self.state["phase"] = "paused"; self.state["message"] = "paused while your request runs"
+            elif self.state.get("enabled", True):
                 try:
                     self.tick()
                 except Exception as e:
@@ -69,7 +72,7 @@ class Agent:
                     traceback.print_exc()
                 self.state["last_tick"] = time.time()
                 self.save()
-            time.sleep(self.interval)
+            time.sleep(self.interval if not self.busy() else 5)
 
     def risk(self):
         return {**scanner.DEFAULT_RISK, **(self.db.kv_get("risk_limits") or {})}

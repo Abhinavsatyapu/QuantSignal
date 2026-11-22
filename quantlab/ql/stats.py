@@ -106,7 +106,10 @@ def johansen(y: np.ndarray, x: np.ndarray, k_ar_diff: int = 1) -> dict:
     the highest confidence level at which r=0 is rejected (0 if none)."""
     data = np.column_stack([np.asarray(y, float), np.asarray(x, float)])
     try:
-        res = coint_johansen(data, det_order=0, k_ar_diff=k_ar_diff)
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            res = coint_johansen(data, det_order=0, k_ar_diff=k_ar_diff)
         tr = float(res.lr1[0]); cv = [float(c) for c in res.cvt[0]]
         conf = 0.99 if tr > cv[2] else 0.95 if tr > cv[1] else 0.90 if tr > cv[0] else 0.0
         vec = res.evec[:, 0]
