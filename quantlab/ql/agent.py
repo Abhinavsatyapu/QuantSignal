@@ -26,7 +26,7 @@ from . import engine, scanner
 from .data import Data, last_session
 from .strategies import LIBRARY
 
-RESEARCH_STRATS = ["A", "C", "E", "F", "B", "D", "G", "M"]
+RESEARCH_STRATS = ["B", "A", "C", "E", "F", "D", "G", "M"]   # Z-score first
 QUALIFY = {"min_oos_sharpe": 0.5, "min_trades": 10, "min_fold_positive": 0.5, "min_deflated": 0.5, "min_sharpe_2x_costs": 0.0, "max_dd": -0.20}
 
 
@@ -39,7 +39,7 @@ class Agent:
         self.stop_flag = False
         st = self.db.kv_get("agent_state") or {}
         self.state = {"enabled": st.get("enabled", True), "phase": "idle", "message": "starting", "log": st.get("log", [])[-150:],
-                      "queue": st.get("queue", []), "done": st.get("done", 0), "last_tick": None, "scan_asof": st.get("scan_asof")}
+                      "queue": sorted(st.get("queue", []), key=lambda i: RESEARCH_STRATS.index(i["strategy"]) if i.get("strategy") in RESEARCH_STRATS else 99), "done": st.get("done", 0), "last_tick": None, "scan_asof": st.get("scan_asof")}
 
     # ------------------------------------------------------------ plumbing
     def log(self, msg):
@@ -148,7 +148,7 @@ class Agent:
     # ------------------------------------------------------------ research
     def _build_queue(self, scan_res, top=6):
         pairs = [(r["y"], r["x"]) for r in scan_res["accepted"][:top]]
-        self.state["queue"] = [{"pair": list(p), "strategy": k, "scan": scan_res["asof"]} for p in pairs for k in RESEARCH_STRATS]
+        self.state["queue"] = [{"pair": list(p), "strategy": k, "scan": scan_res["asof"]} for k in RESEARCH_STRATS for p in pairs]
         self.log(f"research queue: {len(pairs)} pairs × {len(RESEARCH_STRATS)} strategies = {len(self.state['queue'])} walk-forward tests")
 
     def _research(self, item):
@@ -182,7 +182,7 @@ class Agent:
         self.log(f"{k} on {y}/{x}: OOS P&L {_p(m['total_return'])} on 100k, Sharpe {_n(m['sharpe'])}, win rate {_p(m['win_rate'])}, max DD {_p(m['max_drawdown'])}, "
                  f"{m['trades']} trades → {'QUALIFIES' if q else 'fails'}" + ("" if q else f" ({why[0]})"))
         rest = [i for i in self.state["queue"] if i["pair"] == [y, x]]
-        if not rest:
+        if not rest and self.db.one("SELECT COUNT(*) FROM ql_runs WHERE kind='research' AND id LIKE ?", (f"res-{y}-{x}-%",))[0] >= len(RESEARCH_STRATS):
             self._pair_report(y, x, item["scan"])
 
     def _pair_report(self, y, x, scan_asof):
