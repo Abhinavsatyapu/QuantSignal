@@ -31,6 +31,7 @@ WEB = Path(__file__).resolve().parent.parent / "web"
 PASSWORD = os.environ.get("QL_PASSWORD", "")
 SECRET = (os.environ.get("QL_SECRET") or secrets.token_hex(32)).encode()
 COOKIE = "ql_session"
+BOOT = uuid.uuid4().hex[:8]
 MAX_AGE = 14 * 86400
 
 
@@ -81,7 +82,7 @@ def create_app(db: DB | None = None, data: Data | None = None, start_agent: bool
     @app.middleware("http")
     async def gate(req: Request, call_next):
         p = req.url.path
-        if p in ("/login", "/health", "/favicon.ico") or p.startswith("/static/login"):
+        if (req.method == "HEAD" and p in ("/", "/health")) or p in ("/login", "/health", "/favicon.ico") or p.startswith("/static/login"):
             return await call_next(req)
         if not authed(req):
             if p.startswith("/api/"):
@@ -128,6 +129,11 @@ def create_app(db: DB | None = None, data: Data | None = None, start_agent: bool
         return {"ok": True, "db": db.kind}
 
     # ------------------------------------------------------------ static
+    @app.head("/")
+    @app.head("/health")
+    def head_ok():
+        return Response(status_code=200)
+
     @app.get("/", response_class=HTMLResponse)
     def index():
         return (WEB / "index.html").read_text()
@@ -169,17 +175,21 @@ def create_app(db: DB | None = None, data: Data | None = None, start_agent: bool
         busy["n"] += 1
         jid = uuid.uuid4().hex[:12]
         jobs[jid] = {"id": jid, "kind": kind, "title": title, "status": "queued", "created": time.time()}
+        db.kv_set(f"job:{jid}", {"status": "queued", "title": title, "boot": BOOT})
 
         def work():
             jobs[jid]["status"] = "running"; jobs[jid]["started"] = time.time()
+            db.kv_set(f"job:{jid}", {"status": "running", "title": title, "boot": BOOT})
             try:
                 res = clean(fn())
                 db.save_run(jid, kind, title, res.get("summary", {}), res)
                 jobs[jid].update(status="done", result=res)
+                db.exec("DELETE FROM ql_kv WHERE k=?", (f"job:{jid}",))
                 print(f"job done: {title} · {res.get('summary', {})}", flush=True)
             except Exception as e:
                 traceback.print_exc()
                 jobs[jid].update(status="error", error=str(e)[:500])
+                db.kv_set(f"job:{jid}", {"status": "error", "title": title, "error": str(e)[:500]})
                 print(f"job failed: {title} · {str(e)[:300]}", flush=True)
             jobs[jid]["finished"] = time.time()
             busy["n"] -= 1
@@ -237,7 +247,12 @@ def create_app(db: DB | None = None, data: Data | None = None, start_agent: bool
             r = db.run(jid)
             if r:
                 return {"id": jid, "status": "done", "result": r["payload"], "kind": r["kind"], "title": r["title"]}
-            raise HTTPException(404, "unknown job")
+            k = db.kv_get(f"job:{jid}")
+            if k and k.get("status") == "error":
+                return {"id": jid, "status": "error", "error": k.get("error")}
+            if k:
+                return {"id": jid, "status": "error", "error": "the server restarted (a deploy or the free plan's sleep) before this run finished — please run it again"}
+            return {"id": jid, "status": "error", "error": "this run is no longer known to the server (it restarted) — please run it again"}
         return {k: v for k, v in j.items()}
 
     @app.get("/api/runs")
