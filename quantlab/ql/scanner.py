@@ -43,7 +43,8 @@ def scan(data, universe: pd.DataFrame, risk: dict, costs: dict, window: int = 50
     syms = universe.sort_values("dollar_vol", ascending=False, na_position="last")["symbol"].tolist()[:max_symbols]
     sector = dict(zip(universe.symbol, universe.sector))
     closes, dvol, missing = {}, {}, []
-    since = (pd.Timestamp.today() - pd.Timedelta(days=int(window * 1.6) + 30)).date().isoformat()
+    latest = (data.db.one("SELECT MAX(d) FROM ql_bars") or [None])[0]
+    since = ((pd.Timestamp(latest) if latest else pd.Timestamp.today()) - pd.Timedelta(days=int(window * 1.6) + 30)).date().isoformat()
     bulk = data.bars_bulk(syms, since)
     for s in syms:
         b = bulk.get(s)
