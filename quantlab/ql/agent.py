@@ -137,7 +137,7 @@ class Agent:
                 self.log(f"daily bars: updated {ok}, failed {bad}, {max(len(stale) - len(batch), 0)} still to check (target session {target})")
                 return
             latest = self.db.kv_get("latest_scan_meta") or {}
-            if latest.get("asof") != self._data_asof() or time.time() - latest.get("at", 0) > 24 * 3600:
+            if latest.get("asof") != self._data_asof():
                 self.state["phase"] = "scan"
                 self.log("scanning for cointegrated pairs")
                 res = scanner.scan(self.data, uni, self.risk(), self.costs(), progress=lambda m: self.state.update(message=m))
@@ -194,8 +194,11 @@ class Agent:
     # ------------------------------------------------------------ research
     def _build_queue(self, scan_res, top=6):
         pairs = [(r["y"], r["x"]) for r in scan_res["accepted"][:top]]
-        self.state["queue"] = ([{"type": "study", "pair": list(p), "scan": scan_res["asof"]} for p in pairs]
-                               + [{"pair": list(p), "strategy": k, "scan": scan_res["asof"]} for k in RESEARCH_STRATS for p in pairs])
+        done = {(r["summary"].get("pair"), r["summary"].get("strategy")) for r in self.db.runs("research", 3000) if r["summary"].get("scan") == scan_res["asof"]}
+        studied = {r["summary"].get("pair") for r in self.db.runs("sa_study", 200) if r["summary"].get("scan") == scan_res["asof"]}
+        self.state["queue"] = ([{"type": "study", "pair": list(p), "scan": scan_res["asof"]} for p in pairs if f"{p[0]}/{p[1]}" not in studied]
+                               + [{"pair": list(p), "strategy": k, "scan": scan_res["asof"]} for k in RESEARCH_STRATS for p in pairs
+                                  if (f"{p[0]}/{p[1]}", k) not in done])
         self.log(f"research queue: {len(pairs)} pairs × {len(RESEARCH_STRATS)} strategies = {len(self.state['queue'])} walk-forward tests")
 
     def _migrate(self):
