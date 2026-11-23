@@ -1,13 +1,12 @@
 name: quantlab-live
 # Live paper trading for the Quant Lab's Statistical Arbitrage Lab during US market
-# hours (09:30–16:00 ET = 20:00–02:30 IST). Three back-to-back jobs of up to ~3 h each
-# cover the session in both summer and winter time; the engine polls quotes about
-# once a minute and stops early after the close. Paper only — no orders are sent.
+# hours (09:30–16:00 ET = 20:00–02:30 IST). One start covers the whole session: two
+# chained jobs (GitHub allows 6 h per job). The engine waits for the open, polls
+# quotes about once a minute and stops after the close. Paper only — no orders.
 on:
   schedule:
     - cron: '20 13 * * 1-5'
-    - cron: '15 16 * * 1-5'
-    - cron: '10 19 * * 1-5'
+    - cron: '50 13 * * 1-5'
   workflow_dispatch:
 permissions:
   contents: read
@@ -15,22 +14,31 @@ concurrency:
   group: quantlab-live
   cancel-in-progress: false
 jobs:
-  run:
+  part1:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: chatgpt-version
-          sparse-checkout: quantlab
+        with: { ref: chatgpt-version, sparse-checkout: quantlab }
       - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-          cache: pip
-          cache-dependency-path: quantlab/requirements.txt
+        with: { python-version: '3.13', cache: pip, cache-dependency-path: quantlab/requirements.txt }
       - run: pip install -r quantlab/requirements.txt
-      - name: Live paper trading
+      - name: Live paper trading (first part)
         working-directory: quantlab
-        env:
-          DATABASE_URL: ${{ secrets.QL_DATABASE_URL }}
-        run: python -m ql.live --minutes 172
+        env: { DATABASE_URL: "${{ secrets.QL_DATABASE_URL }}" }
+        run: python -m ql.live --minutes 340
+  part2:
+    needs: part1
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: chatgpt-version, sparse-checkout: quantlab }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.13', cache: pip, cache-dependency-path: quantlab/requirements.txt }
+      - run: pip install -r quantlab/requirements.txt
+      - name: Live paper trading (rest of the session)
+        working-directory: quantlab
+        env: { DATABASE_URL: "${{ secrets.QL_DATABASE_URL }}" }
+        run: python -m ql.live --minutes 320
