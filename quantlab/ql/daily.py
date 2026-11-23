@@ -26,7 +26,16 @@ def main() -> int:
         print("DATABASE_URL (Postgres) is not set — refusing to run against a throwaway database", file=sys.stderr)
         return 2
     db = DB()
-    agent = Agent(Data(db), owner="github-actions")
+    data = Data(db)
+    # connectivity check, printed to the job log
+    try:
+        q = data.nasdaq.quote("SPY")
+        print(f"check · Nasdaq quote SPY: {q.get('price')} ({q.get('status')}, real-time flag via provider)")
+    except Exception as e:
+        print(f"check · Nasdaq quote SPY FAILED: {str(e)[:160]}")
+    data.hl.refresh()
+    print(f"check · Hyperliquid stock perps: {len(data.hl.mids)} symbols" + (f" — error {data.hl.error}" if data.hl.error else ""))
+    agent = Agent(data, owner="github-actions")
     deadline = time.time() + a.minutes * 60
     idle = 0
     while time.time() < deadline:
