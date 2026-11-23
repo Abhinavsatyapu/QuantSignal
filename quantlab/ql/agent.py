@@ -242,6 +242,9 @@ class Agent:
     def _research(self, item):
         y, x = item["pair"]
         k = item["strategy"]
+        prev = self.db.run(f"res-{y}-{x}-{k}")
+        if prev and prev["summary"].get("scan") == item.get("scan"):
+            return            # already tested on this scan's data
         self.state["message"] = f"walk-forward {k} on {y}/{x}"
         panel = self.data.panel([y, x, "SPY"])
         if not panel["ok"]:
