@@ -406,7 +406,7 @@ class Data:
             return {}
         df["d"] = pd.to_datetime(df["d"]); df["c"] = pd.to_numeric(df["c"], errors="coerce"); df["v"] = pd.to_numeric(df["v"], errors="coerce")
         want = set(symbols)
-        divs = {r[0][4:]: r[1] for r in self.db.all("SELECT k, v FROM ql_kv WHERE k LIKE 'div:%'")}
+        divs = {r[0][4:]: r[1] for r in self.db.all("SELECT k, v FROM ql_kv WHERE k LIKE ?", ("div:%",))}
         import json as _json
         out = {}
         for s, g in df.groupby("symbol", sort=False):
